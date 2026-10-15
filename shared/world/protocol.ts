@@ -264,6 +264,12 @@ export const WORLD_ERROR_CODES = [
   'device_limit', // já há 3 dispositivos na conta
   'rate_limited',
   'not_found',
+  'no_player', // a ação pede o personagem e a conta ainda não tem
+  'unavailable', // servidor do mundo fora do ar para manutenção (503)
+  'invalid_json', // corpo que não é JSON
+  'too_large', // corpo grande demais (413)
+  'unsupported_media_type', // sem Content-Type: application/json (415)
+  'method_not_allowed', // método errado para a rota (405)
 ] as const;
 export type WorldErrorCode = (typeof WORLD_ERROR_CODES)[number];
 

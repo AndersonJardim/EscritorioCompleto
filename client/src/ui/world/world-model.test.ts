@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PART_KEYS } from '../../../../shared/appearance';
 import { TRAIT_IDS } from '../../../../shared/world/traits';
-import { WORLD_ERROR_CODES, type WorldMeta } from '../../net/world';
+import { WORLD_UI_ERROR_CODES, type WorldMeta } from '../../net/world';
 import {
   characterProblem,
   codeLooksValid,
@@ -217,13 +217,22 @@ describe('personagem', () => {
 });
 
 describe('erros', () => {
-  it('todo código tem texto próprio (nenhum cai no genérico, menos o desconhecido)', () => {
+  it('todo código tem texto próprio (nenhum cai no genérico, menos os que não dizem nada)', () => {
     const generic = worldErrorText('qualquer-coisa', 'status');
-    for (const code of WORLD_ERROR_CODES) {
+    const vague = ['unknown', 'world_error', 'internal'];
+    for (const code of WORLD_UI_ERROR_CODES) {
       const text = worldErrorText(code, 'register');
       expect(text, code).toBeTruthy();
-      if (code !== 'unknown') expect(text, code).not.toBe(generic);
+      if (!vague.includes(code)) expect(text, code).not.toBe(generic);
     }
+  });
+
+  it('os códigos extras do servidor do mundo têm texto', () => {
+    expect(worldErrorText('device_limit', 'login')).toBe('Esta conta já tem 3 computadores; revogue um em Dispositivos.');
+    expect(worldErrorText('name_cooldown', 'character')).toMatch(/30 dias/);
+    expect(worldErrorText('no_player', 'visibility')).toMatch(/personagem/);
+    expect(worldErrorText('unavailable', 'status')).toMatch(/manutenção/);
+    for (const c of ['invalid_json', 'too_large', 'unsupported_media_type', 'method_not_allowed']) expect(worldErrorText(c, 'login')).toMatch(/formato/);
   });
 
   it('"invalid" diz o que foi recusado, conforme a ação', () => {

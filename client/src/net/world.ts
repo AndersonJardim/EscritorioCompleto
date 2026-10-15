@@ -5,6 +5,7 @@
 import type { AppearanceParts } from '../../../shared/appearance';
 import type { Locale } from '../../../shared/i18n';
 import type { OfficeSnapshot } from '../../../shared/types';
+import { WORLD_KNOWN_ERROR_CODES, type WorldKnownErrorCode } from '../../../shared/world/api';
 import type { TraitId } from '../../../shared/world/traits';
 import type { IntroId } from '../../../shared/world/intro';
 import { parsePlayerName, playerNameKey } from '../../../shared/world/names-rules';
@@ -67,26 +68,11 @@ export interface WorldCharacterInput {
 }
 
 /**
- * Códigos do contrato, mais três da própria interface: `offline` (o Habblaud local não respondeu), `forbidden` (403 da
- * guarda, sem código: a página não é a do próprio computador) e `unknown`.
+ * Códigos que a interface traduz: os do servidor do mundo e os do servidor local (shared/world/), mais dois só dela:
+ * `offline` (o Habblaud local não respondeu) e `forbidden` (403 sem código: a guarda de origem recusou a página).
  */
-export const WORLD_ERROR_CODES = [
-  'invalid_code',
-  'invalid_credentials',
-  'email_not_verified',
-  'banned',
-  'name_taken',
-  'name_invalid',
-  'name_blocked',
-  'invalid',
-  'not_configured',
-  'rate_limited',
-  'network',
-  'offline',
-  'forbidden',
-  'unknown',
-] as const;
-export type WorldErrorCode = (typeof WORLD_ERROR_CODES)[number];
+export const WORLD_UI_ERROR_CODES = [...WORLD_KNOWN_ERROR_CODES, 'offline', 'forbidden'] as const;
+export type WorldErrorCode = WorldKnownErrorCode | 'offline' | 'forbidden';
 
 export type WorldResult<T = null> = { ok: true; data: T } | { ok: false; code: WorldErrorCode; status: number };
 
@@ -151,7 +137,7 @@ export function parseWorldStatus(v: unknown): WorldStatus | null {
 export function worldErrorCode(status: number, body: unknown): WorldErrorCode {
   const err = isObject(body) ? body.error : undefined;
   const code = isObject(err) ? err.code : undefined;
-  if (typeof code === 'string' && (WORLD_ERROR_CODES as readonly string[]).includes(code)) return code as WorldErrorCode;
+  if (typeof code === 'string' && (WORLD_UI_ERROR_CODES as readonly string[]).includes(code)) return code as WorldErrorCode;
   if (status === 404) return 'not_configured';
   if (status === 429) return 'rate_limited';
   if (status === 403) return 'forbidden';

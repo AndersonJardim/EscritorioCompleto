@@ -371,7 +371,9 @@ Em desenvolvimento e desligado por padrão (o que sai do computador: `docs/world
   lotes de 5.000 tentativas que devolvem a vez ao event loop.
 - `service.ts`: a conta (uma operação por vez). `/v1/me` é relido no máximo a cada 30 s (ou com `?refresh=1`); um 401
   do servidor do mundo numa rota com token apaga a sessão daqui (`lastError: session_expired`); entrar de novo revoga
-  o dispositivo anterior; sair apaga o `world.json` mesmo sem resposta do servidor.
+  o dispositivo anterior; sair apaga o `world.json` mesmo sem resposta do servidor. O `lastError` leva só códigos
+  conhecidos (`worldLastError` em `shared/world/api.ts`): rede e prazo viram `network`, o resto que a interface não
+  conhece vira `unknown`.
 - `http.ts`: as rotas `/api/world/*` (lista e formatos em `shared/world/api.ts`). `http/app.ts` só as entrega pela
   porta local com `Host` local (a porta do celular recebe 403 `local_only`, nem com login); tudo, menos o `status`, exige
   a trava do terminal (403 `terminal_off`); sem `HABBLAUD_WORLD_URL`, 409 `not_configured`; `HABBLAUD_WORLD=0`, 404.

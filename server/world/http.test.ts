@@ -384,9 +384,9 @@ describe('de ponta a ponta com o servidor do mundo de mentira', () => {
     await call(s.base, 'PUT', '/api/world/character', CHARACTER);
     await s.world!.close();
     const st = await call(s.base, 'GET', '/api/world/status');
-    expect(st.body).toMatchObject({ state: 'waiting', account: { access: 'waiting' }, player: { name: 'Ana Pixel' }, lastError: 'world_unreachable' });
+    expect(st.body).toMatchObject({ state: 'waiting', account: { access: 'waiting' }, player: { name: 'Ana Pixel' }, lastError: 'network' });
     const out = await call(s.base, 'POST', '/api/world/logout', {});
-    expect(out.body).toEqual({ available: true, configured: true, state: 'logged_out', lastError: 'world_unreachable' });
+    expect(out.body).toEqual({ available: true, configured: true, state: 'logged_out', lastError: 'network' });
     expect(existsSync(s.file)).toBe(false);
   });
 

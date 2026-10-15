@@ -20,7 +20,7 @@
 // - Qualquer 401 do servidor do mundo numa rota com token = token revogado ou vencido: a sessão daqui é apagada.
 // - Entrar de novo (outra conta ou a mesma) troca a sessão e revoga o dispositivo anterior no servidor.
 import { getLocale } from '../../shared/i18n';
-import type { WorldMeta, WorldState, WorldStatus } from '../../shared/world/api';
+import { worldLastError, type WorldKnownErrorCode, type WorldMeta, type WorldState, type WorldStatus } from '../../shared/world/api';
 import {
   TOS_VERSION,
   type DeviceAuth,
@@ -71,7 +71,8 @@ export class WorldService {
   private meToken?: string;
   private lastFetchAt = -Infinity;
   private inflight?: Promise<void>;
-  private lastError?: string;
+  /** Só códigos conhecidos (worldLastError): a interface traduz cada um. */
+  private lastError?: WorldKnownErrorCode;
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly o: WorldServiceOptions) {
@@ -278,7 +279,7 @@ export class WorldService {
     this.me = undefined;
     this.meToken = undefined;
     this.lastFetchAt = -Infinity;
-    this.lastError = error;
+    this.lastError = error === undefined ? undefined : worldLastError(error);
     if (had) this.o.onChange?.();
   }
 
@@ -302,7 +303,7 @@ export class WorldService {
     if (this.o.store.get()?.token !== s.token) return; // a sessão mudou no meio
     if (!r.ok) {
       if (r.status === 401) this.drop('session_expired');
-      else this.lastError = r.code;
+      else this.lastError = worldLastError(r.code);
       return;
     }
     this.applyMe(s, r.data);

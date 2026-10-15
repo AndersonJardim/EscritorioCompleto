@@ -8,6 +8,7 @@ import { appearanceFromSeed } from '../../art/character/appearance';
 import { PLAYER_TRAITS } from '../../../../shared/world/protocol';
 import { parsePlayerTraits, traitsClash, type TraitId } from '../../../../shared/world/traits';
 import type { WorldErrorCode, WorldMeta, WorldServerState, WorldVisibility } from '../../net/world';
+import { isWorldKnownErrorCode } from '../../../../shared/world/api';
 import { isIntroId } from '../../../../shared/world/intro';
 import { parsePlayerName, type PlayerNameProblem } from '../../../../shared/world/names-rules';
 import { tr } from '../../../../shared/i18n';
@@ -300,8 +301,12 @@ export type WorldAction =
   | 'devices'
   | 'revoke';
 
-/** Texto de um erro (o `message` do servidor, em inglês, nunca aparece). Código desconhecido: texto genérico. */
-export function worldErrorText(code: WorldErrorCode | string, action: WorldAction): string {
+/**
+ * Texto de um erro (o `message` do servidor, em inglês, nunca aparece). O switch cobre todo WorldErrorCode (o
+ * compilador cobra um texto para cada código novo); um código que esta versão não conhece leva o texto genérico.
+ */
+export function worldErrorText(raw: WorldErrorCode | string, action: WorldAction): string {
+  const code: WorldErrorCode = isWorldKnownErrorCode(raw) || raw === 'offline' || raw === 'forbidden' ? raw : 'unknown';
   switch (code) {
     case 'invalid_code':
       return tr('Código errado ou vencido. Confira o e-mail ou peça outro código.');
@@ -311,22 +316,64 @@ export function worldErrorText(code: WorldErrorCode | string, action: WorldActio
       return tr('Falta confirmar o e-mail: mandamos um código novo.');
     case 'banned':
       return tr('Esta conta foi banida do Habblaud World. Para recorrer, responda ao e-mail do banimento.');
+    case 'suspended':
+      return tr('Esta conta está suspensa no Habblaud World por enquanto.');
+    case 'unauthorized':
+    case 'not_logged_in':
+    case 'session_expired':
+      return tr('A sessão do Habblaud World neste computador terminou. Entre de novo.');
     case 'name_taken':
       return tr('Este nome já está em uso no mundo. Escolha outro.');
     case 'name_invalid':
       return tr('Nome inválido: de 3 a 20 caracteres, com letras de um só alfabeto, números, espaço, _ - e .');
     case 'name_blocked':
       return tr('Este nome não é permitido. Escolha outro.');
+    case 'name_cooldown':
+      return tr('O nome só pode ser trocado uma vez a cada 30 dias.');
+    case 'password_invalid':
+      return tr('A senha precisa ter de 12 a 128 caracteres.');
+    case 'password_weak':
+      return tr('Senha fraca: não use o e-mail, o nome de jogador nem só repetição.');
+    case 'password_pwned':
+      return tr('Esta senha aparece em vazamentos de dados conhecidos. Escolha outra.');
+    case 'invalid_email':
+      return tr('E-mail inválido. Confira o endereço.');
+    case 'altcha_required':
+    case 'altcha_invalid':
+    case 'altcha_failed':
+      return tr('A verificação anti-robô não passou. Tente de novo em instantes.');
+    case 'device_limit':
+      return tr('Esta conta já tem 3 computadores; revogue um em Dispositivos.');
+    case 'no_player':
+      return tr('Crie o personagem primeiro.');
+    case 'unavailable':
+      return tr('O Habblaud World está em manutenção. Tente de novo mais tarde.');
+    case 'not_found':
+      return action === 'revoke' ? tr('Este dispositivo não está mais na conta.') : tr('O servidor do Habblaud World não encontrou o que foi pedido.');
+    case 'invalid_json':
+    case 'too_large':
+    case 'unsupported_media_type':
+    case 'method_not_allowed':
+      return tr('O pedido saiu num formato que o servidor não aceita. Atualize o Habblaud e tente de novo.');
     case 'not_configured':
       return tr('O Habblaud World não está ligado neste Habblaud (falta HABBLAUD_WORLD_URL).');
     case 'rate_limited':
       return tr('Muitas tentativas seguidas. Espere alguns minutos e tente de novo.');
     case 'network':
+    case 'world_unreachable':
+    case 'world_timeout':
       return tr('O servidor do Habblaud World não respondeu. Tente de novo em instantes.');
+    case 'world_bad_response':
+      return tr('O servidor do Habblaud World respondeu algo inesperado. Tente de novo em instantes.');
+    case 'storage_failed':
+      return tr('Não deu para gravar a sessão neste computador: ela vale só até o Habblaud reiniciar.');
     case 'offline':
       return tr('Sem conexão com o Habblaud.');
     case 'forbidden':
+    case 'local_only':
       return tr('A conta do World só pode ser mexida pelo próprio computador, com o Habblaud aberto em localhost.');
+    case 'terminal_off':
+      return tr('A conta do World só pode ser mexida com o Habblaud acessível apenas pelo próprio computador (acesso local, bind 127.0.0.1).');
     case 'invalid':
       switch (action) {
         case 'register':
@@ -339,7 +386,9 @@ export function worldErrorText(code: WorldErrorCode | string, action: WorldActio
         default:
           return tr('O servidor recusou o pedido. Confira os dados e tente de novo.');
       }
-    default:
+    case 'world_error':
+    case 'internal':
+    case 'unknown':
       return tr('Algo deu errado. Tente de novo em instantes.');
   }
 }
