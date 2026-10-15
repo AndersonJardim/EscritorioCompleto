@@ -758,8 +758,11 @@ character stay, and coming back creates a new building).
 
 The **World** button in the top bar swaps the office for the city: walk with the arrows/WASD or by clicking, each
 building's card shows floors, agents and status, and the minimap sits in the corner; paused or out of the world, your
-building stays dark, but you can still walk around the city. In demo mode (`?mock=1&world=approved&scene=city`, only
-fictional buildings and people): [the city](docs/screenshots/world-cidade.png) and [a building's card](docs/screenshots/world-cartao.png).
+building stays dark, but you can still walk around the city. Near a building's door, **Enter (E)** takes you inside:
+the owner's live office, with rooms under made-up names and the agents in their current status, view only (no
+terminal, messages or permissions); you see "N visitors now" on yours. In demo mode (`?mock=1&world=approved&scene=city`,
+only fictional buildings and people): [the city](docs/screenshots/world-cidade.png), [a building's card](docs/screenshots/world-cartao.png),
+[the visit](docs/screenshots/world-visita.png) and [the visit panel](docs/screenshots/world-visita-painel.png).
 
 The account stays only on this computer, in `~/.habblaud/world.json` (in Docker, in the `/data` volume), and the section
 only works from this computer. What leaves your computer and what never does (in Portuguese):

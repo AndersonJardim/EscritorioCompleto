@@ -96,6 +96,10 @@ export interface CityScene {
   visitOwn(): void;
   /** A cena Visita aberta agora (null na rua). */
   visit(): VisitScene | null;
+  /** A frente da porta de um prédio da cidade (tiles), ou null (depuração e capturas). */
+  doorOf(buildingId: string): { x: number; y: number } | null;
+  /** Anda até (x, y) tiles pelo A*, como um clique no chão (depuração e capturas). */
+  walkTo(x: number, y: number): boolean;
 }
 
 export function createCityScene(o: CitySceneOptions): CityScene {
@@ -653,6 +657,11 @@ export function createCityScene(o: CitySceneOptions): CityScene {
       else pendingOwn = true;
     },
     visit: () => visit,
+    walkTo: (x, y) => walkTo(x, y, false),
+    doorOf(id) {
+      const b = state.buildings.get(id);
+      return b ? { ...lotDoor(b.lot).front } : null;
+    },
   };
   return scene;
 }

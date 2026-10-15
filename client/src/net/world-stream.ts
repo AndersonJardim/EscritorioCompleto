@@ -306,12 +306,15 @@ const DISTRICT = 'centro';
 const FAKE_AFK_MS = 60_000;
 /** O servidor aceita o `enter` a até isto da frente da porta (2 tiles + 1 de folga). */
 const FAKE_ENTER_MAX = 3;
-/** Status que os agentes do interior de exemplo vão trocando, um patch a cada 3 s. */
+/**
+ * Status que os agentes do interior de exemplo vão trocando, um patch a cada 3 s (pelo número do patch, de 4 em 4; o
+ * 4º de cada volta só muda os visitantes): o do exemplo, Beatriz responde, Thiago e Larissa voltam ao trabalho.
+ */
 const FAKE_STATUS_CYCLE: ReadonlyArray<Readonly<Record<string, WorldBuildingDetail['floors'][number]['agents'][number]['status']>>> = [
+  {},
+  { Beatriz: 'waiting', Larissa: 'idle', Thiago: 'shell' },
   { Beatriz: 'working', Larissa: 'idle', Thiago: 'shell' },
   { Beatriz: 'working', Larissa: 'working', Thiago: 'working' },
-  { Beatriz: 'waiting', Larissa: 'working', Thiago: 'shell' },
-  { Beatriz: 'waiting', Larissa: 'idle', Thiago: 'shell' },
 ];
 
 /** Eu na cidade falsa: o personagem da conta de exemplo do FakeWorldApi (net/world.ts), o das Configurações. */

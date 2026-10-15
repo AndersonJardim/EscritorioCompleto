@@ -756,8 +756,11 @@ prédio novo).
 
 O botão **Mundo**, na barra do topo, troca o escritório pela cidade: anda-se com setas/WASD ou clicando, o cartão de
 cada prédio mostra andares, agentes e estado, e o minimapa fica no canto; pausado ou fora do mundo, o seu prédio fica
-apagado, mas dá para andar pela cidade. No modo demonstração (`?mock=1&world=approved&scene=city`, só prédios e
-pessoas fictícios): [a cidade](docs/screenshots/world-cidade.png) e [o cartão de um prédio](docs/screenshots/world-cartao.png).
+apagado, mas dá para andar pela cidade. Perto da porta de um prédio, **Entrar (E)** leva para dentro: o escritório do
+dono ao vivo, com as salas de nomes fictícios e os agentes no status de agora, só para ver (nada de terminal,
+mensagens ou permissões); você vê "N visitantes agora" no seu. No modo demonstração (`?mock=1&world=approved&scene=city`,
+só prédios e pessoas fictícios): [a cidade](docs/screenshots/world-cidade.png), [o cartão de um prédio](docs/screenshots/world-cartao.png),
+[a visita](docs/screenshots/world-visita.png) e [o painel da visita](docs/screenshots/world-visita-painel.png).
 
 A conta fica só neste computador, em `~/.habblaud/world.json` (no Docker, no volume `/data`), e a seção só funciona pelo
 próprio computador. O que sai e o que nunca sai do computador: [docs/world/privacidade.md](docs/world/privacidade.md).

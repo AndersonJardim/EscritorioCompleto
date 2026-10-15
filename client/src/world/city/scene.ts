@@ -824,10 +824,9 @@ export class CityRenderer {
       const x = sx(hl.me.x * TILE) + 12 + 7 * Math.min(2, zoom);
       const y = sy(hl.me.y * TILE) - 20 * Math.min(2.2, Math.max(0.8, zoom));
       const bounce = Math.round(Math.sin(now / 240) * 2);
-      const label = tr('Entrar');
+      const label = tr('Entrar (E)');
       ctx.font = `700 11px ${UI_FONT}`;
-      const tw = Math.ceil(ctx.measureText(label).width);
-      const w = 20 + 6 + tw + 8;
+      const w = Math.ceil(ctx.measureText(label).width) + 16;
       const left = Math.round(x - 10);
       const top = Math.round(y - 10 + bounce);
       ctx.fillStyle = 'rgba(18,21,29,0.86)';
@@ -837,18 +836,8 @@ export class CityRenderer {
       ctx.roundRect(left, top, w, 20, 5);
       ctx.fill();
       ctx.stroke();
-      // a tecla
-      ctx.fillStyle = 'rgba(255,214,140,0.18)';
-      ctx.beginPath();
-      ctx.roundRect(left + 3, top + 3, 14, 14, 3);
-      ctx.fill();
       ctx.fillStyle = '#ffe3a0';
-      ctx.font = `800 11px ${UI_FONT}`;
-      ctx.textAlign = 'center';
-      ctx.fillText('E', left + 10, top + 10.5);
-      ctx.textAlign = 'left';
-      ctx.font = `700 11px ${UI_FONT}`;
-      ctx.fillText(label, left + 23, top + 10.5);
+      ctx.fillText(label, left + 8, top + 10.5);
     }
     void night;
   }

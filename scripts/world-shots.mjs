@@ -1,8 +1,11 @@
 // Capturas da seção do Habblaud World no modo demonstração (?mock=1&world=approved: só dados fictícios do
 // FakeWorldApi, nada do escritório de verdade): o cartão "Seu prédio" (docs/screenshots/world-predio.png), a janela
 // "Ver o que foi enviado" (docs/screenshots/world-enviado.png) e a cidade de mentira (&scene=city: só prédios e
-// jogadores fictícios do FakeWorldStream de client/src/net/world-stream.ts) no fim da tarde (world-cidade.png) e o
-// cartão de um prédio (world-cartao.png). Sobe o Vite sozinho (ou usa --url de um Habblaud já rodando) e fotografa com o Chromium
+// jogadores fictícios do FakeWorldStream de client/src/net/world-stream.ts) no fim da tarde (world-cidade.png), o
+// cartão de um prédio (world-cartao.png) e a visita ao prédio do vizinho (o interior de exemplo de
+// shared/world/visit-sample.ts): o escritório por dentro (world-visita.png) e o painel com o cartão de um agente
+// (world-visita-painel.png). Durante a visita, nenhuma requisição a /api sai da página (o modo demonstração não tem
+// servidor; ao vivo, a cena só fala com /api/world/*). Sobe o Vite sozinho (ou usa --url de um Habblaud já rodando) e fotografa com o Chromium
 // headless do Playwright, sem tocar no navegador de quem roda.
 //
 // Uso: npm run shots:world [-- --url http://localhost:4747] [--out docs/screenshots] [--chromium /caminho/do/chrome]
@@ -90,6 +93,42 @@ try {
   const y1 = Math.min(900, Math.max(lot.b.y, box.y + box.height) + 16);
   await page.screenshot({ path: join(out, 'world-cartao.png'), clip: { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } });
   console.log('salvo:', join(out, 'world-cartao.png'));
+
+  // A visita (Fase 4): anda até a porta do vizinho (lote 4,1, aceso) e aperta E.
+  await city('14');
+  const neighbor = await page.evaluate(() => {
+    const s = window.habblaud.city.scene();
+    const b = [...s.state.buildings.values()].find((x) => x.lot.x === 4 && x.lot.y === 1);
+    return b ? { id: b.id, door: s.doorOf(b.id) } : null;
+  });
+  if (!neighbor?.door) throw new Error('sem o prédio do vizinho no lote (4,1)');
+  await page.evaluate((d) => window.habblaud.city.scene().walkTo(d.x, d.y + 0.3), neighbor.door);
+  await page.waitForFunction((d) => {
+    const m = window.habblaud.city.scene().me();
+    return m && !m.moving && Math.hypot(m.x - d.x, m.y - d.y) < 1.2;
+  }, neighbor.door, { timeout: 20_000 });
+  const apiDuringVisit = [];
+  const onRequest = (r) => {
+    if (new URL(r.url()).pathname.startsWith('/api/')) apiDuringVisit.push(r.url());
+  };
+  page.on('request', onRequest);
+  await page.keyboard.press('e');
+  await page.waitForFunction(() => !!window.habblaud.city.scene().visit(), null, { timeout: 10_000 });
+  await page.mouse.move(700, 880);
+  await page.waitForTimeout(2600);
+  await page.screenshot({ path: join(out, 'world-visita.png') });
+  console.log('salvo:', join(out, 'world-visita.png'));
+  // o painel: o cartão de quem espera o dono
+  await page.locator('.ui-visit-agent', { hasText: 'Beatriz' }).click();
+  await page.waitForTimeout(900);
+  await page.locator('.ui-visit-panel').screenshot({ path: join(out, 'world-visita-painel.png') });
+  console.log('salvo:', join(out, 'world-visita-painel.png'));
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !window.habblaud.city.scene().visit(), null, { timeout: 10_000 });
+  page.off('request', onRequest);
+  const outside = apiDuringVisit.filter((u) => !new URL(u).pathname.startsWith('/api/world/'));
+  if (outside.length) problems.push(`[visita] rotas fora de /api/world/: ${outside.join(', ')}`);
 } finally {
   await browser.close();
   await vite?.close();

@@ -795,9 +795,12 @@ personnage restent, et revenir crée un nouvel immeuble).
 
 Le bouton **Monde**, dans la barre du haut, remplace le bureau par la ville : on marche avec les flèches/WASD ou en
 cliquant, la carte de chaque immeuble montre étages, agents et état, et la minicarte reste dans le coin ; en pause ou
-hors du monde, votre immeuble reste éteint, mais vous pouvez vous promener dans la ville. En mode démonstration
-(`?mock=1&world=approved&scene=city`, uniquement des immeubles et des personnes fictifs) : [la ville](docs/screenshots/world-cidade.png)
-et [la carte d'un immeuble](docs/screenshots/world-cartao.png).
+hors du monde, votre immeuble reste éteint, mais vous pouvez vous promener dans la ville. Près de la porte d'un
+immeuble, **Entrer (E)** vous fait entrer : le bureau du propriétaire en direct, avec des salles aux noms fictifs et
+les agents dans leur statut du moment, en lecture seule (ni terminal, ni messages, ni permissions) ; sur le vôtre, vous
+voyez « N visiteurs en ce moment ». En mode démonstration (`?mock=1&world=approved&scene=city`, uniquement des
+immeubles et des personnes fictifs) : [la ville](docs/screenshots/world-cidade.png), [la carte d'un immeuble](docs/screenshots/world-cartao.png),
+[la visite](docs/screenshots/world-visita.png) et [le panneau de la visite](docs/screenshots/world-visita-painel.png).
 
 Le compte reste uniquement sur cet ordinateur, dans `~/.habblaud/world.json` (dans Docker, dans le volume `/data`), et la
 section ne fonctionne que depuis l'ordinateur lui-même. Ce qui sort de l'ordinateur et ce qui n'en sort jamais (en

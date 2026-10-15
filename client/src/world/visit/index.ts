@@ -102,7 +102,7 @@ export function createVisitScene(o: VisitSceneOptions): VisitScene {
     attrs: { disabled: true, 'aria-disabled': 'true' },
   });
   const panelBtn = h('button', { class: 'ui-btn ui-visit-bar__panel', type: 'button', attrs: { 'aria-expanded': 'false', 'aria-controls': 'ui-visit-panel' }, on: { click: () => setPanel(!panelOpen) } });
-  const leaveBtn = h('button', { class: 'ui-btn ui-btn--primary ui-visit-bar__leave', type: 'button', text: tr('Sair'), title: tr('Sair do prédio (Esc)'), on: { click: () => leave() } });
+  const leaveBtn = h('button', { class: 'ui-btn ui-btn--primary ui-visit-bar__leave', type: 'button', text: tr('Sair do prédio'), title: tr('Sair do prédio (Esc)'), on: { click: () => leave() } });
   const bar = h(
     'header',
     { class: 'ui-visit-bar', attrs: { 'aria-label': tr('Visita') } },
