@@ -22,12 +22,20 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
   Privacidade) ou **Já tenho conta**; código de 6 dígitos com reenvio; **Esqueci a senha**. Na lista de espera, só
   o aviso, sem posição nem previsão, e já dá para **criar o personagem**: nome de jogador, dica visual, o mesmo
   editor de aparência da gaveta do agente, 2 ou 3 traços de personalidade (os que não combinam ficam desabilitados)
-  e uma frase de apresentação da lista. Com o acesso liberado, "Seu prédio entra no mundo na próxima versão".
-  Também: visibilidade do prédio (ao vivo ou discreto, fechado a visitas, esconder o país, tokens, placar,
+  e uma frase de apresentação da lista. Com o acesso liberado, o cartão **Seu prédio** (abaixo). Também: visibilidade do prédio (ao vivo ou discreto, fechado a visitas, esconder o país, tokens, placar,
   compactações), dispositivos (revogar) e sair. Se a moderação trocar o nome de jogador, a seção pede um nome novo,
   que entra sem esperar os 30 dias. Tudo só pelo próprio computador; nada pela porta remota do celular.
   O cartão **Conheça o Habblaud World** aparece uma vez, para quem ainda não tem conta. No modo demonstração,
   `?mock=1&world=logged_out` (ou `waiting`, `approved`) simula o servidor; o código é 123456.
+- **Seu prédio no mundo (interface):** com o acesso liberado, o cartão **Seu prédio** em Configurações › Habblaud
+  World mostra se o prédio está conectado, reconectando ou pausado (ou se ainda falta o personagem), quantos andares
+  e agentes ele tem, quando saiu a última remessa e, se o mundo recusar uma remessa, o motivo. **Pausar** interrompe
+  o envio na hora e apaga o prédio; **Retomar** acende de novo. **Ver o que foi enviado** abre o JSON exato da última
+  remessa, com o horário, o tamanho em bytes, a resposta do mundo e um botão para copiar: é tudo o que saiu do
+  computador. O tema escolhido em **Aparência › Tema do escritório** também vale para o prédio, e a barra do topo
+  ganha o selo "🏙️ no mundo" / "⏸ pausado", que abre a seção (some na barra apertada e no celular). No modo
+  demonstração, `?mock=1&world=approved` mostra o prédio com a remessa de exemplo de `docs/world/privacidade.md`;
+  `npm run shots:world` refaz as capturas `docs/screenshots/world-predio.png` e `world-enviado.png`.
 - **Conta e personagem pelo servidor local:** rotas `/api/world/*` para criar a conta (o desafio anti-robô é resolvido
   pelo próprio Habblaud), confirmar o e-mail, entrar, sair, reenviar o código, trocar a senha, salvar o personagem
   (nome, aparência, 2 ou 3 traços e a frase de apresentação) e a visibilidade, e ver ou desconectar dispositivos. Só

@@ -9,7 +9,7 @@ import type { UiComponent, UiContext } from '../context';
 import { h, setHidden } from '../dom';
 import { pixelIcon } from '../icons';
 import { safeLocalStorage } from '../prefs';
-import { extLink, WORLD_PRIVACY_URL } from './settings-world';
+import { extLink, WORLD_PRIVACY_URL } from './links';
 import { INVITE_SEEN_KEY, shouldShowInvite } from './world-model';
 
 /** Prédio em pixels (o mundo é uma cidade de prédios). */

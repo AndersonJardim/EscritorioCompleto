@@ -9672,3 +9672,335 @@ html.is-replay #world {
     justify-content: center;
   }
 }
+
+/* ------------------------------------------------------------------ Habblaud World: prédio no mundo (Fase 2)
+   Cartão "Seu prédio" na seção (conta aprovada), a janela "Ver o que foi enviado", a dica do tema em Aparência e o
+   chip da barra do topo. A interface só tem o tema escuro: as cores saem dos tokens do .ui-root. */
+
+.ui-world__building {
+  --bld: var(--st-working);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 11px 12px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--bld) 34%, transparent);
+  background: color-mix(in srgb, var(--bld) 6%, var(--ui-bg-soft));
+  box-shadow: inset 3px 0 0 var(--bld);
+}
+
+.ui-world__building.is-reconnecting {
+  --bld: var(--st-waiting);
+}
+
+.ui-world__building.is-paused,
+.ui-world__building.is-no_player {
+  --bld: var(--st-idle);
+}
+
+.ui-world__building.is-no_player {
+  border-style: dashed;
+}
+
+.ui-world__bhead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* Prédio em pixels: aceso (janelas amarelas) só com a conexão aberta. */
+.ui-world__bart {
+  --win: rgba(124, 200, 255, 0.22);
+  flex: none;
+  width: 30px;
+  height: 40px;
+  background:
+    linear-gradient(var(--ui-faint), var(--ui-faint)) 12px 32px / 6px 8px no-repeat,
+    linear-gradient(var(--win), var(--win)) 6px 8px / 6px 4px no-repeat,
+    linear-gradient(var(--win), var(--win)) 18px 8px / 6px 4px no-repeat,
+    linear-gradient(var(--win), var(--win)) 6px 18px / 6px 4px no-repeat,
+    linear-gradient(var(--win), var(--win)) 18px 18px / 6px 4px no-repeat,
+    linear-gradient(rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.1)) 0 0 / 30px 40px no-repeat;
+  image-rendering: pixelated;
+}
+
+.ui-world__building.is-connected .ui-world__bart {
+  --win: #ffd36b;
+  filter: drop-shadow(0 0 5px rgba(255, 211, 107, 0.35));
+}
+
+.ui-world__btitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.ui-world__btitle h4 {
+  margin: 0;
+  font: 700 14px/1.25 var(--font-ui);
+}
+
+.ui-world__bstate {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--bld) 40%, transparent);
+  font-size: 11px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--bld) 75%, #fff);
+  white-space: nowrap;
+}
+
+.ui-world__bstate::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  background: var(--bld);
+}
+
+.ui-world__building.is-connected .ui-world__bstate::before {
+  box-shadow: 0 0 6px var(--bld);
+}
+
+.ui-world__building.is-reconnecting .ui-world__bstate::before {
+  animation: ui-blink 1s steps(2, jump-none) infinite;
+}
+
+.ui-world__bdesc {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ui-muted);
+  overflow-wrap: anywhere;
+}
+
+.ui-world__bstats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ui-world__bstats li {
+  padding: 1px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--ui-line);
+  background: rgba(0, 0, 0, 0.18);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ui-world__brejected {
+  padding: 7px 10px;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--lv-crit) 38%, transparent);
+  background: color-mix(in srgb, var(--lv-crit) 9%, transparent);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.ui-world__brejected strong {
+  color: color-mix(in srgb, var(--lv-crit) 55%, #fff);
+}
+
+.ui-world__building > .ui-set__hint {
+  line-height: 1.45;
+}
+
+/* Dica do tema em Aparência (o tema também vai para o prédio). */
+.ui-world-theme {
+  display: block;
+  margin-top: 2px;
+}
+
+.ui-world-theme .ui-world__error {
+  font-size: inherit;
+}
+
+/* Janela "Ver o que foi enviado": cartão central no computador, quase a tela toda no celular. */
+.ui-world-sent {
+  width: min(620px, calc(100vw - 32px));
+  max-width: none;
+  max-height: calc(100dvh - 48px);
+  padding: 0;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: 14px;
+  background: var(--ui-bg-solid);
+  color: var(--ui-text);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+  font: 13px/1.4 var(--font-ui);
+}
+
+.ui-world-sent::backdrop {
+  background: rgba(5, 8, 14, 0.72);
+  backdrop-filter: blur(3px);
+}
+
+.ui-world-sent[open] {
+  animation: ui-deliv-in 0.22s ease-out;
+}
+
+.ui-world-sent__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 16px calc(16px + env(safe-area-inset-bottom));
+}
+
+.ui-world-sent__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ui-world-sent__title {
+  margin: 0;
+  font: 700 16px/1.25 var(--font-ui);
+}
+
+.ui-world-sent__content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ui-world-sent__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ui-world-sent__meta li {
+  padding: 1px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--ui-line);
+  background: var(--ui-bg-soft);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ui-world-sent__ack {
+  --ack: var(--st-idle);
+  padding: 7px 10px;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--ack) 38%, transparent);
+  background: color-mix(in srgb, var(--ack) 9%, transparent);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ui-world-sent__ack strong {
+  color: color-mix(in srgb, var(--ack) 60%, #fff);
+}
+
+.ui-world-sent__ack.is-accepted {
+  --ack: var(--st-working);
+}
+
+.ui-world-sent__ack.is-rejected {
+  --ack: var(--lv-crit);
+}
+
+.ui-world-sent__lead {
+  font-size: 12.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.ui-world-sent__json {
+  max-height: min(52vh, 460px);
+  min-height: 120px;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-radius: 8px;
+  border: 1px solid var(--ui-line-strong);
+  background: rgba(0, 0, 0, 0.32);
+  font: 500 11.5px/1.5 var(--font-mono);
+  color: #cfe3ff;
+  white-space: pre;
+  tab-size: 2;
+  user-select: text;
+}
+
+.ui-root .ui-world-sent__json:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 1px;
+}
+
+/* Chip da barra do topo: discreto como o número da versão; verde aceso, cinza pausado, âmbar reconectando. */
+.ui-world-chip {
+  --chip: var(--st-working);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 7px 0 5px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--chip) 32%, transparent);
+  background: color-mix(in srgb, var(--chip) 10%, transparent);
+  font: 600 10.5px/1 var(--font-ui);
+  color: color-mix(in srgb, var(--chip) 70%, #fff);
+  white-space: nowrap;
+  transition: background-color 0.15s;
+}
+
+.ui-world-chip:hover {
+  background: color-mix(in srgb, var(--chip) 20%, transparent);
+}
+
+.ui-world-chip.is-paused {
+  --chip: var(--st-idle);
+}
+
+.ui-world-chip.is-reconnecting {
+  --chip: var(--st-waiting);
+}
+
+.ui-world-chip__icon {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.ui-world-chip.is-paused .ui-world-chip__icon {
+  font-size: 9px;
+}
+
+/* Barra apertada: a linha de status vira um selo no canto do logo (sem versão nem "Demonstração"); o chip sai também
+   (o prédio continua em Configurações › Habblaud World). */
+@media (max-width: 1040px) {
+  .ui-world-chip {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .ui-world-sent {
+    width: calc(100vw - 16px);
+    max-width: none;
+    max-height: calc(100dvh - 16px);
+  }
+
+  .ui-world-sent__body {
+    max-height: calc(100dvh - 16px);
+    padding: 12px 12px calc(14px + env(safe-area-inset-bottom));
+  }
+
+  .ui-world-sent__json {
+    max-height: 48vh;
+    font-size: 11px;
+  }
+}
