@@ -61,7 +61,7 @@ export interface WorldServiceOptions {
 /** Releitura automática de /v1/me enquanto a conta está na lista de espera. */
 export const WAITING_POLL_MS = 30 * 60_000;
 
-/** "marcio@exemplo.com" -> "m***@exemplo.com" (só quando o servidor do mundo não respondeu com o dele). */
+/** "ana@exemplo.com" -> "a***@exemplo.com" (só quando o servidor do mundo não respondeu com o dele). */
 export function maskEmail(email: string): string {
   const at = email.lastIndexOf('@');
   if (at < 1) return '***';
