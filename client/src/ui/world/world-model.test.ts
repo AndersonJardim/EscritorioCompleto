@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PART_KEYS } from '../../../../shared/appearance';
 import { TRAIT_IDS } from '../../../../shared/world/traits';
+import { NOTICE_IDS } from '../../../../shared/world/protocol';
 import { FAKE_UPLINK, WORLD_UI_ERROR_CODES, type WorldBuildingStatus, type WorldBuildingStop, type WorldMeta } from '../../net/world';
 import {
   ackView,
@@ -14,6 +15,7 @@ import {
   prettyUplink,
   themeGoesToWorld,
   UPLINK_REJECT_CODES,
+  worldNoticeText,
   uplinkRejectText,
   worldChipState,
   characterProblem,
@@ -392,5 +394,13 @@ describe('tema e chip do topo', () => {
     expect(worldChipState(meta('waiting', { building }), LOCAL)).toBeNull();
     // Aberto por outro endereço (sem a trava), o chip informa; a seção explica que a conta só mexe pelo computador.
     expect(worldChipState(meta('approved', { building }), { ...LOCAL, local: false })).toBe('live');
+  });
+});
+
+describe('avisos do mundo na cena (Fase 3)', () => {
+  it('cada id de NOTICE_IDS tem um texto próprio; um id desconhecido leva o genérico', () => {
+    const generic = worldNoticeText('id_novo');
+    const texts = NOTICE_IDS.map((id) => worldNoticeText(id));
+    expect(new Set([...texts, generic]).size).toBe(NOTICE_IDS.length + 1);
   });
 });
