@@ -379,7 +379,31 @@ describe('BuildingUplink: goodbye, pausa e retomada', () => {
     expect(h.goodbyes).toEqual([]);
   });
 
-  for (const reason of ['banned', 'suspended', 'update', 'other-device'] as const) {
+  it('deploy a cada hello (manutenção do mundo): tenta de novo com a espera crescendo até o teto, e o welcome zera', async () => {
+    const h = await start({ start: false });
+    h.world.ws.options.hello = 'deploy';
+    h.uplink.start();
+    await waitFor(() => h.world.ws.connections.length >= 5, 'cinco tentativas', 3_000);
+    const at = h.world.ws.connections.map((c) => c.openedAt);
+    const gaps = at.slice(1).map((t, i) => t - at[i]);
+    // Espera de 20, 40, 80, 80 ms (random 0,5: sem sorteio), mais o tempo da conexão.
+    expect(gaps[0]).toBeGreaterThanOrEqual(18);
+    expect(gaps[1]).toBeGreaterThanOrEqual(38);
+    expect(gaps[2]).toBeGreaterThanOrEqual(78);
+    expect(gaps[3]).toBeGreaterThanOrEqual(78);
+    expect(h.goodbyes).toEqual([]);
+    expect(h.uplink.status().stopped).toBeUndefined();
+    h.world.ws.options.hello = 'auto';
+    await waitFor(() => h.world.ws.uplinks.length === 1, 'de volta');
+    // Depois do welcome, a próxima queda começa de novo da espera mínima.
+    const n = h.world.ws.connections.length;
+    h.world.ws.open[0].drop();
+    await waitFor(() => h.world.ws.connections.length === n + 1, 'reconectou');
+    const last = h.world.ws.connections.at(-1)!.openedAt - h.world.ws.connections.at(-2)!.openedAt;
+    expect(last).toBeLessThan(400);
+  });
+
+  for (const reason of ['banned', 'suspended', 'update', 'other-device', 'deleted'] as const) {
     it(`${reason}: para, avisa a conta e mostra no status; só volta com retomar`, async () => {
       const h = await start();
       await waitFor(() => h.world.ws.uplinks.length === 1, 'primeira');

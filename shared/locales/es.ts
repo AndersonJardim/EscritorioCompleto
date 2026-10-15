@@ -2630,7 +2630,7 @@ export const ES: Readonly<Record<string, string>> = {
   "idioma desconhecido": "idioma desconocido",
   "código de convite inválido": "código de invitación no válido",
   "senha ausente": "falta la contraseña",
-  "esperado {mode: \"live\" ou \"discreet\", closed, hideCountry, tokensVisible, leaderboard, compactions}": "se esperaba {mode: \"live\" o \"discreet\", closed, hideCountry, tokensVisible, leaderboard, compactions}",
+  "esperado {mode: \"live\" ou \"discreet\", closed, hideCountry, tokensVisible, leaderboard, compactions, notifyInactivity?}": "se esperaba {mode: \"live\" o \"discreet\", closed, hideCountry, tokensVisible, leaderboard, compactions, notifyInactivity?}",
   "dispositivo desconhecido": "dispositivo desconocido",
   "o Habblaud World só age pela conta com o Habblaud acessível apenas pelo próprio computador": "Habblaud World solo actúa por la cuenta con Habblaud accesible únicamente desde el propio ordenador",
   "Habblaud World desligado: defina HABBLAUD_WORLD_URL": "Habblaud World desactivado: define HABBLAUD_WORLD_URL",
@@ -3026,4 +3026,7 @@ export const ES: Readonly<Record<string, string>> = {
   "Habblaud World: ligado: {0}": "Habblaud World: activado: {0}",
   "Habblaud World: desligado ({0}).": "Habblaud World: desactivado ({0}).",
   "Habblaud World: desligado (defina HABBLAUD_WORLD_URL).": "Habblaud World: desactivado (define HABBLAUD_WORLD_URL).",
+  "A conta do Habblaud World foi excluída. O prédio e o perfil saíram do mundo na hora; o resto é apagado do banco em 7 dias e dos backups em até 30.": "La cuenta de Habblaud World se eliminó. El edificio y el perfil salieron del mundo en el acto; el resto se borra de la base de datos en 7 días y de las copias de seguridad en hasta 30.",
+  "Habblaud World: conta excluída; a sessão e o world.json foram apagados deste computador.": "Habblaud World: cuenta eliminada; la sesión y el world.json se borraron de este ordenador.",
+  "os dados da conta só saem pela própria página do Habblaud": "los datos de la cuenta solo salen por la propia página de Habblaud",
 };

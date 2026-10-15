@@ -31,6 +31,10 @@
 //   aqui do mesmo jeito (saída e pausa gravadas, nenhum pacote até o join).
 // - Retomar sem resposta do servidor do mundo (rede, 429, 5xx): o uplink reconecta assim mesmo, e o aviso da retomada
 //   tenta de novo com a espera crescente da reconexão (backoffDelay), até dar certo ou o prédio ser pausado de novo.
+// - Excluir a conta (Fase 6): pede o código (POST /v1/me/delete) e, com o código certo (POST /v1/me/delete/confirm),
+//   fecha a conexão do prédio, apaga o world.json inteiro (sessão e tema) e a última remessa, e só então responde. O
+//   `goodbye: deleted` (a conta excluída daqui ou de outro computador) faz o mesmo; os dois juntos não atrapalham.
+// - Exportar os dados (GET /v1/me/export): repassa o JSON como veio, sem guardar nada aqui.
 // - GET /api/world/status sem `refresh` é barato: responde com o que está em memória e, se o /v1/me venceu, relê em
 //   segundo plano (só espera a leitura quando ainda não há nada guardado).
 import { getLocale, tr } from '../../shared/i18n';
@@ -369,6 +373,10 @@ export class WorldService {
         this.lastFetchAt = -Infinity;
         this.o.onChange?.();
         return;
+      case 'deleted':
+        // A conta foi excluída (daqui ou de outro computador): a sessão e o world.json somem.
+        void this.erase();
+        return;
       default:
         // update e other-device: o status do prédio mostra (building.stopped).
         this.o.onChange?.();
@@ -484,6 +492,32 @@ export class WorldService {
     );
   }
 
+  /** "Excluir conta", primeira etapa: o servidor do mundo manda o código de confirmação ao e-mail da conta. */
+  requestDeletion(): Promise<Outcome<Record<string, never>>> {
+    return this.exclusive(() => this.withToken((s) => this.o.client!.requestDeletion(s.token)));
+  }
+
+  /**
+   * "Excluir conta" com o código do e-mail. Com a resposta boa: fecha a conexão do prédio (esperando o fechamento),
+   * apaga o world.json inteiro e a última remessa e responde com o status sem conta (lastError `account_deleted`).
+   */
+  confirmDeletion(code: string): Promise<Outcome<WorldStatus>> {
+    return this.exclusive(() =>
+      this.withToken(async (s) => {
+        const r = await this.o.client!.confirmDeletion(s.token, code);
+        if (!r.ok) return r;
+        // Um `goodbye: deleted` que chegou antes já apagou tudo: erase de novo não muda nada.
+        await this.erase();
+        return { ok: true, status: 200, data: this.compose() };
+      }),
+    );
+  }
+
+  /** "Baixar meus dados": o JSON da conta como o servidor do mundo mandou (uma vez por dia, lá). */
+  exportData(): Promise<Outcome<Record<string, unknown>>> {
+    return this.withToken((s) => this.o.client!.exportData(s.token));
+  }
+
   /** Revoga um dispositivo da conta; se for este, sai daqui também. */
   revokeDevice(id: string): Promise<Outcome<Record<string, never>>> {
     return this.exclusive(() =>
@@ -551,6 +585,25 @@ export class WorldService {
     this.lastFetchAt = -Infinity;
     this.lastError = error === undefined ? undefined : worldLastError(error);
     if (had) this.changed();
+  }
+
+  /**
+   * Conta excluída: apaga a sessão e o world.json inteiro (o tema também), fecha a conexão do prédio e espera o
+   * fechamento; a última remessa some junto (outra sessão no uplink). lastError fica `account_deleted`.
+   */
+  private async erase(): Promise<void> {
+    const had = !!this.o.store.get();
+    this.stopPoll();
+    this.clearResumeRetry();
+    this.o.store.erase();
+    this.me = undefined;
+    this.meToken = undefined;
+    this.lastFetchAt = -Infinity;
+    this.lastError = 'account_deleted';
+    if (had) log.info(tr('Habblaud World: conta excluída; a sessão e o world.json foram apagados deste computador.'));
+    // Sem sessão o uplink não quer conexão: pause() fecha e espera; o changed() depois esquece a sessão (última remessa).
+    await this.uplink?.pause();
+    this.changed();
   }
 
   private rememberPlayer(player: Player): void {
@@ -629,6 +682,8 @@ export class WorldService {
     const me = s && this.meToken === s.token ? this.me : undefined;
     if (s) {
       st.account = { emailMasked: me?.account.emailMasked ?? maskEmail(s.email), access: s.access };
+      const id = this.uplink?.accountId();
+      if (id) st.account.id = id;
       const player = me ? me.player : s.player;
       if (player) st.player = player;
       if (me) st.devices = me.devices;

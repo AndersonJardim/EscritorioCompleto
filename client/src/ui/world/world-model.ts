@@ -378,6 +378,8 @@ export function worldErrorText(raw: WorldErrorCode | string, action: WorldAction
       return tr('O servidor do Habblaud World não respondeu. Tente de novo em instantes.');
     case 'world_bad_response':
       return tr('O servidor do Habblaud World respondeu algo inesperado. Tente de novo em instantes.');
+    case 'account_deleted':
+      return tr('A conta do Habblaud World foi excluída. O prédio e o perfil saíram do mundo na hora; o resto é apagado do banco em 7 dias e dos backups em até 30.');
     case 'storage_failed':
       return tr('Não deu para gravar a sessão neste computador: ela vale só até o Habblaud reiniciar.');
     case 'too_many_streams':

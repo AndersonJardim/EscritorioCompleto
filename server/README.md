@@ -367,8 +367,9 @@ Em desenvolvimento e desligado por padrão (o que sai do computador: `docs/world
   Aparência, `auto` por padrão) fica mesmo sem sessão (o arquivo vira só `{theme}`); `paused` e `left` (saiu do mundo,
   sempre com `paused`) são da sessão.
 - `client.ts`: as rotas `/v1/*` com o `fetch` nativo (prazo de 15 s, sem seguir redirecionamento, resposta de até
-  256 KB copiada campo a campo). Erro do servidor do mundo volta como `{status, code}`; rede, prazo e resposta fora do
-  formato ganham `world_unreachable`, `world_timeout` e `world_bad_response`.
+  256 KB copiada campo a campo; a exportação dos dados, até 8 MB e como veio). Erro do servidor do mundo volta como
+  `{status, code}` (a manutenção, `503 maintenance`); rede, prazo e resposta fora do formato ganham
+  `world_unreachable`, `world_timeout` e `world_bad_response`.
 - `altcha.ts`: o desafio anti-robô do cadastro e dos pedidos de e-mail, resolvido aqui por força bruta (SHA-256), em
   lotes de 5.000 tentativas que devolvem a vez ao event loop.
 - `service.ts`: a conta (uma operação por vez). `/v1/me` é relido no máximo a cada 30 s (ou com `?refresh=1`) e, na
@@ -378,16 +379,23 @@ Em desenvolvimento e desligado por padrão (o que sai do computador: `docs/world
   servidor. O `lastError` leva só códigos conhecidos (`worldLastError` em `shared/world/api.ts`): rede e prazo viram
   `network`, o resto que a interface não conhece vira `unknown`. Pausa, retomada e saída do mundo vão ao servidor do
   mundo numa fila (na ordem pedida); a retomada sem resposta (rede, prazo, 429, 5xx) tenta de novo com a espera da
-  reconexão do uplink (2 s a 60 s), até dar certo ou o prédio ser pausado de novo.
+  reconexão do uplink (2 s a 60 s), até dar certo ou o prédio ser pausado de novo. Excluir a conta (Fase 6): o código
+  vem de `POST /v1/me/delete`; com `POST /v1/me/delete/confirm` aceito (ou um `goodbye: deleted`), fecha o uplink e
+  espera, apaga o `world.json` inteiro (tema junto, `store.erase`) e a última remessa, e o status fica sem conta com
+  `lastError: account_deleted`. Exportar os dados (`GET /v1/me/export`) só repassa o JSON.
 - `uplink.ts`: o prédio no mundo, por WebSocket (o `WebSocket` global do Node) em `<HABBLAUD_WORLD_URL>/v1/socket`
-  (`wss://`; `ws://127.0.0.1` só no modo dev). Conecta só com a conta aprovada, o personagem criado e a trava do
+  (`wss://`; `ws://127.0.0.1` e `ws://host.docker.internal` só no modo dev). Conecta só com a conta aprovada, o personagem criado e a trava do
   terminal; pausado ou fora do mundo, só enquanto a cena Mundo está aberta (o viewer avisa por `cityChanged`) e sem
   nenhum `uplink` (nem o do `welcome`): só `hello`, `ping`/`pong` e os comandos da cena. Manda o `hello` (`{v, version, build: {commit, dirty}, locale, token}`) e, a cada `welcome`, o
   pacote inteiro; depois, a cada mudança do escritório (`Office.onChange`) ou a cada minuto, projeta
   (`shared/world/projection.ts`) e manda se mudou: 3 s desde a primeira mudança, no máximo uma remessa a cada 5 s.
   `{t: 'ping'}` a cada 30 s (sem resposta por 75 s, reconecta). Reconexão de 2 s a 60 s (dobra, ±25 %). `goodbye`:
-  `deploy` reconecta; `banned`, `suspended`, `update` e `other-device` param até retomar (ou reabrir); `waiting`,
-  `no_player` e `unauthorized` param até a sessão mudar e avisam a conta (`service.goodbye`). `uplink.ack {error:
+  `deploy` reconecta (na manutenção do mundo, `deploy` a cada `hello`: a espera cresce até o teto e só zera com um
+  `welcome`); `banned`, `suspended`, `update` e `other-device` param até retomar (ou reabrir); `waiting`, `no_player`
+  e `unauthorized` param até a sessão mudar e avisam a conta (`service.goodbye`); `deleted` para e a conta apaga a
+  sessão. Do `welcome` guarda, só em memória e só para o status, o id da conta (`me.id`, no assunto do recurso por
+  e-mail) e o selo "não verificado" do próprio prédio (`building.unverified`, que a `area`/`area.patch` da cena
+  também atualiza). `uplink.ack {error:
   'left'}` (a conta saiu do mundo, aqui ou em outro computador) e o `left: true` do `/v1/me` gravam `left` e `paused`
   (`service.leftElsewhere`): nenhum pacote até o join (a conexão só fica com a cena aberta). A última remessa
   `{at, bytes, uplink, ack}` fica em memória e em `<dataDir>/world-last-uplink.json` (modo 600; só da mesma sessão,
@@ -414,13 +422,17 @@ Em desenvolvimento e desligado por padrão (o que sai do computador: `docs/world
   não conta como feito; o `/resume` fora do mundo passa por ele e, sem ter saído, ele é o `/resume`) e
   `GET /api/world/last-uplink` (`{at, bytes, uplink, ack?}` ou `{}`, sem a trava do terminal, como o status). O
   `GET /api/world/status` ganha `building` (conta aprovada com personagem) e `theme`; sem `?refresh=1` responde da
-  memória e relê `/v1/me` em segundo plano quando venceu.
+  memória e relê `/v1/me` em segundo plano quando venceu. Da conta (Fase 6): `POST /api/world/delete-account` (`202
+  {}`: o código vai ao e-mail), `POST /api/world/delete-account/confirm` `{code}` (responde o status sem conta depois de
+  fechar o prédio e apagar o `world.json`), `GET /api/world/export` (o JSON como anexo `habblaud-world-dados.json`;
+  como o stream, só pela própria página, porque gasta a cota do dia; `HEAD` não chama o servidor do mundo) e o
+  `notifyInactivity` opcional no `PUT /api/world/visibility`.
 
 O estado vai no snapshot em `meta.world` (`{enabled, configured, state, building?, scene?}`, nada da conta; `building` =
 `{connected, paused, floors, agents, lastUplinkAt?, left?, stopped?}`, com `connected` = aceso e mandando (a conexão
 só da cena, pausado, não conta) e `stopped: true` sem o motivo, que só vai no status; `scene` = `{available}` com a
-conta aprovada e o personagem, `available` com a trava do terminal e sem parada de `banned`, `suspended`, `update` ou
-`other-device`: o botão Mundo da barra) e em `GET /api/access` (`world`). O build grava
+conta aprovada e o personagem, `available` com a trava do terminal e sem parada de `banned`, `suspended`, `update`,
+`other-device` ou `deleted`: o botão Mundo da barra) e em `GET /api/access` (`world`). O build grava
 `dist/build.json` (`{commit, dirty, builtAt}`, `scripts/build-info.mjs`; sem git, `unknown`;
 `HABBLAUD_BUILD_COMMIT`/`HABBLAUD_BUILD_DIRTY` substituem o git), lido por `readBuildInfo()` (`build.ts`) a cada conexão
 do uplink: o `hello` leva só `{commit, dirty}`.

@@ -365,6 +365,9 @@ describe('porta remota', () => {
       ['POST', '/api/world/join'],
       ['GET', '/api/world/stream'],
       ['POST', '/api/world/cmd'],
+      ['POST', '/api/world/delete-account'],
+      ['POST', '/api/world/delete-account/confirm'],
+      ['GET', '/api/world/export'],
     ];
     for (const [method, path] of routes) {
       const r = await request(s.remoteBase, path, { method, headers, ...(method === 'GET' ? {} : { body: {} }) });

@@ -1012,3 +1012,159 @@ describe('a cena Mundo pelas rotas (stream e comandos)', () => {
     sse.close();
   });
 });
+
+describe('a conta e os dados (Fase 6)', () => {
+  async function approved(opts: { building?: Record<string, unknown> } = {}) {
+    const s = await start({ uplink: true });
+    const w = s.world!;
+    if (opts.building) w.ws.options.building = opts.building;
+    s.office.addMain({ id: '.claude:6', account: '.claude', sessionId: 'sess-6', cwd: '/p/f6', role: 'Agente principal', startedAt: Date.now(), status: 'working' });
+    await call(s.base, 'POST', '/api/world/register', { email: EMAIL, password: PASSWORD });
+    await call(s.base, 'POST', '/api/world/verify', { email: EMAIL, code: FAKE_CODE });
+    await call(s.base, 'PUT', '/api/world/character', CHARACTER);
+    w.accounts.get(EMAIL)!.access = 'approved';
+    await call(s.base, 'GET', '/api/world/status?refresh=1');
+    await waitFor(() => w.ws.uplinks.length === 1 && existsSync(s.lastFile), 'primeira remessa');
+    return { s, w };
+  }
+
+  it('excluir conta: código pedido, código errado não apaga, o certo fecha o prédio e apaga o world.json inteiro antes de responder', async () => {
+    seen.length = 0;
+    const { s, w } = await approved();
+    // Um tema escolhido: sair da conta o deixaria no world.json; excluir apaga o arquivo inteiro.
+    await call(s.base, 'PUT', '/api/world/theme', { theme: 'halloween' });
+    const token = s.store.get()!.token;
+
+    const asked = await call(s.base, 'POST', '/api/world/delete-account', {});
+    expect(asked.status).toBe(202);
+    expect(asked.body).toEqual({});
+    expect(w.requests.find((r) => r.path === '/v1/me/delete')).toMatchObject({ method: 'POST', authorization: `Bearer ${token}` });
+
+    // Fora do formato, recusado aqui; errado, recusado lá: nada muda.
+    expect((await call(s.base, 'POST', '/api/world/delete-account/confirm', { code: '12' })).body.error.code).toBe('invalid_code');
+    expect(w.requests.filter((r) => r.path === '/v1/me/delete/confirm')).toHaveLength(0);
+    const wrong = await call(s.base, 'POST', '/api/world/delete-account/confirm', { code: '000000' });
+    expect(wrong.status).toBe(400);
+    expect(wrong.body.error.code).toBe('invalid_code');
+    expect(s.store.get()?.token).toBe(token);
+    expect(w.ws.open).toHaveLength(1);
+
+    const done = await call(s.base, 'POST', '/api/world/delete-account/confirm', { code: '123 456' });
+    expect(done.status).toBe(200);
+    expect(done.body).toEqual({ available: true, configured: true, state: 'logged_out', lastError: 'account_deleted' });
+    expect(w.requests.filter((r) => r.path === '/v1/me/delete/confirm').map((r) => r.body)).toEqual([{ code: '000000' }, { code: FAKE_CODE }]);
+    // Quando a resposta chega: a conexão fechou, o world.json (tema junto) e a última remessa sumiram.
+    expect(w.ws.open).toHaveLength(0);
+    expect(existsSync(s.file)).toBe(false);
+    expect(existsSync(s.lastFile)).toBe(false);
+    expect(s.store.get()).toBeUndefined();
+    expect((await call(s.base, 'GET', '/api/world/last-uplink')).body).toEqual({});
+    expect(s.hub.current().meta.world).toEqual({ enabled: true, configured: true, state: 'logged_out' });
+    // Nada reconecta, e o status continua dizendo por quê.
+    await new Promise((ok) => setTimeout(ok, 200));
+    expect(w.ws.open).toHaveLength(0);
+    expect((await call(s.base, 'GET', '/api/world/status')).body.lastError).toBe('account_deleted');
+    // Sem conta, as rotas da conta pedem a conta.
+    expect((await call(s.base, 'POST', '/api/world/delete-account', {})).body.error.code).toBe('not_logged_in');
+    for (const text of seen) expect(text).not.toContain(token);
+  });
+
+  it('goodbye deleted (conta excluída em outro computador): a sessão e o world.json somem daqui', async () => {
+    const { s, w } = await approved();
+    w.ws.open[0].goodbye('deleted');
+    await waitFor(() => !s.store.get() && !existsSync(s.file), 'sessão apagada');
+    await waitFor(() => !existsSync(s.lastFile), 'última remessa apagada');
+    const st = (await call(s.base, 'GET', '/api/world/status')).body;
+    expect(st).toEqual({ available: true, configured: true, state: 'logged_out', lastError: 'account_deleted' });
+    await new Promise((ok) => setTimeout(ok, 150));
+    expect(w.ws.connections).toHaveLength(1);
+  });
+
+  it('baixar meus dados: o JSON como anexo, uma vez por dia; só pela própria página; HEAD não gasta a cota', async () => {
+    const { s, w } = await approved();
+    const head = await call(s.base, 'HEAD', '/api/world/export');
+    expect(head.status).toBe(200);
+    const refused: Array<Record<string, string>> = [{ Origin: 'http://evil.example' }, { 'Sec-Fetch-Site': 'cross-site' }];
+    for (const headers of refused) {
+      const r = await call(s.base, 'GET', '/api/world/export', undefined, headers);
+      expect(r.status, JSON.stringify(headers)).toBe(403);
+      expect(r.body.error.code).toBe('local_only');
+    }
+    expect(w.requests.filter((r) => r.path === '/v1/me/export')).toHaveLength(0);
+
+    const r = await call(s.base, 'GET', '/api/world/export', undefined, { 'Sec-Fetch-Site': 'same-origin' });
+    expect(r.status).toBe(200);
+    expect(r.headers['content-disposition']).toBe('attachment; filename="habblaud-world-dados.json"');
+    expect(r.headers['cache-control']).toBe('no-store');
+    expect(r.body).toMatchObject({ account: { email: EMAIL }, player: { name: 'Ana Pixel' }, likesGiven: [], blocked: [], reports: [] });
+    expect(w.requests.find((q) => q.path === '/v1/me/export')?.method).toBe('GET');
+    // A segunda no mesmo dia: 429, com a espera.
+    const again = await call(s.base, 'GET', '/api/world/export');
+    expect(again.status).toBe(429);
+    expect(again.body.error).toEqual({ code: 'rate_limited', retryAfter: 86400 });
+    expect(again.headers['retry-after']).toBe('86400');
+  });
+
+  it('baixar meus dados e excluir: sem conta 401, sem a trava do terminal 403, sem URL 409', async () => {
+    const s = await start();
+    expect((await call(s.base, 'GET', '/api/world/export')).body.error.code).toBe('not_logged_in');
+    expect((await call(s.base, 'POST', '/api/world/delete-account/confirm', { code: FAKE_CODE })).body.error.code).toBe('not_logged_in');
+    const off = await start({ terminal: false });
+    for (const [m, p] of [['GET', '/api/world/export'], ['POST', '/api/world/delete-account'], ['POST', '/api/world/delete-account/confirm']]) {
+      const r = await call(off.base, m, p, m === 'GET' ? undefined : { code: FAKE_CODE });
+      expect(r.status, p).toBe(403);
+      expect(r.body.error.code).toBe('terminal_off');
+    }
+    const noUrl = await start({ world: 'no-url' });
+    expect((await call(noUrl.base, 'GET', '/api/world/export')).body.error.code).toBe('not_configured');
+    expect(s.world!.requests).toEqual([]);
+    expect(off.world!.requests).toEqual([]);
+  });
+
+  it('aviso de inatividade: vai no PUT da visibilidade só quando mandado; fora do formato, 422', async () => {
+    const { s, w } = await approved();
+    const vis = { mode: 'live', closed: false, hideCountry: false, tokensVisible: true, leaderboard: false, compactions: false };
+    expect((await call(s.base, 'PUT', '/api/world/visibility', { ...vis, notifyInactivity: 'sim' })).body.error.code).toBe('invalid');
+    expect((await call(s.base, 'PUT', '/api/world/visibility', vis)).status).toBe(200);
+    expect('notifyInactivity' in (w.requests.at(-1)!.body ?? {})).toBe(false);
+    const off = await call(s.base, 'PUT', '/api/world/visibility', { ...vis, notifyInactivity: false });
+    expect(off.body).toEqual({ ...vis, notifyInactivity: false });
+    expect(w.requests.at(-1)!.body).toEqual({ ...vis, notifyInactivity: false });
+    expect((await call(s.base, 'GET', '/api/world/status?refresh=1')).body.player.visibility.notifyInactivity).toBe(false);
+  });
+
+  it('manutenção: o status diz (503 maintenance), o prédio tenta de novo com espera e volta quando acaba', async () => {
+    const { s, w } = await approved();
+    w.options.maintenance = true;
+    w.ws.open[0].goodbye('deploy');
+    const st = await call(s.base, 'GET', '/api/world/status?refresh=1');
+    expect(st.body.lastError).toBe('maintenance');
+    expect((await call(s.base, 'POST', '/api/world/delete-account', {})).body.error.code).toBe('maintenance');
+    // Recusado a cada hello, com a espera crescendo (20, 40, 60 ms nos testes): poucas tentativas, nunca em rajada.
+    await new Promise((ok) => setTimeout(ok, 400));
+    const tries = w.ws.connections.length;
+    expect(tries).toBeGreaterThan(2);
+    expect(tries).toBeLessThan(15);
+    w.options.maintenance = false;
+    await waitFor(() => s.uplink!.connected, 'de volta');
+    await waitFor(() => w.ws.uplinks.length >= 2, 'pacote de novo');
+    expect((await call(s.base, 'GET', '/api/world/status?refresh=1')).body.lastError).toBeUndefined();
+  });
+
+  it('não verificado e o id da conta: do welcome para o status (nunca no snapshot); a cidade atualiza o selo', async () => {
+    const { s, w } = await approved({ building: { id: 'acc_1', floors: 1, agents: { total: 1, working: 1, waiting: 0, idle: 0 }, unverified: true } });
+    const st = (await call(s.base, 'GET', '/api/world/status')).body;
+    expect(st.account).toEqual({ emailMasked: 'a***@exemplo.com', access: 'approved', id: 'acc_1' });
+    expect(st.building.unverified).toBe(true);
+    expect(JSON.stringify(s.hub.current().meta.world)).not.toMatch(/unverified|acc_1/);
+    // A revisão tirou o selo: o patch da cidade (o prédio inteiro, com lot e sem o campo) atualiza.
+    w.ws.open[0].send({ t: 'area.patch', chunk: 'centro:0,0', rev: 1, changes: [{ id: 'acc_1', lot: { district: 'centro', x: 0, y: 0 }, floors: 1 }] });
+    await waitFor(() => !s.uplink!.status().unverified, 'selo tirado');
+    w.ws.open[0].send({ t: 'area.patch', chunk: 'centro:0,0', rev: 2, changes: [{ id: 'acc_1', unverified: true }] });
+    await waitFor(() => s.uplink!.status().unverified === true, 'selo de volta');
+    // De outro prédio, nada muda.
+    w.ws.open[0].send({ t: 'area', chunk: 'centro:0,0', rev: 3, buildings: [{ id: 'acc_9', unverified: false }] });
+    await new Promise((ok) => setTimeout(ok, 50));
+    expect(s.uplink!.status().unverified).toBe(true);
+  });
+});

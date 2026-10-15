@@ -32,6 +32,11 @@
 //   para "Ver o que foi enviado": é o mesmo objeto que foi para o fio.
 // - `uplink.ack {error: 'left'}`: a conta saiu do mundo (aqui ou em outro computador); a conta grava a saída e a pausa
 //   (`onLeft`): nenhum pacote sai até o "Voltar ao mundo" (a conexão só continua com a cena Mundo aberta).
+// - Do `welcome` guarda o id da conta (`me.id`, para o assunto do recurso) e o selo "não verificado" do próprio prédio
+//   (`building.unverified`), que a cidade (`area`, `area.patch`) também atualiza; os dois só em memória e só para o
+//   status (nunca no snapshot, que vai ao celular).
+// - `goodbye: deploy` reconecta com a mesma espera crescente (também na manutenção do mundo, em que o servidor manda
+//   `deploy` a cada `hello`: a espera só volta ao começo com um `welcome`).
 // - A cena Mundo (viewer.ts) usa a mesma conexão: recebe o `welcome`, a queda e as mensagens da cidade (`CityListener`)
 //   e manda os comandos do jogador por `sendCity`, só depois do `welcome`; avisa quando passa a querer (ou deixa de
 //   querer) a cidade (`cityChanged`), para a conexão de quem está pausado abrir ou fechar. A lógica da cena fica lá.
@@ -172,6 +177,9 @@ const isGoodbye = (v: unknown): v is GoodbyeReason => typeof v === 'string' && (
 /** Só os códigos conhecidos; o resto (de uma versão mais nova do servidor) vira `internal`. */
 const ackError = (v: string): UplinkAckError => ((UPLINK_ACK_ERRORS as readonly string[]).includes(v) ? (v as UplinkAckError) : 'internal');
 const count = (v: unknown): number | undefined => (typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : undefined);
+/** Id de conta do `welcome` (opaco: só letras, números, `_` e `-`). */
+const ACCOUNT_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const record = (v: unknown): Record<string, unknown> | undefined => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined);
 
 /** Assinatura da sessão que decide se dá para conectar: muda ao entrar, ser aprovado, criar ou trocar o personagem. */
 function sessionKey(s: WorldSession | undefined): string {
@@ -207,6 +215,10 @@ export class BuildingUplink {
   private last?: LastRecord;
   /** Andares e agentes do prédio que vieram no `welcome` (antes da primeira remessa). */
   private fromWelcome?: { floors: number; agents: number };
+  /** Id da conta no mundo (`welcome.me.id`), desta sessão. */
+  private meId?: string;
+  /** O prédio desta conta está marcado como "não verificado" (do `welcome` ou da cidade). */
+  private unverified = false;
   private city?: CityListener;
 
   constructor(private readonly o: BuildingUplinkOptions) {
@@ -321,7 +333,13 @@ export class BuildingUplink {
     const st: WorldBuildingStatus = { ...meta };
     if (this.last?.ack) st.lastAck = this.last.ack.ok ? { ok: true } : { ok: false, error: this.last.ack.error ?? 'internal' };
     if (this.stop_) st.stopped = this.stop_.reason;
+    if (this.unverified) st.unverified = true;
     return st;
+  }
+
+  /** O id da conta no mundo, se um `welcome` desta sessão já chegou (vai no assunto do recurso por e-mail). */
+  accountId(): string | undefined {
+    return this.meId;
   }
 
   /** OfficeSnapshot.meta.world.building (a parada só como sim/não: o snapshot também vai ao celular). */
@@ -432,7 +450,10 @@ export class BuildingUplink {
         return;
       default:
         // A cidade (área, jogadores, avisos e o que vier nas próximas fases): para a cena, se houver.
-        if (this.welcomed) this.city?.message(msg);
+        if (this.welcomed) {
+          this.noteOwnBuilding(msg);
+          this.city?.message(msg);
+        }
         return;
     }
   }
@@ -444,6 +465,9 @@ export class BuildingUplink {
     const floors = count(b?.floors);
     const agents = count((b?.agents as Record<string, unknown> | undefined)?.total);
     this.fromWelcome = floors === undefined ? undefined : { floors, agents: agents ?? 0 };
+    const id = record(msg.me)?.id;
+    if (typeof id === 'string' && ACCOUNT_ID_RE.test(id)) this.meId = id;
+    this.unverified = b?.unverified === true;
     this.welcomed = true;
     this.attempt = 0;
     this.stop_ = undefined;
@@ -459,6 +483,28 @@ export class BuildingUplink {
     if (this.sending()) this.armSend(Math.max(0, this.lastSentAt + this.t.minGapMs - this.now()));
     this.o.onChange?.();
     this.city?.opened(msg);
+  }
+
+  /**
+   * O próprio prédio numa mensagem da cidade (só com a cena aberta): o selo "não verificado" acompanha. `area` e item de
+   * `area.patch` com `lot` trazem o prédio inteiro (sem o campo = sem o selo); item sem `lot` traz só o que mudou.
+   */
+  private noteOwnBuilding(msg: Record<string, unknown>): void {
+    const id = this.meId;
+    if (!id) return;
+    let next: boolean | undefined;
+    if (msg.t === 'area' && Array.isArray(msg.buildings)) {
+      const b = msg.buildings.map(record).find((x) => x?.id === id);
+      if (b) next = b.unverified === true;
+    } else if (msg.t === 'area.patch' && Array.isArray(msg.changes)) {
+      for (const c of msg.changes.map(record)) {
+        if (c?.id !== id) continue;
+        if ('lot' in c || 'unverified' in c) next = c.unverified === true;
+      }
+    }
+    if (next === undefined || next === this.unverified) return;
+    this.unverified = next;
+    this.o.onChange?.();
   }
 
   private onAck(msg: Record<string, unknown>): void {
@@ -685,6 +731,8 @@ export class BuildingUplink {
     this.signals.clear();
     this.lastJson = undefined;
     this.fromWelcome = undefined;
+    this.meId = undefined;
+    this.unverified = false;
     if (this.last && this.last.deviceId !== deviceId) {
       this.last = undefined;
       this.removeLast();

@@ -21,12 +21,14 @@ Ao usar o World, sai do computador, por HTTPS, para o servidor do mundo:
 | Aceite dos Termos de Uso (só a versão, `v1`) e o código de convite, se você tiver um | No cadastro | Registrar o aceite; o convite põe a conta no próximo lote da lista de espera |
 | Solução do desafio anti-robô (ALTCHA) | No cadastro, nos pedidos de e-mail e, se o servidor pedir, ao entrar | É só um número calculado pelo seu Habblaud, no lugar de um captcha |
 | Personagem: nome de jogador, aparência (cores e estilos), 2 ou 3 traços e a frase de apresentação | Ao salvar o personagem | É o que os outros jogadores vão ver |
-| Preferências de visibilidade (ao vivo ou discreto, fechado a visitas, esconder o país, mostrar tokens, placar, compactações) | Ao salvar | Para o mundo respeitar a sua escolha |
+| Preferências de visibilidade (ao vivo ou discreto, fechado a visitas, esconder o país, mostrar tokens, placar, compactações) e o aviso por e-mail antes de retirar o prédio por inatividade | Ao salvar | Para o mundo respeitar a sua escolha |
 | Token do dispositivo | Em cada chamada da conta | Provar que é você, sem mandar a senha de novo |
 | Qual dispositivo desconectar | Ao desconectar um | Só o id que o próprio servidor deu ao dispositivo |
 | Pausar e retomar o prédio | Ao clicar em Pausar ou Retomar (`POST /v1/me/building/pause` e `/resume`, só com o token) | Para o prédio apagar na hora para todos e voltar quando você quiser |
 | Sair do mundo | Ao confirmar "Sair do mundo" (`DELETE /v1/me/building`, só com o token) | Para o prédio sair do mundo na hora e o lote ficar livre; a conta e o personagem continuam |
 | Voltar ao mundo | Ao clicar em "Voltar ao mundo" depois de sair (`POST /v1/me/building/join`, só com o token) | Para o servidor aceitar o prédio de novo (um prédio novo, em outro lote) |
+| Excluir a conta | Ao pedir a exclusão e ao digitar o código que chegou por e-mail (`POST /v1/me/delete` e `/v1/me/delete/confirm`, com o token e o código) | Para o servidor apagar a conta: o prédio e o perfil somem do mundo na hora; a conta, os likes, os bloqueios, as denúncias feitas e os dispositivos saem do banco em 7 dias e dos backups em até 30. Aqui, o `world.json` é apagado |
+| Baixar meus dados | Ao clicar em "Baixar meus dados" (`GET /v1/me/export`, só com o token; uma vez por dia) | O servidor devolve, num arquivo JSON, o que guarda da sua conta; nada novo sai do computador |
 | Versão do Habblaud | Em toda chamada, no cabeçalho `User-Agent` (`Habblaud/0.11.0`) | Compatibilidade e diagnóstico |
 
 Enquanto a conta está na lista de espera, o Habblaud aberto pergunta ao servidor do mundo, a cada 30 minutos, se o

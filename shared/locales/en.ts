@@ -2630,7 +2630,7 @@ export const EN: Readonly<Record<string, string>> = {
   "idioma desconhecido": "unknown language",
   "código de convite inválido": "invalid invite code",
   "senha ausente": "missing password",
-  "esperado {mode: \"live\" ou \"discreet\", closed, hideCountry, tokensVisible, leaderboard, compactions}": "expected {mode: \"live\" or \"discreet\", closed, hideCountry, tokensVisible, leaderboard, compactions}",
+  "esperado {mode: \"live\" ou \"discreet\", closed, hideCountry, tokensVisible, leaderboard, compactions, notifyInactivity?}": "expected {mode: \"live\" or \"discreet\", closed, hideCountry, tokensVisible, leaderboard, compactions, notifyInactivity?}",
   "dispositivo desconhecido": "unknown device",
   "o Habblaud World só age pela conta com o Habblaud acessível apenas pelo próprio computador": "Habblaud World only acts on your account when Habblaud is reachable only from this computer",
   "Habblaud World desligado: defina HABBLAUD_WORLD_URL": "Habblaud World is off: set HABBLAUD_WORLD_URL",
@@ -3025,4 +3025,7 @@ export const EN: Readonly<Record<string, string>> = {
   "Habblaud World: ligado: {0}": "Habblaud World: on: {0}",
   "Habblaud World: desligado ({0}).": "Habblaud World: off ({0}).",
   "Habblaud World: desligado (defina HABBLAUD_WORLD_URL).": "Habblaud World: off (set HABBLAUD_WORLD_URL).",
+  "A conta do Habblaud World foi excluída. O prédio e o perfil saíram do mundo na hora; o resto é apagado do banco em 7 dias e dos backups em até 30.": "The Habblaud World account was deleted. The building and the profile left the world right away; the rest is deleted from the database within 7 days and from backups within 30.",
+  "Habblaud World: conta excluída; a sessão e o world.json foram apagados deste computador.": "Habblaud World: account deleted; the session and world.json were removed from this computer.",
+  "os dados da conta só saem pela própria página do Habblaud": "the account data only leaves through Habblaud's own page",
 };

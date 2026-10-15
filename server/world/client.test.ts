@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FAKE_CODE, startFakeWorld } from '../test/fake-world';
 import { encodeAltchaPayload, solveAltcha } from './altcha';
-import { parseMe, parsePlayer, WorldClient } from './client';
+import { EXPORT_MAX_BYTES, parseMe, parsePlayer, parseVisibility, WorldClient } from './client';
 
 const closers: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -106,6 +106,58 @@ describe('WorldClient', () => {
     expect(await client.verify({ email: 'a@b.co', code: '123456' })).toEqual({ ok: false, status: 502, code: 'world_bad_response' });
     expect(await client.me('t'.repeat(43))).toEqual({ ok: false, status: 502, code: 'world_bad_response' });
     expect(await client.altcha()).toEqual({ ok: false, status: 502, code: 'world_bad_response' });
+  });
+
+  it('excluir a conta e exportar os dados: POST com o código, GET do JSON como veio (até 8 MB, o resto é recusado)', async () => {
+    const big = { account: { email: 'ana@exemplo.com' }, likesGiven: Array.from({ length: 30_000 }, (_, i) => `b_${i.toString(16).padStart(8, '0')}`) };
+    const body = JSON.stringify(big);
+    expect(body.length).toBeGreaterThan(256 * 1024);
+    const seen: Array<{ method?: string; url?: string; body: string; auth?: string }> = [];
+    const base = await rawServer((req, res) => {
+      let data = '';
+      req.on('data', (c: Buffer) => (data += c));
+      req.on('end', () => {
+        seen.push({ method: req.method, url: req.url, body: data, auth: req.headers.authorization });
+        if (req.url === '/v1/me/export') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return void res.end(body);
+        }
+        if (req.url === '/v1/me/delete') {
+          res.writeHead(202, { 'Content-Type': 'application/json' });
+          return void res.end('{}');
+        }
+        res.writeHead(204);
+        res.end();
+      });
+    });
+    const client = new WorldClient({ baseUrl: base, version: '9.9.9' });
+    expect(await client.requestDeletion('tok_aaaaaaaaaaaaaaaa')).toEqual({ ok: true, status: 202, data: {} });
+    expect(await client.confirmDeletion('tok_aaaaaaaaaaaaaaaa', FAKE_CODE)).toEqual({ ok: true, status: 204, data: {} });
+    const exp = await client.exportData('tok_aaaaaaaaaaaaaaaa');
+    expect(exp).toEqual({ ok: true, status: 200, data: big });
+    expect(seen.map((r) => `${r.method} ${r.url} ${r.body}`)).toEqual(['POST /v1/me/delete {}', `POST /v1/me/delete/confirm {"code":"${FAKE_CODE}"}`, 'GET /v1/me/export ']);
+    expect(seen.every((r) => r.auth === 'Bearer tok_aaaaaaaaaaaaaaaa')).toBe(true);
+    // Uma lista (não um objeto) ou maior que o teto: resposta fora do formato.
+    const odd = await rawServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(_req.url === '/v1/me/export' ? '[1,2]' : '{}');
+    });
+    expect(await new WorldClient({ baseUrl: odd, version: '9' }).exportData('tok_aaaaaaaaaaaaaaaa')).toEqual({ ok: false, status: 502, code: 'world_bad_response' });
+    const huge = await rawServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': String(EXPORT_MAX_BYTES + 1) });
+      res.end();
+    });
+    expect((await new WorldClient({ baseUrl: huge, version: '9' }).exportData('tok_aaaaaaaaaaaaaaaa')).ok).toBe(false);
+  });
+
+  it('parseVisibility: o aviso de inatividade é opcional e, presente, só booleano', () => {
+    const v = { mode: 'live', closed: false, hideCountry: false, tokensVisible: true, leaderboard: false, compactions: false };
+    expect(parseVisibility(v)).toEqual(v);
+    expect('notifyInactivity' in parseVisibility(v)!).toBe(false);
+    expect(parseVisibility({ ...v, notifyInactivity: false })).toEqual({ ...v, notifyInactivity: false });
+    expect(parseVisibility({ ...v, notifyInactivity: 'sim' })).toBeUndefined();
+    expect(parseVisibility({ ...v, notifyInactivity: null })).toBeUndefined();
+    expect(parseVisibility({ ...v, extra: 1 })).toEqual(v);
   });
 
   it('sem conexão e tempo esgotado', async () => {

@@ -29,6 +29,18 @@
 //                                                resume)
 //   GET  /api/world/last-uplink              → WorldLastUplink | {} (o que foi enviado por último, exato)
 //
+// A conta e os dados (Fase 6):
+//   POST /api/world/delete-account           {} → 202 {} ("Excluir conta": POST /v1/me/delete manda o código ao e-mail)
+//   POST /api/world/delete-account/confirm   {code} → 200 WorldStatus (POST /v1/me/delete/confirm; com a resposta boa,
+//                                                fecha a conexão do prédio e apaga o world.json inteiro: a sessão
+//                                                some daqui e o status volta sem conta, com lastError
+//                                                `account_deleted`)
+//   GET  /api/world/export                   → 200 JSON da conta como veio de GET /v1/me/export, como anexo
+//                                                (habblaud-world-dados.json); uma vez por dia (429 rate_limited); só
+//                                                pela própria página, como o stream (gasta a cota do dia)
+//   PUT  /api/world/visibility               aceita também `notifyInactivity` (opcional): o aviso por e-mail antes
+//                                                de retirar o prédio por inatividade
+//
 // A cena Mundo (Fase 3; server/world/viewer.ts), com as mesmas travas e sem a porta do celular:
 //   GET  /api/world/stream                   → text/event-stream: `world.snapshot` (WorldSceneSnapshot) ao conectar e
 //                                                a cada recomeço (conexão com o mundo aberta ou caída, `view` de
@@ -141,6 +153,11 @@ export interface WorldBuildingStatus {
   stopped?: WorldBuildingStop;
   /** Saiu do mundo (POST /api/world/leave): o prédio foi retirado e nenhum pacote sai até o join (prédio novo, lote novo). */
   left?: true;
+  /**
+   * O mundo marcou o prédio como "não verificado" (WorldBuildingPublic.unverified, do `welcome` ou da cidade): os dados
+   * pareceram fora do plausível e estão em revisão; o prédio fica fora de placares e destaques. Dá para contestar.
+   */
+  unverified?: true;
 }
 
 /** OfficeSnapshot.meta.world.building: o resumo do prédio (sem a conta), para a interface mostrar sem pedir o status. */
@@ -292,7 +309,8 @@ export interface WorldStatus {
   available: boolean;
   configured: boolean;
   state: WorldState;
-  account?: { emailMasked: string; access: WorldAccess };
+  /** `id`: o id da conta no mundo, quando já se sabe (do `welcome` da conexão do prédio); vai no assunto do recurso. */
+  account?: { emailMasked: string; access: WorldAccess; id?: string };
   player?: Player;
   devices?: DeviceInfo[];
   /** Código do último problema (worldLastError: só códigos conhecidos), quando os dados podem estar velhos. */
@@ -328,6 +346,7 @@ export const WORLD_LOCAL_ERROR_CODES = [
   'too_many_streams', // 429: a cena Mundo já está aberta em 4 abas
   'no_stream', // 409: comando de um stream que não está aberto (a cena fechou ou o servidor reiniciou)
   'not_connected', // 409: comando sem a conexão com o servidor do mundo aberta
+  'account_deleted', // em lastError: a conta foi excluída (daqui ou de outro computador) e o world.json, apagado
   'network', // em lastError: sem conexão com o servidor do mundo ou sem resposta no prazo
   'unknown', // em lastError: outro problema (resposta fora do formato, código que esta versão não conhece)
 ] as const;

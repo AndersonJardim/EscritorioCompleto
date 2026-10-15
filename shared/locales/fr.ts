@@ -2646,7 +2646,7 @@ export const FR: Readonly<Record<string, string>> = {
   "idioma desconhecido": "langue inconnue",
   "código de convite inválido": "code d'invitation invalide",
   "senha ausente": "mot de passe manquant",
-  "esperado {mode: \"live\" ou \"discreet\", closed, hideCountry, tokensVisible, leaderboard, compactions}": "attendu {mode : \"live\" ou \"discreet\", closed, hideCountry, tokensVisible, leaderboard, compactions}",
+  "esperado {mode: \"live\" ou \"discreet\", closed, hideCountry, tokensVisible, leaderboard, compactions, notifyInactivity?}": "attendu {mode : \"live\" ou \"discreet\", closed, hideCountry, tokensVisible, leaderboard, compactions, notifyInactivity?}",
   "dispositivo desconhecido": "appareil inconnu",
   "o Habblaud World só age pela conta com o Habblaud acessível apenas pelo próprio computador": "Habblaud World n'agit pour le compte que si Habblaud n'est accessible que depuis cet ordinateur",
   "Habblaud World desligado: defina HABBLAUD_WORLD_URL": "Habblaud World désactivé : définissez HABBLAUD_WORLD_URL",
@@ -3042,4 +3042,7 @@ export const FR: Readonly<Record<string, string>> = {
   "Habblaud World: ligado: {0}": "Habblaud World : activé : {0}",
   "Habblaud World: desligado ({0}).": "Habblaud World : désactivé ({0}).",
   "Habblaud World: desligado (defina HABBLAUD_WORLD_URL).": "Habblaud World : désactivé (définissez HABBLAUD_WORLD_URL).",
+  "A conta do Habblaud World foi excluída. O prédio e o perfil saíram do mundo na hora; o resto é apagado do banco em 7 dias e dos backups em até 30.": "Le compte Habblaud World a été supprimé. L'immeuble et le profil ont quitté le monde aussitôt ; le reste est effacé de la base de données sous 7 jours et des sauvegardes sous 30 jours au plus.",
+  "Habblaud World: conta excluída; a sessão e o world.json foram apagados deste computador.": "Habblaud World : compte supprimé ; la session et le world.json ont été effacés de cet ordinateur.",
+  "os dados da conta só saem pela própria página do Habblaud": "les données du compte ne sortent que par la page de Habblaud elle-même",
 };
