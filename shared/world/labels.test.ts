@@ -50,6 +50,10 @@ describe('frases de apresentação', () => {
     expect(introLabel('coffee')).toBe('Movido a café');
   });
 
+  it('id desconhecido (servidor mais novo) vira o próprio id, sem quebrar', () => {
+    expect(introLabel('emacs' as never)).toBe('emacs');
+  });
+
   it('isIntroId', () => {
     expect(isIntroId('vim')).toBe(true);
     expect(isIntroId('emacs')).toBe(false);

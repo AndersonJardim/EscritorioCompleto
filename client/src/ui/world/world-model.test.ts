@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { PART_KEYS } from '../../../../shared/appearance';
 import { TRAIT_IDS } from '../../../../shared/world/traits';
 import { WORLD_ERROR_CODES, type WorldMeta } from '../../net/world';
-import { INTRO_IDS, introLabel, isIntroId } from './intro-labels';
 import {
   characterProblem,
   codeLooksValid,
@@ -242,16 +241,6 @@ describe('personagem', () => {
     expect(characterProblem({ name: 'Pixel', traits: ['games'], intro: null })).toEqual({ field: 'traits' });
     expect(characterProblem({ name: 'Pixel', traits: ['games', 'cafeina'], intro: null })).toEqual({ field: 'intro' });
     expect(characterProblem({ name: 'Pixel', traits: ['games', 'cafeina'], intro: 'coffee' })).toBeNull();
-  });
-});
-
-describe('frases de apresentação', () => {
-  it('as 20 do contrato, cada uma com texto', () => {
-    expect(INTRO_IDS).toHaveLength(20);
-    expect(new Set(INTRO_IDS.map(introLabel)).size).toBe(20);
-    expect(introLabel('night_owl')).toBe('Codo de madrugada');
-    expect(isIntroId('hello')).toBe(true);
-    expect(introLabel('desconhecida')).toBe('desconhecida');
   });
 });
 

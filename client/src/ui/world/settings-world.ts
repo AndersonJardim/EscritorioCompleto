@@ -26,7 +26,7 @@ import type { UiContext } from '../context';
 import { h, setAttr, setHidden, setText, setVariant } from '../dom';
 import { formatDateTime, relativeTime } from '../format';
 import { segmented, switchRow } from '../settings';
-import { INTRO_IDS, introLabel, isIntroId, type IntroId } from './intro-labels';
+import { INTRO_IDS, introLabel, isIntroId, type IntroId } from '../../../../shared/world/intro';
 import {
   characterProblem,
   codeLooksValid,

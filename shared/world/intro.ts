@@ -33,9 +33,9 @@ export function isIntroId(v: unknown): v is IntroId {
   return typeof v === 'string' && (INTRO_IDS as readonly string[]).includes(v);
 }
 
-/** Texto da frase no idioma ativo. */
+/** Texto da frase no idioma ativo (um id que esta versão não conhece, vindo de um servidor mais novo: o próprio id). */
 export function introLabel(id: IntroId): string {
-  return LABELS[id]();
+  return LABELS[id]?.() ?? String(id);
 }
 
 /** Todas as frases, na ordem de INTRO_IDS (para o seletor). */

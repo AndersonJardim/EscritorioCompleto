@@ -8,7 +8,7 @@ import { appearanceFromSeed } from '../../art/character/appearance';
 import { PLAYER_TRAITS } from '../../../../shared/world/protocol';
 import { parsePlayerTraits, traitsClash, type TraitId } from '../../../../shared/world/traits';
 import type { WorldErrorCode, WorldMeta, WorldServerState, WorldVisibility } from '../../net/world';
-import { isIntroId } from './intro-labels';
+import { isIntroId } from '../../../../shared/world/intro';
 import { tr } from '../../../../shared/i18n';
 
 // ------------------------------------------------------------------ quando aparece

@@ -6,7 +6,7 @@ import type { AppearanceParts } from '../../../shared/appearance';
 import type { Locale } from '../../../shared/i18n';
 import type { OfficeSnapshot } from '../../../shared/types';
 import type { TraitId } from '../../../shared/world/traits';
-import type { IntroId } from '../ui/world/intro-labels';
+import type { IntroId } from '../../../shared/world/intro';
 import { emailLooksValid, parsePlayerName, passwordProblem, playerNameKey, traitsValid, DEFAULT_VISIBILITY } from '../ui/world/world-model';
 
 export type WorldServerState = 'off' | 'logged_out' | 'waiting' | 'approved';
