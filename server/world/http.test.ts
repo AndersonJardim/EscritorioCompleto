@@ -21,6 +21,7 @@ import { createWorldRoutes } from './http';
 import { WorldService } from './service';
 import { WorldSettingsStore } from './settings';
 import { BuildingUplink } from './uplink';
+import { WorldViewer } from './viewer';
 
 setQuiet(true);
 
@@ -39,6 +40,7 @@ interface Harness {
   hub: Hub;
   office: Office;
   uplink?: BuildingUplink;
+  viewer?: WorldViewer;
   lastFile: string;
   service?: WorldService;
   store: WorldSettingsStore;
@@ -115,6 +117,13 @@ async function start(opts: { world?: 'off' | 'no-url' | 'on'; terminal?: boolean
     uplink.start();
     closers.push(() => uplink.stop());
   }
+  // A cena Mundo, como no server/index.ts (só com o uplink).
+  const viewer = uplink ? new WorldViewer() : undefined;
+  if (uplink && viewer) {
+    viewer.attach(uplink);
+    uplink.attachCity(viewer);
+    closers.push(() => viewer.stop());
+  }
   const api = createApiHandler({
     office,
     hub,
@@ -123,7 +132,7 @@ async function start(opts: { world?: 'off' | 'no-url' | 'on'; terminal?: boolean
     version: '9.9.9',
     inDocker: false,
     terminal,
-    world: service ? createWorldRoutes(service) : undefined,
+    world: service ? createWorldRoutes(service, viewer) : undefined,
   });
   const guard = createRequestGuard({ allowedHosts: new Set(['meu-mac.local']) });
   const server = http.createServer((req, res) => {
@@ -136,7 +145,8 @@ async function start(opts: { world?: 'off' | 'no-url' | 'on'; terminal?: boolean
   });
   await new Promise<void>((ok) => server.listen(0, '127.0.0.1', ok));
   closers.push(() => new Promise<void>((ok) => server.close(() => ok())));
-  return { base: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, hub, office, uplink, lastFile, service, store, file, world: fake };
+  closers.push(() => server.closeAllConnections());
+  return { base: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, hub, office, uplink, viewer, lastFile, service, store, file, world: fake };
 }
 
 /** Todas as respostas locais do teste, para conferir que o token nunca sai. */
@@ -740,5 +750,170 @@ describe('o prédio no mundo (uplink) pelas rotas', () => {
     }
     expect((await call(s.base, 'GET', '/api/world/last-uplink')).status).toBe(200);
     expect((await call(s.base, 'GET', '/api/world/status')).status).toBe(200);
+  });
+});
+
+// ------------------------------------------------------------------------------------------------ a cena Mundo (Fase 3)
+
+interface SseClient {
+  status: number;
+  headers: http.IncomingHttpHeaders;
+  body: string;
+  events(): Array<{ event: string; data: any }>;
+  close(): void;
+}
+
+/** Abre o SSE e vai juntando o que chega (para os testes: sem EventSource no Node). */
+function openStream(base: string, headers: Record<string, string> = {}): Promise<SseClient> {
+  return new Promise((ok, fail) => {
+    const req = http.request(new URL('/api/world/stream', base), { method: 'GET', headers }, (res) => {
+      const c: SseClient = {
+        status: res.statusCode ?? 0,
+        headers: res.headers,
+        body: '',
+        events: () =>
+          c.body
+            .split('\n\n')
+            .filter((b) => b.startsWith('event: '))
+            .map((b) => {
+              const [ev, data] = b.split('\n');
+              return { event: ev.slice(7), data: JSON.parse(data.slice(6)) };
+            }),
+        close: () => req.destroy(),
+      };
+      res.setEncoding('utf8');
+      res.on('data', (d: string) => (c.body += d));
+      res.on('error', () => undefined);
+      ok(c);
+    });
+    req.on('error', fail);
+    req.end();
+  });
+}
+
+describe('a cena Mundo pelas rotas (stream e comandos)', () => {
+  async function approved() {
+    const s = await start({ uplink: true });
+    const w = s.world!;
+    await call(s.base, 'POST', '/api/world/register', { email: EMAIL, password: PASSWORD });
+    await call(s.base, 'POST', '/api/world/verify', { email: EMAIL, code: FAKE_CODE });
+    await call(s.base, 'PUT', '/api/world/character', CHARACTER);
+    w.accounts.get(EMAIL)!.access = 'approved';
+    await call(s.base, 'GET', '/api/world/status?refresh=1');
+    await waitFor(() => s.uplink!.connected, 'conexão aceita');
+    return { s, w, conn: () => w.ws.open[0]! };
+  }
+
+  it('o stream manda o snapshot, liga a cidade (view), repassa o que vem do mundo e, fechado, manda view.off', async () => {
+    const { s, conn } = await approved();
+    expect(conn().messages.filter((m) => m.t === 'view')).toHaveLength(0);
+    const sse = await openStream(s.base);
+    expect(sse.status).toBe(200);
+    expect(sse.headers['content-type']).toBe('text/event-stream; charset=utf-8');
+    await waitFor(() => sse.events().length >= 1, 'snapshot');
+    const snap = sse.events()[0];
+    expect(snap.event).toBe('world.snapshot');
+    expect(snap.data).toMatchObject({ connected: true, viewing: true, district: 'centro', me: { id: 'acc_1', name: 'Ana Pixel' }, chunks: [], players: [] });
+    expect(typeof snap.data.stream).toBe('string');
+    await waitFor(() => conn().messages.some((m) => m.t === 'view'), 'view no servidor do mundo');
+
+    conn().send({ t: 'pos', x: 21, y: 15 });
+    conn().send({ t: 'area', chunk: 'centro:0,0', rev: 1, buildings: [] });
+    conn().send({ t: 'player.join', player: { id: 'p_2', name: 'Zeca', look: 'm', parts: {}, traits: ['games', 'cafeina'], likesReceived: 0, pos: { x: 25, y: 15, dir: 'w', moving: true }, where: 'street' } });
+    conn().send({ t: 'area.patch', chunk: 'centro:0,0', rev: 3, changes: [] });
+    await waitFor(() => conn().messages.some((m) => m.t === 'resync'), 'resync do salto');
+    expect(conn().messages.find((m) => m.t === 'resync')).toEqual({ t: 'resync', chunk: 'centro:0,0' });
+    expect(sse.events().filter((e) => e.event === 'world').map((e) => e.data.t)).toEqual(['pos', 'area', 'player.join']);
+    // Nada do prédio (nem o token) no stream.
+    expect(sse.body).not.toContain(s.store.get()!.token);
+    expect(sse.body).not.toContain('uplink');
+
+    // Comandos: só o último move de cada lote vai ao servidor do mundo.
+    const stream = snap.data.stream;
+    const r = await call(s.base, 'POST', '/api/world/cmd', {
+      stream,
+      cmds: [
+        { t: 'move', x: 22, y: 15, dir: 'e', moving: true },
+        { t: 'move', x: 23, y: 15, dir: 'e', moving: true, extra: 'não sobe' },
+        { t: 'profile', playerId: 'p_2' },
+      ],
+    });
+    expect(r.status).toBe(202);
+    expect(r.body).toEqual({ sent: 2 });
+    await waitFor(() => conn().messages.some((m) => m.t === 'profile'), 'comandos no servidor do mundo');
+    const city = conn().messages.filter((m) => m.t === 'move' || m.t === 'profile');
+    expect(city).toEqual([{ t: 'move', x: 23, y: 15, dir: 'e', moving: true }, { t: 'profile', playerId: 'p_2' }]);
+    // O que não é da cena nunca passa.
+    for (const bad of [{ t: 'hello', v: 1, token: 'x' }, { t: 'uplink', uplink: {} }]) {
+      const b = await call(s.base, 'POST', '/api/world/cmd', { stream, cmds: [bad] });
+      expect(b.status).toBe(400);
+      expect(b.body.error.code).toBe('invalid');
+    }
+    expect((await call(s.base, 'POST', '/api/world/cmd', { stream: 'nenhum', cmds: [{ t: 'view' }] })).body.error.code).toBe('no_stream');
+
+    sse.close();
+    await waitFor(() => conn().messages.some((m) => m.t === 'view.off'), 'view.off');
+    expect(s.viewer!.size).toBe(0);
+  });
+
+  it('sair do mundo derruba a conexão: o stream recebe o snapshot sem conexão e o comando volta not_connected', async () => {
+    const { s } = await approved();
+    const sse = await openStream(s.base);
+    await waitFor(() => sse.events().length >= 1, 'snapshot');
+    const stream = sse.events()[0].data.stream;
+    expect((await call(s.base, 'POST', '/api/world/leave', {})).status).toBe(200);
+    await waitFor(() => sse.events().some((e) => e.event === 'world.snapshot' && e.data.connected === false), 'snapshot sem conexão');
+    const r = await call(s.base, 'POST', '/api/world/cmd', { stream, cmds: [{ t: 'move', x: 21, y: 15, dir: 's', moving: false }] });
+    expect(r.status).toBe(409);
+    expect(r.body.error.code).toBe('not_connected');
+    sse.close();
+  });
+
+  it('o stream só abre pela própria página: Origin de outro site ou Sec-Fetch-Site cross-site recebem 403', async () => {
+    const { s, conn } = await approved();
+    const refused: Array<Record<string, string>> = [{ Origin: 'http://evil.example' }, { 'Sec-Fetch-Site': 'cross-site' }, { 'Sec-Fetch-Site': 'same-site' }, { Origin: 'null' }];
+    for (const headers of refused) {
+      const r = await call(s.base, 'GET', '/api/world/stream', undefined, headers);
+      expect(r.status, JSON.stringify(headers)).toBe(403);
+      expect(r.body.error.code).toBe('local_only');
+    }
+    expect(conn().messages.some((m) => m.t === 'view')).toBe(false);
+    // A própria página (mesma origem) abre.
+    const port = new URL(s.base).port;
+    const ok = await openStream(s.base, { Origin: `http://127.0.0.1:${port}`, 'Sec-Fetch-Site': 'same-origin' });
+    expect(ok.status).toBe(200);
+    ok.close();
+  });
+
+  it('no máximo 4 streams; o quinto recebe 429 too_many_streams', async () => {
+    const { s } = await approved();
+    const open: SseClient[] = [];
+    for (let i = 0; i < 4; i++) open.push(await openStream(s.base));
+    expect(open.map((o) => o.status)).toEqual([200, 200, 200, 200]);
+    const fifth = await call(s.base, 'GET', '/api/world/stream');
+    expect(fifth.status).toBe(429);
+    expect(fifth.body.error.code).toBe('too_many_streams');
+    open.forEach((o) => o.close());
+  });
+
+  it('travas: sem a trava do terminal, 403; sem URL, 409; sem conta, o stream abre sem conexão', async () => {
+    const off = await start({ uplink: true, terminal: false });
+    for (const [method, path] of [['GET', '/api/world/stream'], ['POST', '/api/world/cmd']] as const) {
+      const r = await call(off.base, method, path, method === 'GET' ? undefined : { stream: 'x', cmds: [{ t: 'view' }] });
+      expect(r.status, path).toBe(403);
+      expect(r.body.error.code).toBe('terminal_off');
+    }
+    const noUrl = await start({ world: 'no-url' });
+    for (const [method, path] of [['GET', '/api/world/stream'], ['POST', '/api/world/cmd']] as const) {
+      const r = await call(noUrl.base, method, path, method === 'GET' ? undefined : { stream: 'x', cmds: [{ t: 'view' }] });
+      expect(r.status, path).toBe(409);
+      expect(r.body.error.code).toBe('not_configured');
+    }
+    const none = await start({ uplink: true });
+    const sse = await openStream(none.base);
+    await waitFor(() => sse.events().length >= 1, 'snapshot');
+    expect(sse.events()[0].data).toMatchObject({ connected: false, viewing: false });
+    expect(none.world!.ws.connections).toHaveLength(0);
+    sse.close();
   });
 });

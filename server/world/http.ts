@@ -17,7 +17,9 @@
 // guard (Host, Origin, JSON) e por http/app.ts, que só entrega aqui pela porta local com Host local (a porta do celular
 // recebe 403, nem com login). Aqui: tudo o que age pela conta exige a trava do terminal (bind local); sem
 // HABBLAUD_WORLD_URL, 409 `not_configured`; os corpos são conferidos antes de ir ao servidor do mundo, e os erros dele
-// voltam como {error: {code}} com o mesmo status.
+// voltam como {error: {code}} com o mesmo status. A cena Mundo (stream e comandos) fica em viewer.ts; o stream é um GET
+// que põe o personagem na rua, então só abre pela própria página (sem `Origin` de outro site nem Sec-Fetch-Site
+// cross-site/same-site), como a guarda já faz com os POST.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { parseAppearanceParts } from '../../shared/appearance';
 import { tr } from '../../shared/i18n';
@@ -29,6 +31,7 @@ import { parsePlayerTraits } from '../../shared/world/traits';
 import { HttpError, readJson, sendJson } from '../http/app';
 import { isWorldLocale, parseVisibility, type WorldResult } from './client';
 import type { WorldService } from './service';
+import type { WorldViewer } from './viewer';
 
 /** Corpo máximo das rotas do mundo (o maior é o personagem). */
 const MAX_BODY = 16 * 1024;
@@ -115,8 +118,24 @@ function character(body: Record<string, unknown>): PlayerInput {
   return { name: name.name, look: body.look, parts, traits, intro: body.intro };
 }
 
+/**
+ * O stream veio da própria página do Habblaud? O EventSource de outro site manda `Origin` (e o navegador marca
+ * Sec-Fetch-Site): a guarda só confere a origem dos POST, e abrir a cena tem efeito (o personagem entra na rua).
+ */
+export function sameOriginRequest(req: IncomingMessage): boolean {
+  const site = req.headers['sec-fetch-site'];
+  if (typeof site === 'string' && site !== 'same-origin' && site !== 'none') return false;
+  const origin = req.headers.origin;
+  if (origin === undefined) return true;
+  try {
+    return new URL(origin).host.toLowerCase() === String(req.headers.host ?? '').trim().toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
 /** Devolve o handler das rotas /api/world/* (o filtro de porta e Host fica em http/app.ts). */
-export function createWorldRoutes(service: WorldService): (req: IncomingMessage, res: ServerResponse, url: URL) => void {
+export function createWorldRoutes(service: WorldService, viewer?: WorldViewer): (req: IncomingMessage, res: ServerResponse, url: URL) => void {
   const routes: Record<string, { method: Method; account: boolean; run: (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<void> }> = {
     '/api/world/status': {
       method: 'GET',
@@ -242,6 +261,33 @@ export function createWorldRoutes(service: WorldService): (req: IncomingMessage,
       run: async (req, res) => {
         await readBody(req);
         sendOutcome(res, await service.join());
+      },
+    },
+    // A cena Mundo: o SSE da cidade (viewer.ts). Abrir o primeiro stream manda `view` ao servidor do mundo.
+    '/api/world/stream': {
+      method: 'GET',
+      account: true,
+      run: async (req, res) => {
+        if (!viewer) throw new BodyError(409, 'not_configured', tr('Habblaud World desligado: defina HABBLAUD_WORLD_URL'));
+        if (!sameOriginRequest(req)) throw new BodyError(403, 'local_only', tr('a cena Mundo só abre pela própria página do Habblaud'));
+        if (req.method === 'HEAD') {
+          res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache' });
+          return void res.end();
+        }
+        const r = viewer.open(req, res);
+        if (!r.ok) sendError(res, r.status, r.code, undefined, r.retryAfter);
+      },
+    },
+    // Os comandos do jogador ({stream, cmds}): até 5 lotes por segundo por stream, só os da cena.
+    '/api/world/cmd': {
+      method: 'POST',
+      account: true,
+      run: async (req, res) => {
+        const body = await readBody(req);
+        if (!viewer) throw new BodyError(409, 'not_configured', tr('Habblaud World desligado: defina HABBLAUD_WORLD_URL'));
+        const r = viewer.command(body);
+        if (!r.ok) return sendError(res, r.status, r.code, undefined, r.retryAfter);
+        sendJson(res, 202, r.data);
       },
     },
     // "Ver o que foi enviado": o pacote exato da última remessa, os bytes e a resposta do servidor ({} se nada).
