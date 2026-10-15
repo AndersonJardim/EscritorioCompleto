@@ -3,6 +3,7 @@
 import { ACCESSORIES, BOTTOM_STYLES, FACIAL_HAIR, HAIR_STYLES, PART_KEYS, TOP_STYLES, type AppearanceParts, type PartKey } from '../../../../shared/appearance';
 import { mulberry32 } from '../../../../shared/hash';
 import type { Accessory, Appearance, HairStyle, TopStyle } from '../api';
+import { tr } from '../../../../shared/i18n';
 
 export const SKINS = ['#ffe2cc', '#f6cfb0', '#eab894', '#d69f78', '#bd8560', '#9a6444', '#7a4a31', '#5a3623'] as const;
 
@@ -232,12 +233,12 @@ const SHORT_HAIR: readonly string[] = ['bald', 'buzz'];
 /** Combinação que o sorteio evita (o editor desabilita a opção): devolve o motivo, ou undefined se pode. */
 export function editorConflict(a: Appearance, key: PartKey, value: string): string | undefined {
   if (key === 'accessory') {
-    if ((value === 'cap' || value === 'beanie') && TALL_HAIR.includes(a.hairStyle)) return 'Não combina com este cabelo';
-    if (value === 'bow' && SHORT_HAIR.includes(a.hairStyle)) return 'Não combina com este cabelo';
+    if ((value === 'cap' || value === 'beanie') && TALL_HAIR.includes(a.hairStyle)) return tr('Não combina com este cabelo');
+    if (value === 'bow' && SHORT_HAIR.includes(a.hairStyle)) return tr('Não combina com este cabelo');
   }
   if (key === 'hairStyle') {
-    if ((a.accessory === 'cap' || a.accessory === 'beanie') && TALL_HAIR.includes(value)) return 'Não combina com o boné ou o gorro';
-    if (a.accessory === 'bow' && SHORT_HAIR.includes(value)) return 'Não combina com o laço';
+    if ((a.accessory === 'cap' || a.accessory === 'beanie') && TALL_HAIR.includes(value)) return tr('Não combina com o boné ou o gorro');
+    if (a.accessory === 'bow' && SHORT_HAIR.includes(value)) return tr('Não combina com o laço');
   }
   return undefined;
 }

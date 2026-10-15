@@ -12,10 +12,21 @@ do meio (0.**3**.0).
 
 ### Habblaud World (em desenvolvimento, desligado por padrão)
 
-A base do Habblaud World, a cidade online onde cada Habblaud vira um prédio. Ainda não há nada na interface, e sem
-`HABBLAUD_WORLD_URL` nada sai do computador (`HABBLAUD_WORLD=0` esconde até as rotas). O que pode sair e o que nunca sai
-está em [`docs/world/privacidade.md`](docs/world/privacidade.md).
+A base do Habblaud World, a cidade online onde cada Habblaud vira um prédio. Sem `HABBLAUD_WORLD_URL` o recurso fica
+desligado: nada aparece na interface e nada sai do computador (`HABBLAUD_WORLD=0` esconde até as rotas). O que pode
+sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privacidade.md).
 
+- **Interface:** **Configurações › Habblaud World** (depois de Acesso pelo celular), só com `HABBLAUD_WORLD_URL`
+  configurada. Sem conta: **Criar conta** (e-mail e senha de 12 caracteres ou mais, o resumo do que sai e do que
+  nunca sai do computador, a linha dos dados verdadeiros e o aceite obrigatório dos Termos de Uso e da Política de
+  Privacidade) ou **Já tenho conta**; código de 6 dígitos com reenvio; **Esqueci a senha**. Na lista de espera, só
+  o aviso, sem posição nem previsão, e já dá para **criar o personagem**: nome de jogador, dica visual, o mesmo
+  editor de aparência da gaveta do agente, 2 ou 3 traços de personalidade (os que não combinam ficam desabilitados)
+  e uma frase de apresentação da lista. Com o acesso liberado, "Seu prédio entra no mundo na próxima versão".
+  Também: visibilidade do prédio (ao vivo ou discreto, fechado a visitas, esconder o país, tokens, placar,
+  compactações), dispositivos (revogar) e sair. Tudo só pelo próprio computador; nada pela porta remota do celular.
+  O cartão **Conheça o Habblaud World** aparece uma vez, para quem ainda não tem conta. No modo demonstração,
+  `?mock=1&world=logged_out` (ou `waiting`, `approved`) simula o servidor; o código é 123456.
 - **Conta e personagem pelo servidor local:** rotas `/api/world/*` para criar a conta (o desafio anti-robô é resolvido
   pelo próprio Habblaud), confirmar o e-mail, entrar, sair, reenviar o código, trocar a senha, salvar o personagem
   (nome, aparência, 2 ou 3 traços e a frase de apresentação) e a visibilidade, e ver ou desconectar dispositivos. Só

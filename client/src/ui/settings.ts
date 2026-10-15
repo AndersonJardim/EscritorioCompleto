@@ -1,5 +1,6 @@
 // Configurações (popover): opções do escritório, avisos, modo demonstração e Sobre (versão).
 import { access, remoteLogout } from '../net/access';
+import type { WorldSource } from '../net/world';
 import type { UiComponent, UiContext } from './context';
 import { h, iconButton, setAttr, setHidden, setText } from './dom';
 import { ICONS } from './icons';
@@ -8,6 +9,8 @@ import type { UiPrefs } from './prefs';
 import { SoundSettingsGroup } from './settings-sound';
 import type { SoundControl } from './sound';
 import { AboutGroup } from './version';
+import { WorldSettingsGroup } from './world/settings-world';
+import type { WorldScreen } from './world/world-model';
 import { LOCALE_STORAGE_KEY, LOCALES, normalizeLocale, tr, type Locale } from '../../../shared/i18n';
 
 type LanguageChoice = 'auto' | Locale;
@@ -40,7 +43,7 @@ interface SwitchRefs {
   hint: HTMLElement;
 }
 
-function switchRow(label: string, hintText: string, onToggle: () => void): SwitchRefs & { row: HTMLElement } {
+export function switchRow(label: string, hintText: string, onToggle: () => void): SwitchRefs & { row: HTMLElement } {
   const id = `ui-sw-${label.replace(/\W+/g, '-').toLowerCase()}`;
   const btn = h('button', { class: 'ui-switch', type: 'button', role: 'switch', attrs: { 'aria-checked': 'false', 'aria-labelledby': id } }, h('span', { class: 'ui-switch__knob' }));
   btn.addEventListener('click', onToggle);
@@ -49,7 +52,7 @@ function switchRow(label: string, hintText: string, onToggle: () => void): Switc
   return { row, btn, hint };
 }
 
-function segmented<T extends string>(label: string, options: readonly [T, string][], onPick: (v: T) => void): { row: HTMLElement; set(v: T): void } {
+export function segmented<T extends string>(label: string, options: readonly [T, string][], onPick: (v: T) => void): { row: HTMLElement; set(v: T): void } {
   const group = h('div', { class: 'ui-seg', role: 'radiogroup', attrs: { 'aria-label': label } });
   const buttons = options.map(([value, text]) => {
     const b = h('button', { class: 'ui-seg__opt', type: 'button', role: 'radio', text, attrs: { 'aria-checked': 'false' } });
@@ -93,6 +96,8 @@ export class SettingsPopover implements UiComponent {
   /** Só na página do celular (porta remota com login): sair deste aparelho. */
   private remoteGroup: HTMLElement;
   private logoutBtn: HTMLButtonElement;
+  /** Habblaud World (some sem `meta.world` ligado). */
+  private world: WorldSettingsGroup;
   private about: AboutGroup;
   private demoBusy = false;
   private anchor: HTMLElement | null = null;
@@ -101,6 +106,7 @@ export class SettingsPopover implements UiComponent {
     private ctx: UiContext,
     private notifier: Notifier,
     sound: SoundControl,
+    world: WorldSource,
   ) {
     const sw = (key: BoolPref | 'demo', label: string, hint: string, onToggle: () => void) => {
       const r = switchRow(label, hint, onToggle);
@@ -180,6 +186,7 @@ export class SettingsPopover implements UiComponent {
       ),
     );
 
+    this.world = new WorldSettingsGroup(ctx, world);
     this.about = new AboutGroup(ctx);
 
     const close = iconButton(ICONS.close, tr('Fechar configurações'), () => this.hide(), 'ui-icon-btn--sm');
@@ -207,6 +214,7 @@ export class SettingsPopover implements UiComponent {
       h('div', { class: 'ui-set-group' }, h('h3', { text: tr('Idioma') }), this.language.row),
       this.demoGroup,
       this.remoteGroup,
+      this.world.el,
       this.about.el,
     );
     this.el.addEventListener('toggle', () => {
@@ -245,6 +253,14 @@ export class SettingsPopover implements UiComponent {
     requestAnimationFrame(() => this.about.highlight());
   }
 
+  /** Abre (se fechado) e leva até a seção do Habblaud World, na tela pedida. */
+  showWorld(anchor: HTMLElement, screen?: WorldScreen): void {
+    this.world.show(screen);
+    if (!this.isOpen) this.toggle(anchor);
+    this.render();
+    requestAnimationFrame(() => this.world.highlight());
+  }
+
   hide(): void {
     if (typeof this.el.hidePopover === 'function' && this.isOpen) this.el.hidePopover();
     this.el.classList.remove('is-open');
@@ -280,6 +296,7 @@ export class SettingsPopover implements UiComponent {
     this.soundGroup.render();
     setHidden(this.demoGroup, this.ctx.store.mock || access().remote);
     setHidden(this.remoteGroup, !access().remote);
+    this.world.render(this.isOpen);
     this.about.render();
 
     const notif = this.switches.get('browserNotifications')!;
