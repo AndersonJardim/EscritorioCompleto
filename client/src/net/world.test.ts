@@ -238,6 +238,10 @@ describe('FakeWorldApi', () => {
     await api.register({ email: 'nova@exemplo.com', password: 'cavalo correto bateria', locale: 'pt-BR' });
     await api.verify({ email: 'nova@exemplo.com', code: FAKE_CODE });
     expect(n).toBe(2);
+    // Ler não avisa (senão a interface releria o status sem parar).
+    await api.status();
+    await api.devices();
+    expect(n).toBe(2);
     off();
     api.approve();
     expect(n).toBe(2);

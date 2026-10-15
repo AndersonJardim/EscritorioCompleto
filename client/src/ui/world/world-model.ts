@@ -83,6 +83,8 @@ export type WorldUiEvent =
   /** "Esqueci a senha": o código da senha nova foi para o e-mail. */
   | { type: 'reset_code_sent'; email: string }
   | { type: 'password_changed' }
+  /** Entrou (código confirmado ou login): o aviso da tela de entrada não vale mais. */
+  | { type: 'signed_in' }
   | { type: 'flash'; flash: WorldFlash };
 
 const SIGNED_OUT: readonly WorldScreen[] = ['welcome', 'register', 'login', 'verify', 'forgot', 'reset'];
@@ -119,6 +121,8 @@ export function worldReduce(s: WorldUi, e: WorldUiEvent): WorldUi {
       return fit({ ...s, screen: 'reset', email: e.email, flash: 'code_sent' });
     case 'password_changed':
       return fit({ ...s, screen: 'login', flash: 'password_changed' });
+    case 'signed_in':
+      return { ...s, flash: null };
     case 'flash':
       return { ...s, flash: e.flash };
   }

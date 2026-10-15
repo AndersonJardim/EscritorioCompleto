@@ -250,8 +250,9 @@ export class WorldSettingsGroup {
   private ui: WorldUi = initialWorldUi();
   private mode: WorldSectionMode = 'hidden';
   private status: WorldStatus | null = null;
-  /** Sobe a cada status novo: as telas que mostram dados da conta se refazem. */
+  /** Sobe quando o status muda de fato: as telas que mostram dados da conta se refazem. */
   private statusRev = 0;
+  private statusSig = '';
   private statusError: WorldErrorCode | null = null;
   private loading = false;
   private stale = true;
@@ -343,7 +344,11 @@ export class WorldSettingsGroup {
     this.loading = false;
     if (r.ok) {
       this.status = r.data;
-      this.statusRev++;
+      const sig = JSON.stringify(r.data);
+      if (sig !== this.statusSig) {
+        this.statusSig = sig;
+        this.statusRev++;
+      }
       this.statusError = null;
       this.ui = worldReduce(this.ui, { type: 'server', state: r.data.state });
     } else {
@@ -553,7 +558,10 @@ export class WorldSettingsGroup {
       if (!password.input.value) return form.setError(tr('Digite a senha.'), password.input);
       const r = await this.run(form, 'login', (c) => c.login({ email: mail, password: password.input.value.normalize('NFC') }), password.input);
       if (!r) return;
-      if (r.ok) return void this.refresh();
+      if (r.ok) {
+        this.dispatch({ type: 'signed_in' });
+        return void this.refresh();
+      }
       // O servidor reenviou o código: segue para a confirmação do e-mail.
       if (r.code === 'email_not_verified') this.dispatch({ type: 'code_sent', email: mail });
     };
@@ -617,7 +625,9 @@ export class WorldSettingsGroup {
     const submit = async () => {
       if (!codeLooksValid(code.input.value)) return form.setError(tr('Digite os 6 dígitos do código.'), code.input);
       const r = await this.run(form, 'verify', (c) => c.verify({ email, code: normalizeCode(code.input.value) }), code.input);
-      if (r?.ok) void this.refresh();
+      if (!r?.ok) return;
+      this.dispatch({ type: 'signed_in' });
+      void this.refresh();
     };
     const resend = this.resendButton(form, (c) => c.resend({ email }));
     form.el.append(code.label, form.error, h('div', { class: 'ui-world__actions' }, form.submit, resend.el));

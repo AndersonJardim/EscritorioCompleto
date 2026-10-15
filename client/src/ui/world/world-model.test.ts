@@ -112,6 +112,11 @@ describe('máquina de estados da seção', () => {
     expect(s.screen).toBe('welcome');
   });
 
+  it('entrar apaga o aviso da tela de entrada ("Senha trocada")', () => {
+    const s = worldReduce(at('logged_out', 'login'), { type: 'password_changed' });
+    expect(worldReduce(s, { type: 'signed_in' }).flash).toBeNull();
+  });
+
   it('navegar apaga o aviso; um aviso novo não muda a tela', () => {
     let s = worldReduce(at('logged_out', 'verify'), { type: 'flash', flash: 'code_resent' });
     expect(s).toMatchObject({ screen: 'verify', flash: 'code_resent' });

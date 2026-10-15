@@ -369,14 +369,17 @@ export class FakeWorldApi implements WorldClient {
     return device;
   }
 
-  /** Responde depois da espera; um `failNext` pendente vira o erro desta resposta. */
-  private async reply<T>(run: () => WorldResult<T>): Promise<WorldResult<T>> {
+  /**
+   * Responde depois da espera; um `failNext` pendente vira o erro desta resposta. Só as escritas (`write`) avisam quem
+   * escuta: uma leitura que avisasse faria a interface reler o status sem parar.
+   */
+  private async reply<T>(run: () => WorldResult<T>, write = true): Promise<WorldResult<T>> {
     if (this.delayMs > 0) await new Promise((r) => setTimeout(r, this.delayMs));
     const fail = this.failures.shift();
     if (fail) return { ok: false, code: fail, status: fail === 'offline' ? 0 : 400 };
     if (!this.configured) return { ok: false, code: 'not_configured', status: 404 };
     const r = run();
-    if (r.ok) this.changed();
+    if (r.ok && write) this.changed();
     return r;
   }
 
@@ -399,7 +402,7 @@ export class FakeWorldApi implements WorldClient {
         status.devices = structuredClone(acc.devices);
       }
       return { ok: true, data: status };
-    });
+    }, false);
   }
 
   register(body: { email: string; password: string; locale: Locale }): Promise<WorldResult> {
@@ -513,7 +516,7 @@ export class FakeWorldApi implements WorldClient {
       const acc = this.current();
       if (!acc) return FakeWorldApi.fail('unknown', 401);
       return { ok: true, data: structuredClone(acc.devices) };
-    });
+    }, false);
   }
 
   revokeDevice(id: string): Promise<WorldResult> {
