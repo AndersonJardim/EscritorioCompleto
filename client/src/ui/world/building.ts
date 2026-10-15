@@ -11,6 +11,7 @@ import type { WorldBuildingStatus, WorldClient, WorldLastUplink } from '../../ne
 import { copyText, h, iconButton, setAttr, setHidden, setText, setVariant } from '../dom';
 import { formatClock, relativeTime } from '../format';
 import { ICONS } from '../icons';
+import { BuildingSocial } from './away-summary';
 import { extLink, WORLD_PRIVACY_URL } from './links';
 import { ackView, buildingView, bytesText, leaveHint, prettyUplink, worldErrorText } from './world-model';
 
@@ -40,6 +41,8 @@ export class BuildingCard {
   private readonly error: HTMLElement;
   private readonly leaveRow: HTMLElement;
   private readonly leaveBtn: HTMLButtonElement;
+  /** Fase 5: o código do prédio e o "Enquanto você estava fora". */
+  private readonly social: BuildingSocial;
   private statsKey = '';
   private busy = false;
   private action: 'pause' | 'resume' | 'join' | null = null;
@@ -60,6 +63,7 @@ export class BuildingCard {
     this.error = h('p', { class: 'ui-world__error', role: 'alert', hidden: true });
     this.leaveBtn = h('button', { class: 'ui-btn', type: 'button', text: tr('Sair do mundo'), on: { click: () => void this.leave() } });
     this.leaveRow = h('div', { class: 'ui-world__leave' }, h('p', { class: 'ui-set__hint', text: leaveHint() }), h('div', { class: 'ui-world__actions' }, this.leaveBtn));
+    this.social = new BuildingSocial({ client: host.client, building: () => host.building(), refresh: () => host.refresh() });
     this.el = h(
       'section',
       { class: 'ui-world__building', attrs: { 'aria-labelledby': titleId } },
@@ -71,6 +75,7 @@ export class BuildingCard {
       ),
       this.desc,
       this.stats,
+      this.social.el,
       this.rejected,
       this.actions,
       this.hint,
@@ -104,6 +109,7 @@ export class BuildingCard {
     }
     setHidden(this.leaveRow, !v.leave);
     if (!v.leave && this.confirmingLeave) this.resetLeave();
+    this.social.sync();
   }
 
   private resetLeave(): void {

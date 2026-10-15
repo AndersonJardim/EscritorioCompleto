@@ -24,6 +24,7 @@ import {
   type WorldVisibility,
 } from '../../net/world';
 import { BuildingCard, SentDialog } from './building';
+import { buildBlocked } from './blocked';
 import { TRAITS, TRAIT_IDS, type TraitId } from '../../../../shared/world/traits';
 import { AppearanceFields } from '../appearance-fields';
 import { createAvatar } from '../avatar';
@@ -233,6 +234,8 @@ function visibilityText(key: VisibilitySwitch): { label: string; hint: string } 
       return { label: tr('Entrar no placar'), hint: tr('O prédio pode aparecer nos placares de tokens da cidade.') };
     case 'compactions':
       return { label: tr('Mostrar as compactações'), hint: tr('Quando um agente compacta o contexto, a lixeira da sala enche. Sai só o fato, nada do conteúdo.') };
+    case 'knocks':
+      return { label: tr('Avisar quando baterem na porta'), hint: tr('Quem estiver na porta do seu prédio pode bater; o aviso chega aqui no Habblaud, sem o nome de quem bateu.') };
   }
 }
 
@@ -399,14 +402,14 @@ export class WorldSettingsGroup {
     this.dispatch({ type: 'go', screen });
   }
 
-  private async refresh(): Promise<void> {
+  private async refresh(force = false): Promise<void> {
     const client = this.client;
     if (!client) return;
     const req = ++this.statusReq;
     const askedAt = this.themeClock;
     this.loading = true;
     this.stale = false;
-    const r = await client.status();
+    const r = await client.status(force);
     if (req !== this.statusReq) return;
     this.loading = false;
     if (r.ok) {
@@ -519,6 +522,8 @@ export class WorldSettingsGroup {
         return this.buildVisibility();
       case 'devices':
         return this.buildDevices();
+      case 'blocked':
+        return this.buildBlocked();
     }
   }
 
@@ -848,6 +853,7 @@ export class WorldSettingsGroup {
     }
     const devices = s?.devices?.length;
     nav.append(this.navRow(tr('Dispositivos'), devices ? tr('{0} de 3', [devices]) : '', () => this.go('devices')));
+    if (player && approved) nav.append(this.navRow(tr('Bloqueados'), s?.blocked?.length ? String(s.blocked.length) : '', () => this.go('blocked')));
     out.push(nav);
 
     if (s?.lastError) out.push(para('ui-world__warn', tr('Último problema com o mundo: {0}', [worldErrorText(s.lastError, 'status')])));
@@ -1078,6 +1084,18 @@ export class WorldSettingsGroup {
         para('ui-set__hint', tr('As mudanças valem na hora.')),
       ),
     };
+  }
+
+  /** Fase 5: quem a conta bloqueou, com Desbloquear (blocked.ts). A lista é relida do /v1/me ao abrir. */
+  private buildBlocked(): View {
+    const epoch = this.epoch;
+    return buildBlocked(screenHead(tr('Bloqueados'), () => this.go('home')), {
+      client: this.client,
+      list: () => this.status?.blocked,
+      refresh: () => this.refresh(true),
+      current: () => epoch === this.epoch,
+      announce: (t) => this.ctx.announce(t),
+    });
   }
 
   private buildDevices(): View {
