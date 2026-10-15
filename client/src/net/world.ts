@@ -120,8 +120,10 @@ export interface WorldClient {
   lastUplink(): Promise<WorldResult<WorldLastUplink | null>>;
   /** Para o envio na hora (o servidor local fecha a conexão antes de responder): o prédio apaga. */
   pause(): Promise<WorldResult<{ paused: boolean }>>;
-  /** Volta a enviar: o prédio acende de novo. */
+  /** Volta a enviar: o prédio acende de novo (depois de sair do mundo, um prédio novo, em outro lote). */
   resume(): Promise<WorldResult<{ paused: boolean }>>;
+  /** "Sair do mundo": o servidor local fecha a conexão e o servidor do mundo retira o prédio antes da resposta. */
+  leave(): Promise<WorldResult>;
   /** O tema escolhido em Aparência também vale para o prédio. */
   setTheme(theme: WorldThemeChoice): Promise<WorldResult>;
 }
@@ -356,6 +358,9 @@ export class HttpWorldApi implements WorldClient {
   resume() {
     return this.paused('/resume', false);
   }
+  leave() {
+    return this.done(this.call('POST', '/leave'));
+  }
   setTheme(theme: WorldThemeChoice) {
     return this.done(this.call('PUT', '/theme', { theme }));
   }
@@ -382,6 +387,10 @@ export interface FakeWorldOptions {
 interface FakeBuilding {
   connected: boolean;
   paused: boolean;
+  /** Saiu do mundo (fica pausado até retomar, que traz um prédio "novo"). */
+  left?: true;
+  /** O "mundo" parou o prédio (goodbye), até retomar. */
+  stopped?: WorldBuildingStop;
   last: WorldLastUplink | null;
 }
 
@@ -534,6 +543,15 @@ export class FakeWorldApi implements WorldClient {
     this.changed();
   }
 
+  /** O "mundo" para o prédio com um `goodbye` (atualize, outro computador...), até retomar. */
+  stopBuilding(reason: WorldBuildingStop): void {
+    const b = this.current()?.building;
+    if (!b || b.paused) return;
+    b.connected = false;
+    b.stopped = reason;
+    this.changed();
+  }
+
   /** A conexão com o mundo cai (o servidor de verdade tenta de novo sozinho; aqui, até pausar e retomar). */
   dropConnection(): void {
     const b = this.current()?.building;
@@ -597,6 +615,8 @@ export class FakeWorldApi implements WorldClient {
       out.lastUplinkAt = b.last.at;
       if (b.last.ack) out.lastAck = b.last.ack.ok ? { ok: true } : { ok: false, error: b.last.ack.error };
     }
+    if (b.left) out.left = true;
+    if (b.stopped) out.stopped = b.stopped;
     return out;
   }
 
@@ -659,6 +679,7 @@ export class FakeWorldApi implements WorldClient {
         const building = this.buildingOf(acc);
         if (building) status.building = building;
       }
+      if (this.theme !== 'auto') status.theme = this.theme;
       return { ok: true, data: status };
     }, false);
   }
@@ -812,10 +833,29 @@ export class FakeWorldApi implements WorldClient {
       const b = acc.building;
       if (!b) return FakeWorldApi.fail('no_player', 409);
       b.paused = paused;
-      // Como o de verdade: pausar fecha a conexão; retomar reconecta e manda o pacote inteiro.
+      // Como o de verdade: pausar fecha a conexão; retomar (também depois de sair do mundo ou de uma parada)
+      // reconecta e manda o pacote inteiro.
       b.connected = !paused;
+      if (!paused) {
+        delete b.left;
+        delete b.stopped;
+      }
       this.sendUplink(acc);
       return { ok: true, data: { paused } };
+    });
+  }
+
+  leave(): Promise<WorldResult> {
+    return this.reply(() => {
+      const acc = this.current();
+      if (!acc) return FakeWorldApi.fail('not_logged_in', 401);
+      const b = acc.building;
+      if (!b) return FakeWorldApi.fail('no_player', 409);
+      b.paused = true;
+      b.connected = false;
+      b.left = true;
+      delete b.stopped;
+      return FakeWorldApi.ok();
     });
   }
 

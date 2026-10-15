@@ -9703,6 +9703,23 @@ html.is-replay #world {
   border-style: dashed;
 }
 
+/* Parado pelo servidor do mundo (atualize, outro computador, conta suspensa...): vermelho; fora do mundo: cinza. */
+.ui-world__building.is-stopped {
+  --bld: var(--lv-crit);
+}
+
+.ui-world__building.is-left {
+  --bld: var(--st-idle);
+  border-style: dashed;
+}
+
+/* "Sair do mundo": separado das ações do dia a dia por uma linha, com a explicação ao lado. */
+.ui-world__leave {
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--ui-line);
+}
+
 .ui-world__bhead {
   display: flex;
   align-items: center;
@@ -9968,6 +9985,10 @@ html.is-replay #world {
 
 .ui-world-chip.is-reconnecting {
   --chip: var(--st-waiting);
+}
+
+.ui-world-chip.is-stopped {
+  --chip: var(--lv-crit);
 }
 
 .ui-world-chip__icon {

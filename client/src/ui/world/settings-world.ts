@@ -281,8 +281,14 @@ export class WorldSettingsGroup {
   private readonly themeError: HTMLElement;
   private themeLinked = false;
   private themeReq = 0;
+  /** Um PUT do tema a caminho (o status que chegar no meio não decide o tema). */
+  private themeInflight = 0;
+  /** Quando a última escolha de tema foi feita aqui (um status pedido antes dela não a desfaz). */
+  private themePickedAt = 0;
   /** Rolar até a seção de novo quando ela terminar de carregar (aberta pelo chip ou pelo convite, ainda carregando). */
   private scrollPending = false;
+  /** Relógio lógico das escolhas de tema e dos pedidos de status (qual veio antes). */
+  private themeClock = 0;
 
   constructor(
     private readonly ctx: UiContext,
@@ -351,12 +357,27 @@ export class WorldSettingsGroup {
    */
   async onThemePicked(theme: WorldThemeChoice): Promise<void> {
     const client = this.client;
+    this.themePickedAt = ++this.themeClock;
     if (!this.themeLinked || !client) return;
     const req = ++this.themeReq;
-    const r = await client.setTheme(theme);
+    this.themeInflight++;
+    const r = await client.setTheme(theme).finally(() => this.themeInflight--);
     if (req !== this.themeReq) return;
     setText(this.themeError, r.ok ? '' : ` ${tr('Não deu para mandar o tema para o prédio: {0}', [worldErrorText(r.code, 'theme')])}`);
     setHidden(this.themeError, r.ok);
+  }
+
+  /**
+   * O tema do escritório e o do prédio ficam iguais (o status traz o do prédio, guardado em world.json): uma escolha
+   * guardada neste computador (`theme` presente) vale também para o escritório desta página; sem escolha guardada (o
+   * automático, padrão), a escolha desta página vai para o prédio. Nada disso com um PUT do tema a caminho, nem com um
+   * status pedido antes da última escolha feita aqui.
+   */
+  private syncTheme(st: WorldStatus, askedAt: number): void {
+    if (!this.themeLinked || st.state !== 'approved' || this.themeInflight > 0 || askedAt < this.themePickedAt) return;
+    const pref = this.ctx.prefs.theme;
+    if (st.theme && st.theme !== pref) this.ctx.updatePrefs({ theme: st.theme });
+    else if (!st.theme && pref !== 'auto') void this.onThemePicked(pref);
   }
 
   /** Rola até a seção e a destaca por um instante. */
@@ -382,6 +403,7 @@ export class WorldSettingsGroup {
     const client = this.client;
     if (!client) return;
     const req = ++this.statusReq;
+    const askedAt = this.themeClock;
     this.loading = true;
     this.stale = false;
     const r = await client.status();
@@ -389,6 +411,7 @@ export class WorldSettingsGroup {
     this.loading = false;
     if (r.ok) {
       this.status = r.data;
+      this.syncTheme(r.data, askedAt);
       // O prédio muda a cada remessa: o cartão se atualiza sozinho (BuildingCard.sync), sem refazer a tela.
       const { building: _building, ...rest } = r.data;
       const sig = JSON.stringify(rest);

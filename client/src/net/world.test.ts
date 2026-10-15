@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { OfficeSnapshot } from '../../../shared/types';
 import { fullParts, draftAppearance } from '../ui/world/world-model';
 import {
+  buildingFromMeta,
   FAKE_CODE,
   FAKE_EMAIL,
   FAKE_PASSWORD,
@@ -308,16 +309,18 @@ describe('de onde vêm os dados', () => {
 // ------------------------------------------------------------------ Fase 2: prédio no mundo
 
 describe('prédio: rotas locais da Fase 2', () => {
-  it('última remessa, pausar, retomar e tema vão para as rotas do contrato', async () => {
+  it('última remessa, pausar, retomar, sair do mundo e tema vão para as rotas do contrato', async () => {
     const { calls, api } = recorder(200, {});
     await api.lastUplink();
     await api.pause();
     await api.resume();
+    await api.leave();
     await api.setTheme('christmas');
     expect(calls.map((c) => `${c.init?.method} ${c.url} ${c.init?.body ?? ''}`.trim())).toEqual([
       'GET /api/world/last-uplink',
       'POST /api/world/pause {}',
       'POST /api/world/resume {}',
+      'POST /api/world/leave {}',
       'PUT /api/world/theme {"theme":"christmas"}',
     ]);
   });
@@ -346,10 +349,27 @@ describe('prédio: rotas locais da Fase 2', () => {
     expect(parseBuilding('prédio')).toBeUndefined();
   });
 
-  it('pausar e retomar devolvem {paused}; sem o campo, vale o que foi pedido', async () => {
-    expect(await recorder(200, { paused: true }).api.pause()).toEqual({ ok: true, data: { paused: true } });
+  it('pausar e retomar devolvem o WorldStatus: vale o building.paused dele; sem o campo, o que foi pedido', async () => {
+    expect(await recorder(200, { state: 'approved', building: { paused: true } }).api.pause()).toEqual({ ok: true, data: { paused: true } });
+    expect(await recorder(200, { state: 'approved', building: { paused: true } }).api.resume()).toEqual({ ok: true, data: { paused: true } });
     expect(await recorder(200, '').api.resume()).toEqual({ ok: true, data: { paused: false } });
     expect(await recorder(409, { error: { code: 'no_player' } }).api.pause()).toMatchObject({ ok: false, code: 'no_player' });
+    expect(await recorder(503, { error: { code: 'unavailable' } }).api.leave()).toMatchObject({ ok: false, code: 'unavailable', status: 503 });
+  });
+
+  it('status: o motivo da parada (só os conhecidos), fora do mundo e o tema guardado', () => {
+    const base = { connected: false, paused: true, floors: 1, agents: 1 };
+    expect(parseWorldStatus({ state: 'approved', building: { ...base, stopped: 'update', left: true }, theme: 'christmas' })).toMatchObject({
+      building: { ...base, stopped: 'update', left: true },
+      theme: 'christmas',
+    });
+    const odd = parseWorldStatus({ state: 'approved', building: { ...base, stopped: 'deploy', left: 'sim' }, theme: 'pascoa' });
+    expect(odd?.building).toEqual(base);
+    expect(odd?.theme).toBeUndefined();
+    // No snapshot, a parada é só sim/não (o motivo não vai ao celular).
+    expect(readWorldMeta(snap({ enabled: true, configured: true, state: 'approved', building: { ...base, stopped: true } }))?.building).toEqual({ ...base, stopped: true });
+    expect(readWorldMeta(snap({ enabled: true, configured: true, state: 'approved', building: { ...base, stopped: 'update' } }))?.building).toEqual(base);
+    expect(buildingFromMeta({ ...base, stopped: true, left: true })).toEqual({ ...base, left: true });
   });
 
   it('meta.world e o status trazem o prédio, conferido', () => {
@@ -442,6 +462,38 @@ describe('FakeWorldApi: prédio', () => {
     const last = await api.lastUplink();
     expect(last.ok && last.data?.ack).toEqual({ ok: false, error: 'limits', at: OCT });
     expect(api.meta().building).not.toHaveProperty('lastAck');
+  });
+
+  it('sair do mundo: apagado e fora do mundo até voltar, que manda o pacote inteiro de novo', async () => {
+    const c = clock(OCT);
+    const api = new FakeWorldApi({ state: 'approved', delayMs: 0, now: c.now });
+    expect((await api.leave()).ok).toBe(true);
+    expect(api.meta().building).toMatchObject({ connected: false, paused: true, left: true });
+    const st = await api.status();
+    expect(st.ok && st.data.building).toMatchObject({ left: true });
+    c.tick(60_000);
+    expect(await api.resume()).toEqual({ ok: true, data: { paused: false } });
+    expect(api.meta().building).toEqual({ connected: true, paused: false, floors: 2, agents: 3, lastUplinkAt: OCT + 60_000 });
+  });
+
+  it('parada pelo "mundo": o status traz o motivo, o meta só "parou"; retomar volta', async () => {
+    const api = new FakeWorldApi({ state: 'approved', delayMs: 0, now: () => OCT });
+    api.stopBuilding('other-device');
+    const st = await api.status();
+    expect(st.ok && st.data.building?.stopped).toBe('other-device');
+    expect(api.meta().building).toMatchObject({ connected: false, stopped: true });
+    await api.resume();
+    expect(api.meta().building).not.toHaveProperty('stopped');
+  });
+
+  it('o status traz o tema guardado (ausente no automático)', async () => {
+    const api = new FakeWorldApi({ state: 'approved', delayMs: 0, now: () => OCT });
+    expect((await api.status()).ok && (await api.status()).ok).toBe(true);
+    const before = await api.status();
+    expect(before.ok && before.data.theme).toBeUndefined();
+    await api.setTheme('halloween');
+    const after = await api.status();
+    expect(after.ok && after.data.theme).toBe('halloween');
   });
 
   it('conexão caída: reconectando até retomar; sair da conta tira o prédio do meta', async () => {

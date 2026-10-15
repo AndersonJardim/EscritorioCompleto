@@ -1,5 +1,7 @@
 // Cartão "Seu prédio" (Configurações › Habblaud World, conta aprovada) e a janela "Ver o que foi enviado".
 //
+// O cartão mostra a conexão, a pausa, a parada pedida pelo servidor do mundo (com o motivo) e "Fora do mundo"; o botão
+// "Sair do mundo" pede confirmação em dois cliques, como o "Sair da conta", e explica a diferença para a pausa.
 // O cartão é atualizado no lugar a cada render (contagens e "última remessa" mudam a cada poucos segundos sem refazer a
 // tela inteira, que perderia o foco). A janela mostra a última remessa exatamente como o servidor local a guardou
 // (GET /api/world/last-uplink): o JSON, o horário, o tamanho em bytes e a resposta do mundo. As regras e os textos
@@ -7,10 +9,10 @@
 import { tr } from '../../../../shared/i18n';
 import type { WorldBuildingStatus, WorldClient, WorldLastUplink } from '../../net/world';
 import { copyText, h, iconButton, setAttr, setHidden, setText, setVariant } from '../dom';
-import { formatClock, formatInt, relativeTime } from '../format';
+import { formatClock, relativeTime } from '../format';
 import { ICONS } from '../icons';
 import { extLink, WORLD_PRIVACY_URL } from './links';
-import { ackView, buildingView, prettyUplink, worldErrorText } from './world-model';
+import { ackView, buildingView, bytesText, leaveHint, prettyUplink, worldErrorText } from './world-model';
 
 export interface BuildingHost {
   readonly client: WorldClient | null;
@@ -36,9 +38,13 @@ export class BuildingCard {
   private readonly sentBtn: HTMLButtonElement;
   private readonly hint: HTMLElement;
   private readonly error: HTMLElement;
+  private readonly leaveRow: HTMLElement;
+  private readonly leaveBtn: HTMLButtonElement;
   private statsKey = '';
   private busy = false;
   private action: 'pause' | 'resume' | null = null;
+  /** Primeiro clique em "Sair do mundo" dado: o segundo confirma. */
+  private confirmingLeave = false;
 
   constructor(private readonly host: BuildingHost) {
     const titleId = 'ui-world-building-title';
@@ -52,6 +58,8 @@ export class BuildingCard {
     this.actions = h('div', { class: 'ui-world__actions' }, this.toggleBtn, this.sentBtn);
     this.hint = h('p', { class: 'ui-set__hint' });
     this.error = h('p', { class: 'ui-world__error', role: 'alert', hidden: true });
+    this.leaveBtn = h('button', { class: 'ui-btn', type: 'button', text: tr('Sair do mundo'), on: { click: () => void this.leave() } });
+    this.leaveRow = h('div', { class: 'ui-set ui-world__leave' }, h('div', { class: 'ui-set__text' }, h('span', { class: 'ui-set__hint', text: leaveHint() })), this.leaveBtn);
     this.el = h(
       'section',
       { class: 'ui-world__building', attrs: { 'aria-labelledby': titleId } },
@@ -66,6 +74,7 @@ export class BuildingCard {
       this.rejected,
       this.actions,
       this.hint,
+      this.leaveRow,
       this.error,
     );
     this.sync();
@@ -85,13 +94,50 @@ export class BuildingCard {
     setHidden(this.stats, !v.stats.length);
     setHidden(this.rejected, !v.rejected);
     setText(this.rejectedReason, v.rejected ?? '');
-    setHidden(this.actions, !v.toggle);
+    // "Ver o que foi enviado" fica sempre (sem personagem, nada saiu: a janela diz isso); o botão de pausa, só quando há.
+    setHidden(this.toggleBtn, !v.toggle);
     setHidden(this.hint, !v.toggle);
     if (v.toggle && !this.busy) {
       this.action = v.toggle.action;
       setText(this.toggleBtn, v.toggle.text);
       setText(this.hint, v.toggle.hint);
     }
+    setHidden(this.leaveRow, !v.leave);
+    if (!v.leave && this.confirmingLeave) this.resetLeave();
+  }
+
+  private resetLeave(): void {
+    this.confirmingLeave = false;
+    setText(this.leaveBtn, tr('Sair do mundo'));
+    this.leaveBtn.classList.remove('is-danger');
+  }
+
+  /** "Sair do mundo" em dois cliques: o primeiro pede confirmação, o segundo retira o prédio. */
+  private async leave(): Promise<void> {
+    const client = this.host.client;
+    if (this.busy || !client) return;
+    if (!this.confirmingLeave) {
+      this.confirmingLeave = true;
+      setText(this.leaveBtn, tr('Confirmar: sair do mundo'));
+      this.leaveBtn.classList.add('is-danger');
+      return;
+    }
+    this.busy = true;
+    this.leaveBtn.disabled = true;
+    this.toggleBtn.disabled = true;
+    setAttr(this.leaveBtn, 'aria-busy', 'true');
+    setHidden(this.error, true);
+    const r = await client.leave();
+    this.busy = false;
+    this.leaveBtn.disabled = false;
+    this.toggleBtn.disabled = false;
+    setAttr(this.leaveBtn, 'aria-busy', null);
+    this.resetLeave();
+    if (!r.ok) {
+      setText(this.error, worldErrorText(r.code, 'leave'));
+      setHidden(this.error, false);
+    }
+    this.host.refresh();
   }
 
   private async toggle(): Promise<void> {
@@ -195,7 +241,7 @@ export class SentDialog {
 
   private sent(last: WorldLastUplink): Node[] {
     const json = prettyUplink(last.uplink);
-    const ack = ackView(last.ack);
+    const ack = ackView(last.ack, last.bytes);
     const copy = h('button', { class: 'ui-btn', type: 'button', text: tr('Copiar') });
     let timer: ReturnType<typeof setTimeout> | undefined;
     copy.addEventListener('click', async () => {
@@ -216,7 +262,7 @@ export class SentDialog {
         'ul',
         { class: 'ui-world-sent__meta' },
         h('li', { text: tr('Enviada {0} ({1})', [relativeTime(last.at, this.now()), formatClock(last.at)]) }),
-        h('li', { text: last.bytes === 1 ? tr('1 byte') : tr('{0} bytes', [formatInt(last.bytes)]) }),
+        h('li', { text: bytesText(last.bytes) }),
       ),
       ackEl,
       h(

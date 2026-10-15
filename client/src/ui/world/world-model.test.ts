@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { PART_KEYS } from '../../../../shared/appearance';
 import { TRAIT_IDS } from '../../../../shared/world/traits';
-import { FAKE_UPLINK, WORLD_UI_ERROR_CODES, type WorldBuildingStatus, type WorldMeta } from '../../net/world';
+import { FAKE_UPLINK, WORLD_UI_ERROR_CODES, type WorldBuildingStatus, type WorldBuildingStop, type WorldMeta } from '../../net/world';
 import {
   ackView,
   agentsText,
   buildingState,
+  buildingStopView,
   buildingView,
+  bytesText,
   floorsText,
+  leaveHint,
   prettyUplink,
   themeGoesToWorld,
   UPLINK_REJECT_CODES,
@@ -296,6 +299,43 @@ describe('cartão "Seu prédio"', () => {
   it('remessa recusada: o motivo traduzido aparece no cartão', () => {
     expect(buildingView({ ...live, lastAck: { ok: false, error: 'rate' } }, true, NOW).rejected).toBe(uplinkRejectText('rate'));
   });
+
+  it('fora do mundo vale mais que tudo; pausado vale mais que a parada; a parada vale mais que a conexão', () => {
+    expect(buildingState({ ...live, left: true, paused: true }, true)).toBe('left');
+    expect(buildingState({ ...live, paused: true, stopped: 'update' }, true)).toBe('paused');
+    expect(buildingState({ ...live, connected: false, stopped: 'update' }, true)).toBe('stopped');
+    expect(buildingState({ ...live, left: true }, false)).toBe('no_player');
+  });
+
+  it('parado pelo servidor do mundo: cada motivo com o seu texto; "Atualize o Habblaud" e "Conectado em outro computador"', () => {
+    const stopped = (reason: WorldBuildingStop) => buildingView({ ...live, connected: false, stopped: reason }, true, NOW);
+    expect(stopped('update')).toMatchObject({ state: 'stopped', label: 'Atualize o Habblaud', toggle: null, leave: true, rejected: null });
+    expect(stopped('other-device')).toMatchObject({ label: 'Conectado em outro computador', toggle: { action: 'resume', text: 'Trazer para este computador' }, leave: true });
+    expect(stopped('suspended').toggle).toMatchObject({ action: 'resume', text: 'Tentar de novo' });
+    expect(stopped('banned')).toMatchObject({ label: 'Conta banida', toggle: null, leave: false });
+    for (const r of ['waiting', 'no_player', 'unauthorized'] as const) expect(stopped(r)).toMatchObject({ toggle: null, leave: false });
+    const reasons: WorldBuildingStop[] = ['banned', 'suspended', 'update', 'other-device', 'waiting', 'no_player', 'unauthorized'];
+    const descs = reasons.map((r) => buildingStopView(r).desc);
+    expect(new Set(descs).size).toBe(reasons.length);
+    // As contagens da última remessa continuam.
+    expect(stopped('update').stats).toEqual(['2 andares', '3 agentes', 'Última remessa: há 12 s']);
+  });
+
+  it('fora do mundo: sem contagens, "Voltar ao mundo" e sem "Sair do mundo"; os outros estados com prédio mostram "Sair do mundo"', () => {
+    expect(buildingView({ ...live, connected: false, paused: true, left: true }, true, NOW)).toMatchObject({
+      state: 'left',
+      label: 'Fora do mundo',
+      stats: [],
+      toggle: { action: 'resume', text: 'Voltar ao mundo' },
+      leave: false,
+    });
+    expect(buildingView(live, true, NOW).leave).toBe(true);
+    expect(buildingView({ ...live, connected: false }, true, NOW).leave).toBe(true);
+    expect(buildingView({ ...live, paused: true }, true, NOW).leave).toBe(true);
+    expect(buildingView(live, false, NOW).leave).toBe(false);
+    // A explicação diz a diferença entre pausar e sair (PLANO.md, 2.6).
+    expect(leaveHint()).toMatch(/^Pausar apaga o prédio e guarda o lote.*Sair do mundo retira o prédio na hora e libera o lote/);
+  });
 });
 
 describe('motivos de recusa de uma remessa', () => {
@@ -310,6 +350,10 @@ describe('motivos de recusa de uma remessa', () => {
 
   it('janela "Ver o que foi enviado": aceita, recusada com motivo ou sem resposta', () => {
     expect(ackView({ ok: true, at: 1 })).toEqual({ kind: 'accepted', label: 'Aceita pelo mundo.', reason: null });
+    // Com os bytes que o mundo contou: iguais aos enviados, ou o número dele.
+    expect(ackView({ ok: true, at: 1, bytes: 1174 }, 1174).reason).toBe('O mundo recebeu os mesmos 1.174 bytes.');
+    expect(ackView({ ok: true, at: 1, bytes: 1 }, 2).reason).toBe('O mundo contou 1 byte.');
+    expect(bytesText(0)).toBe('0 bytes');
     expect(ackView({ ok: false, error: 'name_pool', at: 1 })).toEqual({ kind: 'rejected', label: 'Recusada pelo mundo.', reason: uplinkRejectText('name_pool') });
     expect(ackView(undefined).kind).toBe('pending');
   });
@@ -339,6 +383,9 @@ describe('tema e chip do topo', () => {
     expect(worldChipState(meta('approved', { building }), LOCAL)).toBe('live');
     expect(worldChipState(meta('approved', { building: { ...building, paused: true, connected: false } }), LOCAL)).toBe('paused');
     expect(worldChipState(meta('approved', { building: { ...building, connected: false } }), LOCAL)).toBe('reconnecting');
+    // Parado pelo servidor do mundo: "parado" (o motivo fica no cartão); fora do mundo: nada.
+    expect(worldChipState(meta('approved', { building: { ...building, connected: false, stopped: true } }), LOCAL)).toBe('stopped');
+    expect(worldChipState(meta('approved', { building: { ...building, connected: false, paused: true, left: true } }), LOCAL)).toBeNull();
     // Sem conexão e sem remessa nenhuma, o prédio ainda não está no mundo.
     expect(worldChipState(meta('approved', { building: { ...building, connected: false, lastUplinkAt: undefined } }), LOCAL)).toBeNull();
     expect(worldChipState(meta('approved', { building }), { ...LOCAL, remote: true })).toBeNull();

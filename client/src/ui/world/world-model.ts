@@ -9,7 +9,7 @@ import type { Appearance } from '../../art/api';
 import { appearanceFromSeed } from '../../art/character/appearance';
 import { PLAYER_TRAITS } from '../../../../shared/world/protocol';
 import { parsePlayerTraits, traitsClash, type TraitId } from '../../../../shared/world/traits';
-import type { WorldBuildingStatus, WorldErrorCode, WorldLastUplink, WorldMeta, WorldServerState, WorldVisibility } from '../../net/world';
+import type { WorldBuildingStatus, WorldBuildingStop, WorldErrorCode, WorldLastUplink, WorldMeta, WorldServerState, WorldVisibility } from '../../net/world';
 import { UPLINK_ACK_ERRORS, type WorldUplink } from '../../../../shared/world/protocol';
 import { formatInt, relativeTime } from '../format';
 import { isWorldKnownErrorCode } from '../../../../shared/world/api';
@@ -305,6 +305,7 @@ export type WorldAction =
   | 'revoke'
   | 'pause'
   | 'resume'
+  | 'leave'
   | 'sent'
   | 'theme';
 
@@ -404,15 +405,46 @@ export function worldErrorText(raw: WorldErrorCode | string, action: WorldAction
 // ------------------------------------------------------------------ prédio no mundo (Fase 2)
 
 /**
- * Estado do cartão "Seu prédio" (conta aprovada). Sem personagem o prédio não entra no mundo; pausado vale mais do
- * que a conexão (pausar fecha o socket); sem conexão aberta, o Habblaud está conectando ou tentando de novo.
+ * Estado do cartão "Seu prédio" (conta aprovada). Sem personagem o prédio não entra no mundo; fora do mundo ("Sair do
+ * mundo") e pausado valem mais do que a conexão (os dois fecham o socket); depois, uma parada pedida pelo servidor do
+ * mundo (`stopped`, com o motivo); sem conexão aberta, o Habblaud está conectando ou tentando de novo.
  */
-export type BuildingState = 'connected' | 'reconnecting' | 'paused' | 'no_player';
+export type BuildingState = 'connected' | 'reconnecting' | 'paused' | 'stopped' | 'left' | 'no_player';
 
 export function buildingState(b: WorldBuildingStatus | undefined, hasPlayer: boolean): BuildingState {
   if (!hasPlayer) return 'no_player';
+  if (b?.left) return 'left';
   if (b?.paused) return 'paused';
+  if (b?.stopped) return 'stopped';
   return b?.connected ? 'connected' : 'reconnecting';
+}
+
+/** O que o cartão diz quando o servidor do mundo parou o prédio (`goodbye`), por motivo. */
+export function buildingStopView(reason: WorldBuildingStop): { label: string; desc: string; toggle: BuildingView['toggle'] } {
+  switch (reason) {
+    case 'update':
+      return { label: tr('Atualize o Habblaud'), desc: tr('Esta versão do Habblaud não entra mais no mundo. Atualize para o prédio voltar a acender.'), toggle: null };
+    case 'other-device':
+      return {
+        label: tr('Conectado em outro computador'),
+        desc: tr('A sua conta conectou o prédio em outro computador, e este parou de enviar.'),
+        toggle: { action: 'resume', text: tr('Trazer para este computador'), hint: tr('O prédio volta a subir daqui, e o outro computador para de enviar.') },
+      };
+    case 'banned':
+      return { label: tr('Conta banida'), desc: tr('O Habblaud World baniu esta conta: o prédio saiu do mundo e nada mais sai deste computador.'), toggle: null };
+    case 'suspended':
+      return {
+        label: tr('Conta suspensa'),
+        desc: tr('Esta conta está suspensa no Habblaud World: o prédio fica apagado e nada sai deste computador.'),
+        toggle: { action: 'resume', text: tr('Tentar de novo'), hint: tr('Se a suspensão já acabou, o prédio volta a acender.') },
+      };
+    case 'waiting':
+      return { label: tr('Na lista de espera'), desc: tr('A conta voltou para a lista de espera: o prédio sai do mundo até o acesso ser liberado de novo.'), toggle: null };
+    case 'no_player':
+      return { label: tr('Sem personagem'), desc: tr('O mundo não encontrou o seu personagem: crie de novo para o prédio voltar.'), toggle: null };
+    case 'unauthorized':
+      return { label: tr('Entre de novo'), desc: tr('O servidor do mundo não reconheceu este computador: entre de novo na conta.'), toggle: null };
+  }
 }
 
 /**
@@ -455,6 +487,13 @@ export interface BuildingView {
   rejected: string | null;
   /** Texto do botão de pausa e a explicação dele (null: sem botão). */
   toggle: { action: 'pause' | 'resume'; text: string; hint: string } | null;
+  /** Mostra "Sair do mundo" (há um prédio no mundo para retirar). */
+  leave: boolean;
+}
+
+/** "1 byte", "1.174 bytes". */
+export function bytesText(n: number): string {
+  return n === 1 ? tr('1 byte') : tr('{0} bytes', [formatInt(n)]);
 }
 
 /** "1 andar", "3 andares". */
@@ -473,18 +512,34 @@ export function buildingView(b: WorldBuildingStatus | undefined, hasPlayer: bool
   const floors = b?.floors ?? 0;
   const agents = b?.agents ?? 0;
   const stats =
-    state === 'no_player'
+    state === 'no_player' || state === 'left'
       ? []
       : [
           floorsText(floors),
           agentsText(agents),
           b?.lastUplinkAt ? tr('Última remessa: {0}', [relativeTime(b.lastUplinkAt, now)]) : tr('Nenhuma remessa ainda'),
         ];
-  const rejected = state !== 'no_player' && b?.lastAck?.ok === false ? uplinkRejectText(b.lastAck.error) : null;
+  const live = state === 'connected' || state === 'reconnecting' || state === 'paused';
+  const rejected = live && b?.lastAck?.ok === false ? uplinkRejectText(b.lastAck.error) : null;
   const later = tr('Pausado por 30 dias, o prédio some do mapa e, 30 dias depois, é retirado; retomar antes disso traz de volta, no mesmo lote.');
   switch (state) {
     case 'no_player':
-      return { state, label: tr('Sem personagem'), desc: tr('Crie o seu personagem: o prédio entra no mundo junto com ele.'), stats, rejected, toggle: null };
+      return { state, label: tr('Sem personagem'), desc: tr('Crie o seu personagem: o prédio entra no mundo junto com ele.'), stats, rejected, toggle: null, leave: false };
+    case 'left':
+      return {
+        state,
+        label: tr('Fora do mundo'),
+        desc: tr('Você saiu do mundo: o prédio foi retirado e o lote, liberado. Nada sai deste computador.'),
+        stats,
+        rejected: null,
+        toggle: { action: 'resume', text: tr('Voltar ao mundo'), hint: tr('Voltar cria um prédio novo, em outro lote; a conta e o personagem são os mesmos.') },
+        leave: false,
+      };
+    case 'stopped': {
+      const reason = b!.stopped!;
+      const v = buildingStopView(reason);
+      return { state, ...v, stats, rejected, leave: reason === 'update' || reason === 'other-device' || reason === 'suspended' };
+    }
     case 'paused':
       return {
         state,
@@ -493,6 +548,7 @@ export function buildingView(b: WorldBuildingStatus | undefined, hasPlayer: bool
         stats,
         rejected,
         toggle: { action: 'resume', text: tr('Retomar'), hint: `${tr('Retomar volta a enviar e acende o prédio.')} ${later}` },
+        leave: true,
       };
     case 'connected':
     case 'reconnecting': {
@@ -509,17 +565,32 @@ export function buildingView(b: WorldBuildingStatus | undefined, hasPlayer: bool
         stats,
         rejected,
         toggle: { action: 'pause', text: tr('Pausar'), hint: `${tr('Pausar interrompe o envio na hora e apaga o prédio no mundo.')} ${later}` },
+        leave: true,
       };
     }
   }
 }
 
+/** A diferença entre pausar e sair do mundo (PLANO.md, seção 2.6), ao lado do botão "Sair do mundo". */
+export function leaveHint(): string {
+  return tr(
+    'Pausar apaga o prédio e guarda o lote: retomar traz de volta, no mesmo lugar. Sair do mundo retira o prédio na hora e libera o lote; a conta e o personagem continuam, e voltar depois cria um prédio novo, em outro lote.',
+  );
+}
+
 export type AckKind = 'accepted' | 'rejected' | 'pending';
 
-/** A resposta do mundo a uma remessa, para a janela "Ver o que foi enviado". */
-export function ackView(ack: WorldLastUplink['ack']): { kind: AckKind; label: string; reason: string | null } {
+/**
+ * A resposta do mundo a uma remessa, para a janela "Ver o que foi enviado". Aceita, com os bytes que o mundo contou
+ * (iguais aos enviados, `sentBytes`, quando o pacote chegou inteiro).
+ */
+export function ackView(ack: WorldLastUplink['ack'], sentBytes?: number): { kind: AckKind; label: string; reason: string | null } {
   if (!ack) return { kind: 'pending', label: tr('Sem resposta do mundo ainda.'), reason: null };
-  if (ack.ok) return { kind: 'accepted', label: tr('Aceita pelo mundo.'), reason: null };
+  if (ack.ok) {
+    const reason =
+      ack.bytes === undefined ? null : ack.bytes === sentBytes ? tr('O mundo recebeu os mesmos {0}.', [bytesText(ack.bytes)]) : tr('O mundo contou {0}.', [bytesText(ack.bytes)]);
+    return { kind: 'accepted', label: tr('Aceita pelo mundo.'), reason };
+  }
   return { kind: 'rejected', label: tr('Recusada pelo mundo.'), reason: uplinkRejectText(ack.error) };
 }
 
@@ -536,16 +607,18 @@ export function themeGoesToWorld(meta: WorldMeta | undefined, gate: WorldGate): 
   return worldSectionMode(meta, gate) === 'active' && meta?.state === 'approved';
 }
 
-export type WorldChipState = 'live' | 'paused' | 'reconnecting';
+export type WorldChipState = 'live' | 'paused' | 'reconnecting' | 'stopped';
 
 /**
- * Chip da barra do topo ("🏙️ no mundo" / "⏸ pausado"): só com `meta.world.building` (conta aprovada) e nunca pela
- * porta do celular. Sem conexão, só aparece se o prédio já mandou alguma remessa (antes disso não está no mundo).
+ * Chip da barra do topo ("🏙️ no mundo" / "⏸ pausado" / "⚠️ parado"): só com `meta.world.building` (conta aprovada) e
+ * nunca pela porta do celular. Fora do mundo, nada. Parado pelo servidor do mundo, "parado" (o motivo fica no cartão).
+ * Sem conexão, só aparece se o prédio já mandou alguma remessa (antes disso não está no mundo).
  */
 export function worldChipState(meta: WorldMeta | undefined, gate: WorldGate): WorldChipState | null {
   const b = meta?.building;
-  if (!b || meta.state !== 'approved' || worldSectionMode(meta, gate) === 'hidden') return null;
+  if (!b || b.left || meta.state !== 'approved' || worldSectionMode(meta, gate) === 'hidden') return null;
   if (b.paused) return 'paused';
+  if (b.stopped) return 'stopped';
   if (b.connected) return 'live';
   return b.lastUplinkAt ? 'reconnecting' : null;
 }
