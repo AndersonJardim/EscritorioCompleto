@@ -320,6 +320,42 @@ describe('BuildingUplink: conexão e remessas', () => {
   });
 });
 
+describe('BuildingUplink: visitantes (Fase 4)', () => {
+  it('visitors {count} na conexão do prédio vira meta.visitors (com aviso de mudança); some quando a conexão cai', async () => {
+    const h = await start();
+    await waitFor(() => h.world.ws.uplinks.length === 1, 'primeira remessa');
+    expect(h.uplink.meta()).not.toHaveProperty('visitors');
+    const city: unknown[] = [];
+    h.uplink.attachCity({ opened() {}, closed() {}, message: (m) => city.push(m), wantsCity: false });
+    const conn = h.world.ws.connections[0]!;
+    const before = h.changes.n;
+    conn.send({ t: 'visitors', count: 3 });
+    await waitFor(() => h.uplink.meta().visitors === 3, 'contagem');
+    expect(h.changes.n).toBeGreaterThan(before);
+    expect(h.uplink.status().visitors).toBe(3);
+    expect(city).toEqual([{ t: 'visitors', count: 3 }]);
+    conn.send({ t: 'visitors', count: -2 });
+    conn.send({ t: 'visitors', count: 0 });
+    await waitFor(() => h.uplink.meta().visitors === 0, 'zero');
+    conn.send({ t: 'visitors', count: 1 });
+    await waitFor(() => h.uplink.meta().visitors === 1, 'um');
+    // a conexão caiu: a contagem é de outra conexão, esquecida
+    conn.drop();
+    await waitFor(() => !h.uplink.connected, 'queda');
+    expect(h.uplink.meta()).not.toHaveProperty('visitors');
+  });
+
+  it('fechado a visitas: nenhuma contagem (o servidor não manda nem o 0)', async () => {
+    const h = await start();
+    await waitFor(() => h.world.ws.uplinks.length === 1, 'primeira remessa');
+    h.world.ws.connections[0]!.send({ t: 'visitors', count: 2 });
+    await waitFor(() => h.uplink.meta().visitors === 2, 'contagem');
+    const s = h.store.get()!;
+    h.store.save({ ...s, player: { ...s.player!, visibility: { ...s.player!.visibility, closed: true } } });
+    expect(h.uplink.meta()).not.toHaveProperty('visitors');
+  });
+});
+
 describe('BuildingUplink: tarefas e compactações sem conexão', () => {
   const tasks = (done: number, pending: number) => [
     ...Array.from({ length: done }, (_, i) => ({ id: `d${i}`, title: 'feito', status: 'completed' as const })),

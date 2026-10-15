@@ -20,8 +20,13 @@
 //   manda `view` de novo; a cada queda, a cidade daqui é esquecida. Quando passa a querer a cidade (ou deixa de querer),
 //   avisa a conexão (`cityChanged`): com o prédio pausado ou fora do mundo, ela só existe com a cena aberta, e sem
 //   `uplink` (pausado, dá para andar pela cidade com o prédio apagado).
-// - O estado (shared/world/scene.ts: chunks com `rev`, prédios, jogadores visíveis, minimapa, minha posição, `afk`) fica
-//   só em memória e nunca vai para o log. Salto de `rev`: pede `resync {chunk}` e o patch não passa ao navegador.
+// - O estado (shared/world/scene.ts: chunks com `rev`, prédios, jogadores visíveis, minimapa, minha posição, `afk` e o
+//   interior do prédio onde estou) fica só em memória e nunca vai para o log. Salto de `rev`: pede `resync {chunk}` (ou
+//   `resync {building}`, dentro de um prédio) e o patch não passa ao navegador.
+// - Visita (Fase 4): `building`, `building.patch` e `visitors` passam ao navegador como os outros; dentro de um prédio,
+//   `pos` é a volta à rua. O stream fica aberto durante a visita (fechado o último, sai o `view.off` e o servidor do
+//   mundo tira o jogador do prédio), e a cena Visita nunca manda `view` (aqui, um `view` com a cidade aberta recomeça a
+//   cena, e o servidor entende como "voltou à cidade").
 // - O stream manda `world.snapshot` (tudo o que há, com o id do stream) ao conectar e a cada recomeço (conexão aberta
 //   ou caída, `view` de novo), depois `world` com cada mensagem da cidade como veio, e `: ping` a cada 15 s. No máximo
 //   4 streams; cliente lento demais (1 MB acumulado) é desconectado e o EventSource reconecta.
@@ -143,6 +148,7 @@ export class WorldViewer implements CityListener {
     if (!this.viewing && msg.t !== 'notice') return;
     const r = this.state.apply(msg);
     if (r.resync) this.link?.sendCity({ t: 'resync', chunk: r.resync });
+    if (r.resyncBuilding) this.link?.sendCity({ t: 'resync', building: r.resyncBuilding });
     if (r.forward) this.writeAll(frame('world', msg));
   }
 

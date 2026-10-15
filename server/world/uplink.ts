@@ -207,6 +207,8 @@ export class BuildingUplink {
   private last?: LastRecord;
   /** Andares e agentes do prédio que vieram no `welcome` (antes da primeira remessa). */
   private fromWelcome?: { floors: number; agents: number };
+  /** Visitantes dentro do prédio agora (↓ `visitors`, nesta conexão); esquecido quando ela cai. */
+  private visitors?: number;
   private city?: CityListener;
 
   constructor(private readonly o: BuildingUplinkOptions) {
@@ -338,6 +340,8 @@ export class BuildingUplink {
     if (this.last) m.lastUplinkAt = this.last.at;
     if (s?.left) m.left = true;
     if (this.stop_) m.stopped = true;
+    // Fechado a visitas, o servidor não manda mais a contagem (nem o 0): quem estava dentro foi posto para fora.
+    if (this.welcomed && this.visitors !== undefined && !s?.player?.visibility.closed) m.visitors = this.visitors;
     return m;
   }
 
@@ -430,6 +434,10 @@ export class BuildingUplink {
         return;
       case 'pong':
         return;
+      case 'visitors':
+        // Para o dono (Fase 4): quantos visitantes há no prédio agora (meta.world.building.visitors); a cena também vê.
+        if (this.welcomed) this.onVisitors(msg);
+        return;
       default:
         // A cidade (área, jogadores, avisos e o que vier nas próximas fases): para a cena, se houver.
         if (this.welcomed) this.city?.message(msg);
@@ -459,6 +467,15 @@ export class BuildingUplink {
     if (this.sending()) this.armSend(Math.max(0, this.lastSentAt + this.t.minGapMs - this.now()));
     this.o.onChange?.();
     this.city?.opened(msg);
+  }
+
+  private onVisitors(msg: Record<string, unknown>): void {
+    const n = count(msg.count);
+    if (n === undefined) return;
+    const changed = n !== this.visitors;
+    this.visitors = n;
+    if (changed) this.o.onChange?.();
+    this.city?.message(msg);
   }
 
   private onAck(msg: Record<string, unknown>): void {
@@ -552,6 +569,7 @@ export class BuildingUplink {
     const was = this.welcomed;
     this.ws = undefined;
     this.welcomed = false;
+    this.visitors = undefined;
     this.clearSendTimer();
     if (this.welcomeTimer) clearTimeout(this.welcomeTimer);
     if (this.pingTimer) clearInterval(this.pingTimer);

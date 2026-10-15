@@ -191,6 +191,7 @@ export function parseBuildingMeta(v: unknown): WorldBuildingMeta | undefined {
   if (at) b.lastUplinkAt = at;
   if (v.left === true) b.left = true;
   if (v.stopped === true) b.stopped = true;
+  if (typeof v.visitors === 'number' && Number.isInteger(v.visitors) && v.visitors >= 0) b.visitors = Math.min(v.visitors, 999);
   return b;
 }
 

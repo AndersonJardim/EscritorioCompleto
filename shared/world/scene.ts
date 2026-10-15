@@ -29,11 +29,18 @@
 //   * `pos` é a minha posição absoluta: o nascimento (decidido pelo servidor no primeiro `view`) e cada correção.
 //   * `afk` vale até um comando de verdade: andar ou virar, `view`, `profile`.
 //   * Os comandos do navegador são refeitos campo a campo (`parseSceneCommand`): nada além do formato do protocolo sobe.
+// Dentro de um prédio (Fase 4, README do servidor do mundo, "Regras para o cliente"):
+//   * `building` é o interior inteiro e substitui tudo, inclusive o `rev` (mesmo menor): a partir dele estou dentro.
+//   * `building.patch` só passa com o `rev` do prédio + 1; salto pede `resync {building}` (no máximo um a cada 5 s);
+//     repetido ou velho é ignorado; fora de um prédio não passa. `floors`, `building` e `visitors` substituem o que havia.
+//   * Dentro, qualquer `pos` quer dizer "você está na rua de novo" (saiu com `leave` ou foi posto para fora).
+//   * `visitors` (para o dono, na conexão do prédio) passa como veio.
 import { blockAt, chunkId, chunkOf, chunksAround, parseChunkId } from './city';
 import {
   WORLD_SCENE_COMMANDS,
   type WorldSceneChunk,
   type WorldSceneCommand,
+  type WorldSceneInside,
   type WorldSceneMe,
   type WorldSceneSnapshot,
 } from './api';
@@ -45,6 +52,7 @@ import {
   type GreetingId,
   type IntroId,
   type TraitId,
+  type WorldBuildingDetail,
   type WorldBuildingPublic,
   type WorldPlayerPublic,
   type WorldPosition,
@@ -53,7 +61,10 @@ import {
 /** O que fazer com uma mensagem do servidor do mundo: repassar ao navegador e, num salto de `rev`, pedir o chunk. */
 export interface SceneResult {
   forward: boolean;
+  /** Chunk a pedir de novo (`resync {chunk}`). */
   resync?: string;
+  /** Prédio a pedir de novo (`resync {building}`): salto no `rev` do interior. */
+  resyncBuilding?: string;
 }
 
 /** Espera mínima entre dois `resync` do mesmo chunk. */
@@ -93,9 +104,12 @@ export function parseSceneCommand(v: unknown): WorldSceneCommand | null {
       return { t: 'view.off' };
     case 'leave':
       return { t: 'leave' };
-    case 'resync':
-      if (v.chunk === undefined) return { t: 'resync' };
-      return isId(v.chunk) ? { t: 'resync', chunk: v.chunk } : null;
+    case 'resync': {
+      // `building` (Fase 4): o interior do prédio onde estou; `chunk`: a área de um chunk; nenhum dos dois: todas.
+      if (v.building !== undefined && !isId(v.building)) return null;
+      if (v.chunk !== undefined && !isId(v.chunk)) return null;
+      return { t: 'resync', ...(v.chunk !== undefined ? { chunk: v.chunk as string } : {}), ...(v.building !== undefined ? { building: v.building as string } : {}) };
+    }
     case 'profile':
       return isId(v.playerId) ? { t: 'profile', playerId: v.playerId } : null;
     case 'enter':
@@ -157,9 +171,13 @@ export class SceneState {
   pos?: WorldPosition;
   afk = false;
   minimap: WorldSceneSnapshot['minimap'] = null;
+  /** Dentro de um prédio (Fase 4): o interior com os patches aplicados; ausente na rua. */
+  inside?: WorldSceneInside;
   private readonly chunks = new Map<string, ChunkState>();
   private readonly players = new Map<string, WorldPlayerPublic>();
   private readonly resyncAt = new Map<string, number>();
+  /** Último `resync {building}` pedido (o prédio e quando). */
+  private buildingResyncAt?: { id: string; at: number };
 
   constructor(private readonly now: () => number = Date.now) {}
 
@@ -172,6 +190,7 @@ export class SceneState {
     s.pos = c.pos;
     s.afk = c.afk;
     s.minimap = c.minimap;
+    if (c.inside) s.inside = c.inside;
     for (const ch of c.chunks) s.chunks.set(ch.chunk, { rev: ch.rev, buildings: new Map(ch.buildings.map((b) => [b.id, b])) });
     for (const p of c.players) s.players.set(p.id, p);
     return s;
@@ -186,7 +205,7 @@ export class SceneState {
     this.district = typeof d === 'string' ? d : undefined;
   }
 
-  /** Esquece a cidade (área, jogadores, minimapa, posição, ausência); fica quem sou eu. */
+  /** Esquece a cidade (área, jogadores, minimapa, posição, ausência, o prédio onde estava); fica quem sou eu. */
   clear(): void {
     this.chunks.clear();
     this.players.clear();
@@ -194,6 +213,8 @@ export class SceneState {
     this.minimap = null;
     this.pos = undefined;
     this.afk = false;
+    this.inside = undefined;
+    this.buildingResyncAt = undefined;
   }
 
   /** O prédio pelo id, em qualquer chunk guardado. */
@@ -260,6 +281,9 @@ export class SceneState {
         return { forward: true };
       case 'pos': {
         if (!isNum(msg.x) || !isNum(msg.y)) return { forward: false };
+        // Dentro de um prédio, `pos` é a calçada em frente à porta: estou na rua de novo.
+        this.inside = undefined;
+        this.buildingResyncAt = undefined;
         this.setPos({ x: msg.x, y: msg.y, dir: this.pos?.dir ?? 's', moving: false });
         return { forward: true };
       }
@@ -295,8 +319,11 @@ export class SceneState {
       case 'notice':
         return { forward: typeof msg.text === 'string' };
       case 'building':
+        return this.enterBuilding(msg);
       case 'building.patch':
-        return { forward: true };
+        return this.buildingPatch(msg);
+      case 'visitors':
+        return { forward: isNum(msg.count) && msg.count >= 0 };
       default:
         return { forward: false };
     }
@@ -327,6 +354,7 @@ export class SceneState {
       chunks,
       players: [...this.players.values()],
       minimap: this.minimap,
+      ...(this.inside ? { inside: this.inside } : {}),
     });
   }
 
@@ -360,6 +388,38 @@ export class SceneState {
     }
     for (const id of removed) if (typeof id === 'string') c.buildings.delete(id);
     c.rev = msg.rev;
+    return { forward: true };
+  }
+
+  /** `building`: o interior inteiro, que substitui tudo (mesmo com `rev` menor). Daqui em diante estou dentro. */
+  private enterBuilding(msg: Obj): SceneResult {
+    const d = msg.detail;
+    if (!isNum(msg.rev) || !isObj(d) || !isObj(d.building) || !isId(d.building.id) || !Array.isArray(d.floors)) return { forward: false };
+    this.inside = { id: d.building.id, rev: msg.rev, detail: structuredClone(d) as unknown as WorldBuildingDetail };
+    this.buildingResyncAt = undefined;
+    return { forward: true };
+  }
+
+  /** `building.patch`: só o `rev` seguinte do prédio onde estou; salto pede o prédio de novo. */
+  private buildingPatch(msg: Obj): SceneResult {
+    const inside = this.inside;
+    if (!inside || !isNum(msg.rev)) return { forward: false };
+    if (msg.rev <= inside.rev) return { forward: false };
+    if (msg.rev !== inside.rev + 1) {
+      const now = this.now();
+      const last = this.buildingResyncAt;
+      if (last && last.id === inside.id && now - last.at < RESYNC_GAP_MS) return { forward: false };
+      this.buildingResyncAt = { id: inside.id, at: now };
+      return { forward: false, resyncBuilding: inside.id };
+    }
+    if (msg.floors !== undefined && !Array.isArray(msg.floors)) return { forward: false };
+    if (msg.building !== undefined && (!isObj(msg.building) || msg.building.id !== inside.id)) return { forward: false };
+    if (msg.visitors !== undefined && !isNum(msg.visitors)) return { forward: false };
+    const detail = inside.detail;
+    if (msg.floors) detail.floors = structuredClone(msg.floors) as WorldBuildingDetail['floors'];
+    if (msg.building) detail.building = structuredClone(msg.building) as unknown as WorldBuildingPublic;
+    if (isNum(msg.visitors)) detail.visitors = msg.visitors;
+    inside.rev = msg.rev;
     return { forward: true };
   }
 

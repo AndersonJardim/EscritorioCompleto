@@ -46,9 +46,10 @@ mundo e o seu prédio entra na cidade. Pela conexão sai **só** isto:
 | Sinal de vida (`ping`, e o `pong` quando o servidor pergunta) | A cada 30 segundos, sem conteúdo | Para o prédio ficar aceso enquanto o Habblaud está aberto (pausado ou fora do mundo, não acende nada: só mantém a conexão da cena Mundo) |
 | Cena Mundo aberta ou fechada (`view` e `view.off`) | Ao abrir e ao fechar a cidade no navegador, sem conteúdo | Para o servidor mandar o pedaço da cidade em volta do seu personagem só enquanto você olha; com a cena fechada, nada desce |
 | Os passos do seu personagem (`move`) | Enquanto você anda na cidade (no máximo 5 por segundo): a posição na cidade (`x`, `y`, em tiles), a direção (`dir`: `n`, `s`, `e` ou `w`) e se está andando (`moving`) | É o seu personagem na rua; a posição é na cidade do mundo, nunca nada do escritório. Com a aba em segundo plano, um passo parado a cada 30 s |
-| Pedido de área de novo (`resync`) | Quando chega uma mudança de prédio fora de ordem: só o id do pedaço da cidade (`chunk`) | Para o seu Habblaud mostrar os prédios certos |
+| Pedido de área de novo (`resync`) | Quando chega uma mudança de prédio fora de ordem: só o id do pedaço da cidade (`chunk`) ou, dentro de um prédio que você visita, o id desse prédio (`building`) | Para o seu Habblaud mostrar os prédios certos |
 | Pedido de perfil (`profile`) | Ao clicar em alguém na rua: só o id (`playerId`) que o próprio mundo deu a essa pessoa | Para mostrar o cartão de quem está perto |
-| Outros comandos do seu personagem (próximas fases) | Entrar e sair de prédios, like, cumprimento (da lista fixa), bloqueio, denúncia (motivo da lista fixa), sempre com os ids que o mundo deu | São seus no mundo, nunca do escritório |
+| Entrar e sair de um prédio (`enter` e `leave`) | Ao apertar E na porta (ou em "Ver como os outros veem") e ao sair: só o id do prédio que o mundo deu (`buildingId`). Lá dentro, nenhum passo sai: o seu personagem anda só na sua tela | Para ver o interior do prédio de alguém (salas com nomes fictícios e os agentes no status de agora, sem terminal, mensagens, pedidos de permissão nem nada que age) |
+| Outros comandos do seu personagem (próximas fases) | Like, cumprimento (da lista fixa), bloqueio, denúncia (motivo da lista fixa), sempre com os ids que o mundo deu | São seus no mundo, nunca do escritório |
 
 O pacote do prédio tem estes campos e mais nenhum (o formato exato está em
 [`shared/world/schema.json`](../../shared/world/schema.json); um teste confere que cada campo dele está nesta página):
@@ -143,6 +144,9 @@ fazem, nem quem você é: só o nickname e o avatar que você escolheu.**
   prédio, nunca "online" sobre a pessoa.
 - **Modo discreto:** só aceso ou apagado e o número de andares, sem contadores nem status. **Fechado a visitas:**
   ninguém entra.
+- **Visitas:** quem entra no seu prédio vê as salas com os nomes fictícios e os agentes no status de agora; no modo
+  discreto, as salas vazias com a luz acesa; pausado, tudo apagado. Você vê só "N visitantes agora", nunca quem. E o
+  que você vê lá dentro do prédio dos outros fica na sua tela: nada do interior sobe, nem a posição do seu personagem.
 - **Bloqueio nos dois sentidos:** quem você bloqueia some para você e você some para essa pessoa, inclusive o prédio.
 
 Dito com clareza: quem observar o mesmo prédio por muito tempo pode notar padrões (mais agentes em dias úteis, por
@@ -165,7 +169,7 @@ exemplo). Quem não quiser nem isso usa o modo discreto ou pausa.
   novo).
 - **Pausado: seu prédio está apagado, mas você pode andar pela cidade.** Com a cena Mundo aberta, a conexão continua
   (ou abre) levando só a primeira mensagem (`hello`), o sinal de vida (`ping`/`pong`) e os comandos da cena (`view`,
-  `view.off`, `move`, `profile`, `resync`): nenhum pacote do prédio sai, e o sinal de vida não acende o prédio. Fechada a cena, a conexão
+  `view.off`, `move`, `profile`, `resync`, `enter`, `leave`): nenhum pacote do prédio sai, e o sinal de vida não acende o prédio. Fechada a cena, a conexão
   fecha e nada sai. Fora do mundo vale o mesmo.
 - **Sair do mundo** para o envio do pacote e só responde depois que o servidor do mundo retira o prédio e libera o
   lote. A conta e o personagem continuam (dá para andar pela cidade, como pausado); nenhum pacote do prédio sai até

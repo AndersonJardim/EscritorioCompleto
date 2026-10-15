@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import type { WorldSceneSnapshot } from '../../shared/world/api';
 import type { ClientMessage } from '../../shared/world/protocol';
 import { WorldViewer, type CityLink } from './viewer';
+import { sampleBuildingDetail } from '../../shared/world/visit-sample';
 
 const WELCOME = {
   t: 'welcome',
@@ -207,6 +208,46 @@ describe('WorldViewer: mensagens da cidade', () => {
     b.st.close();
     viewer.message({ t: 'area', chunk: 'centro:0,0', rev: 1, buildings: [] });
     expect(viewer.current().chunks).toEqual([]);
+  });
+});
+
+describe('WorldViewer: visita (Fase 4)', () => {
+  const detail = () => sampleBuildingDetail();
+  const ID = 'o_7a8b9c0d1e2f';
+
+  it('repassa building, building.patch e visitors; salto no rev do prédio pede resync {building} e não repassa', () => {
+    const { link, viewer, open } = setup();
+    const a = open();
+    viewer.command({ stream: 's1', cmds: [{ t: 'enter', buildingId: ID, extra: 'x' }] });
+    expect(link.sent.at(-1)).toEqual({ t: 'enter', buildingId: ID });
+    viewer.message({ t: 'building', rev: 3, detail: detail() });
+    viewer.message({ t: 'building.patch', rev: 4, visitors: 2 });
+    viewer.message({ t: 'building.patch', rev: 6, visitors: 5 });
+    viewer.message({ t: 'visitors', count: 1 });
+    expect(a.st.world().map((m) => `${m.t}${m.rev ?? ''}`)).toEqual(['building3', 'building.patch4', 'visitors']);
+    expect(link.sent.at(-1)).toEqual({ t: 'resync', building: ID });
+    expect(viewer.current().inside).toMatchObject({ id: ID, rev: 4, detail: { visitors: 2 } });
+    // Um stream novo no meio da visita recebe o interior no snapshot.
+    const b = open();
+    expect(b.st.snapshots()[0]?.inside).toMatchObject({ id: ID, rev: 4 });
+    // O navegador pede o prédio de novo: só o id, campo a campo.
+    expect(viewer.command({ stream: 's1', cmds: [{ t: 'resync', building: ID, token: 'x' }] })).toEqual({ ok: true, data: { sent: 1 } });
+    expect(link.sent.at(-1)).toEqual({ t: 'resync', building: ID });
+  });
+
+  it('dentro, pos é a volta à rua; leave sobe como veio; fechar o último stream manda view.off (e esquece o interior)', () => {
+    const { link, viewer, open } = setup();
+    const a = open();
+    viewer.message({ t: 'building', rev: 1, detail: detail() });
+    viewer.command({ stream: 's1', cmds: [{ t: 'leave' }] });
+    expect(link.sent.at(-1)).toEqual({ t: 'leave' });
+    viewer.message({ t: 'pos', x: 40, y: 13 });
+    expect(viewer.current().inside).toBeUndefined();
+    expect(a.st.world().at(-1)).toEqual({ t: 'pos', x: 40, y: 13 });
+    viewer.message({ t: 'building', rev: 1, detail: detail() });
+    a.st.close();
+    expect(link.types().at(-1)).toBe('view.off');
+    expect(viewer.current().inside).toBeUndefined();
   });
 });
 

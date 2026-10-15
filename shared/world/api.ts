@@ -75,6 +75,8 @@ import {
   type TraitId,
   type ViewMessage,
   type ViewOffMessage,
+  type VisitorsMessage,
+  type WorldBuildingDetail,
   type WorldAccess,
   type WorldBuildingPublic,
   type WorldErrorCode,
@@ -141,6 +143,8 @@ export interface WorldBuildingStatus {
   stopped?: WorldBuildingStop;
   /** Saiu do mundo (POST /api/world/leave): o prédio foi retirado e nenhum pacote sai até o join (prédio novo, lote novo). */
   left?: true;
+  /** Visitantes dentro do prédio agora (veja WorldBuildingMeta.visitors). */
+  visitors?: number;
 }
 
 /** OfficeSnapshot.meta.world.building: o resumo do prédio (sem a conta), para a interface mostrar sem pedir o status. */
@@ -154,6 +158,11 @@ export interface WorldBuildingMeta {
   left?: true;
   /** O servidor do mundo parou o prédio (`goodbye`); o motivo só vai no status, que não chega ao celular. */
   stopped?: true;
+  /**
+   * Visitantes dentro do prédio agora (↓ `visitors {count}` na conexão do prédio, Fase 4): ausente antes da primeira
+   * contagem, sem conexão e com o prédio fechado a visitas (fechado, o servidor não manda nem o 0).
+   */
+  visitors?: number;
 }
 
 /** GET /api/world/last-uplink ("Ver o que foi enviado"): o pacote exato da última remessa, os bytes e a resposta. */
@@ -233,12 +242,24 @@ export type WorldSceneMessage =
   | LikeUpdateMessage
   | GreetingMessage
   | BuildingMessage
-  | BuildingPatchMessage;
+  | BuildingPatchMessage
+  | VisitorsMessage;
 
 export const WORLD_SCENE_MESSAGES = [
   'area', 'area.patch', 'players', 'player.join', 'player.leave', 'pos', 'minimap', 'afk', 'profile', 'notice', 'like.update',
-  'greeting', 'building', 'building.patch',
+  'greeting', 'building', 'building.patch', 'visitors',
 ] as const satisfies readonly WorldSceneMessage['t'][];
+
+/**
+ * Dentro de um prédio (Fase 4, cena Visita): o interior que o servidor do mundo mandou no `building` (ao entrar ou no
+ * `resync {building}`), com cada `building.patch` já aplicado, e o `rev` do prédio em que está.
+ */
+export interface WorldSceneInside {
+  /** Id do prédio (o id do dono). */
+  id: string;
+  rev: number;
+  detail: WorldBuildingDetail;
+}
 
 /** Eu na cena: o jogador desta conta (do `welcome`), sem as opções de visibilidade. */
 export interface WorldSceneMe {
@@ -284,6 +305,8 @@ export interface WorldSceneSnapshot {
   players: WorldPlayerPublic[];
   /** O minimapa (prédios acesos por quarteirão), ou null antes do primeiro. */
   minimap: MinimapMessage['blocks'] | null;
+  /** Dentro de um prédio: o interior (até o `pos` que diz "de volta à rua"). Ausente na rua. */
+  inside?: WorldSceneInside;
 }
 
 /** GET /api/world/status (e a resposta de verify, login e logout). */

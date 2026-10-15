@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import type { WorldBuildingPublic } from './protocol';
 import { parseSceneCommand, reduceSceneBatch, RESYNC_GAP_MS, SceneState } from './scene';
+import { sampleBuildingDetail } from './visit-sample';
 
 const ME = 'acc_me';
 const WELCOME = {
@@ -157,7 +158,10 @@ describe('SceneState: jogadores', () => {
     for (const t of ['welcome', 'goodbye', 'uplink.ack', 'ping', 'pong', 'qualquer']) expect(s.apply({ t }).forward, t).toBe(false);
     expect(s.apply({ t: 'notice', level: 'warn', text: 'rate_limited' }).forward).toBe(true);
     expect(s.apply({ t: 'profile', player: player('p2') }).forward).toBe(true);
-    expect(s.apply({ t: 'building', rev: 1, detail: {} }).forward).toBe(true);
+    expect(s.apply({ t: 'building', rev: 1, detail: sampleBuildingDetail() }).forward).toBe(true);
+    expect(s.apply({ t: 'building', rev: 1, detail: {} }).forward).toBe(false);
+    expect(s.apply({ t: 'visitors', count: 2 }).forward).toBe(true);
+    expect(s.apply({ t: 'visitors', count: -1 }).forward).toBe(false);
     expect(s.apply({ t: 'minimap', blocks: [{ x: 1, y: 0, lit: 2 }, { x: 'a' }] }).forward).toBe(true);
     expect(s.minimap).toEqual([{ x: 1, y: 0, lit: 2 }]);
   });
@@ -185,6 +189,8 @@ describe('comandos da cena', () => {
     expect(parseSceneCommand({ t: 'view.off' })).toEqual({ t: 'view.off' });
     expect(parseSceneCommand({ t: 'resync' })).toEqual({ t: 'resync' });
     expect(parseSceneCommand({ t: 'resync', chunk: 'centro:0,0' })).toEqual({ t: 'resync', chunk: 'centro:0,0' });
+    // Fase 4: o interior do prédio onde estou (nunca vira um resync de todas as áreas)
+    expect(parseSceneCommand({ t: 'resync', building: 'o_7a8b' })).toEqual({ t: 'resync', building: 'o_7a8b' });
     expect(parseSceneCommand({ t: 'profile', playerId: 'p1' })).toEqual({ t: 'profile', playerId: 'p1' });
     expect(parseSceneCommand({ t: 'greet', playerId: 'p1', greetingId: 'wave' })).toEqual({ t: 'greet', playerId: 'p1', greetingId: 'wave' });
     expect(parseSceneCommand({ t: 'report', playerId: 'p1', reason: 'harassment', text: 'livre' })).toEqual({ t: 'report', playerId: 'p1', reason: 'harassment' });
@@ -205,6 +211,10 @@ describe('comandos da cena', () => {
       { t: 'profile', playerId: '' },
       { t: 'profile', playerId: 'com espaço' },
       { t: 'resync', chunk: 'x'.repeat(65) },
+      { t: 'resync', building: '' },
+      { t: 'resync', building: 7 },
+      { t: 'enter', buildingId: 'com espaço' },
+      { t: 'enter' },
       null,
       [],
       'move',
@@ -220,5 +230,82 @@ describe('comandos da cena', () => {
       m(3),
     ]);
     expect(reduceSceneBatch([m(1), { t: 'view' }])).toEqual([m(1), { t: 'view' }]);
+  });
+});
+
+describe('SceneState: dentro de um prédio (Fase 4)', () => {
+  const ID = 'o_7a8b9c0d1e2f';
+  const inside = () => {
+    const f = fresh();
+    f.s.apply({ t: 'pos', x: 21, y: 15 });
+    f.s.apply({ t: 'area', chunk: 'centro:0,0', rev: 2, buildings: [building('b1')] });
+    expect(f.s.apply({ t: 'building', rev: 5, detail: sampleBuildingDetail() })).toEqual({ forward: true });
+    return f;
+  };
+
+  it('building: o interior inteiro e o rev; um building novo substitui tudo, mesmo com rev menor', () => {
+    const { s } = inside();
+    expect(s.inside).toMatchObject({ id: ID, rev: 5, detail: { visitors: 1, building: { owner: { name: 'Helena' } } } });
+    expect(s.inside?.detail.floors.map((f) => f.label)).toEqual(['ipe', 'jade', 'aurora']);
+    expect(s.apply({ t: 'building', rev: 1, detail: sampleBuildingDetail('away') }).forward).toBe(true);
+    expect(s.inside).toMatchObject({ rev: 1, detail: { building: { state: 'away' } } });
+    expect(s.inside?.detail.floors.every((f) => f.agents.length === 0)).toBe(true);
+  });
+
+  it('building.patch: só o rev + 1; floors, building e visitors substituem; repetido ou velho é ignorado', () => {
+    const { s } = inside();
+    const floors = sampleBuildingDetail().floors.slice(0, 1);
+    expect(s.apply({ t: 'building.patch', rev: 6, floors })).toEqual({ forward: true });
+    expect(s.inside?.detail.floors.map((f) => f.id)).toEqual(['f_0a1b2c3d4e']);
+    expect(s.apply({ t: 'building.patch', rev: 7, visitors: 4 })).toEqual({ forward: true });
+    expect(s.inside?.detail.visitors).toBe(4);
+    expect(s.apply({ t: 'building.patch', rev: 8, building: sampleBuildingDetail('discreet').building })).toEqual({ forward: true });
+    expect(s.inside?.detail.building.discreet).toBe(true);
+    expect(s.apply({ t: 'building.patch', rev: 8, visitors: 9 })).toEqual({ forward: false });
+    expect(s.apply({ t: 'building.patch', rev: 3, visitors: 9 })).toEqual({ forward: false });
+    expect(s.inside?.detail.visitors).toBe(4);
+    // `building` de outro prédio no patch: não é deste interior
+    expect(s.apply({ t: 'building.patch', rev: 9, building: { ...sampleBuildingDetail().building, id: 'outro' } })).toEqual({ forward: false });
+    expect(s.inside?.rev).toBe(8);
+  });
+
+  it('salto no rev do prédio: pede resync {building} (no máximo um a cada 5 s) e não repassa; o building seguinte resolve', () => {
+    const { s, now } = inside();
+    expect(s.apply({ t: 'building.patch', rev: 8, visitors: 2 })).toEqual({ forward: false, resyncBuilding: ID });
+    expect(s.apply({ t: 'building.patch', rev: 9, visitors: 2 })).toEqual({ forward: false });
+    now.t += RESYNC_GAP_MS;
+    expect(s.apply({ t: 'building.patch', rev: 9, visitors: 2 })).toEqual({ forward: false, resyncBuilding: ID });
+    expect(s.inside?.detail.visitors).toBe(1);
+    expect(s.apply({ t: 'building', rev: 9, detail: sampleBuildingDetail() }).forward).toBe(true);
+    expect(s.apply({ t: 'building.patch', rev: 10, visitors: 3 })).toEqual({ forward: true });
+    // Depois do building, um salto novo pede de novo na hora.
+    expect(s.apply({ t: 'building.patch', rev: 12 }).resyncBuilding).toBe(ID);
+  });
+
+  it('fora de um prédio, building.patch não passa (nem pede nada)', () => {
+    const { s } = fresh();
+    expect(s.apply({ t: 'building.patch', rev: 2, visitors: 1 })).toEqual({ forward: false });
+  });
+
+  it('dentro, pos é a volta à rua: o interior some; clear também esquece', () => {
+    const { s } = inside();
+    expect(s.apply({ t: 'pos', x: 22, y: 16 }).forward).toBe(true);
+    expect(s.inside).toBeUndefined();
+    expect(s.pos).toMatchObject({ x: 22, y: 16 });
+    expect(s.apply({ t: 'building.patch', rev: 6, visitors: 1 })).toEqual({ forward: false });
+    const again = inside().s;
+    again.clear();
+    expect(again.inside).toBeUndefined();
+  });
+
+  it('o snapshot leva o interior (um stream novo no meio da visita continua dentro), em cópia', () => {
+    const { s } = inside();
+    const snap = { stream: 'x', connected: true, viewing: true, ...s.snapshot() };
+    expect(snap.inside).toMatchObject({ id: ID, rev: 5 });
+    const copy = SceneState.fromSnapshot(snap);
+    expect(copy.apply({ t: 'building.patch', rev: 6, visitors: 7 }).forward).toBe(true);
+    expect(copy.inside?.detail.visitors).toBe(7);
+    expect(s.inside?.detail.visitors).toBe(1);
+    expect(fresh().s.snapshot()).not.toHaveProperty('inside');
   });
 });
