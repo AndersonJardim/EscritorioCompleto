@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { lotDoor } from '../../../../shared/world/city';
 import type { CityGoal, WorldBuildingPublic } from '../../../../shared/world/protocol';
-import { cityHallView, goalsReached, goalView, ornamentFor } from './fireworks';
+import { cityHallView, goalsReached, goalView, ornamentFor, reachedGoalView } from './fireworks';
 import { BalloonBook, BALLOON_MS, pickGreetTarget, RateGate, suggestedReply, WHEEL, wheelIndexOfKey, wheelKey, wheelLayout } from './greetings';
 import { doorActions, doorTarget, heartAt, HEART_MS, KnockBook, KNOCK_EVERY_MS, LIKE_DISTANCE } from './likes';
 import { FADE, normalizeBuildingCode, TeleportFade } from './teleport';
@@ -144,6 +144,12 @@ describe('a meta da cidade', () => {
     expect(goalsReached(goal('agent_hours_100k', 100_000, 100_000))).toBe(3);
     expect(goalView({ lit: 3 })).toBeNull();
     expect(goalView(null)).toBeNull();
+  });
+
+  it('durante os fogos, o termômetro mostra a meta que acabou de bater, cheia', () => {
+    expect(reachedGoalView('2026-10-12:agent_hours_10k')).toMatchObject({ pct: 1, pctText: '100%', reached: 1, progressText: 'Meta batida!' });
+    expect(reachedGoalView('2026-10-12:agent_hours_50k')?.reached).toBe(2);
+    expect(reachedGoalView('qualquer')).toBeNull();
   });
 
   it('prefeitura: prédios acesos e a faixa dos tokens (ou o aviso dos 10 prédios)', () => {

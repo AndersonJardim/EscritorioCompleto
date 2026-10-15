@@ -3104,6 +3104,7 @@ export const EN: Readonly<Record<string, string>> = {
   "Cumprimentar": "Greet",
   "Cumprimentos": "Greetings",
   // client/src/world/city/fireworks.ts
+  "Meta batida!": "Goal reached!",
   "{0} de {1} h": "{0} of {1} h",
   "A cidade consumiu ≈ {0} esta semana": "The city used ≈ {0} this week",
   "A soma aparece com 10 prédios ou mais.": "The total shows up with 10 buildings or more.",

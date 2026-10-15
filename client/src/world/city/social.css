@@ -5,7 +5,7 @@
 
 /* os avisos do escritório na cidade sobem acima do "Ir para" do minimapa */
 .ui-root.is-city .ui-toasts {
-  bottom: calc(196px + env(safe-area-inset-bottom));
+  bottom: calc(226px + env(safe-area-inset-bottom));
 }
 
 /* ---- botões perto de mim */

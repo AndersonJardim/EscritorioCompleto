@@ -54,6 +54,14 @@ export function goalView(city: WorldSceneCity | undefined | null): GoalView | nu
   };
 }
 
+/** A meta que acabou de bater (`goalId` = "<segunda>:<CityGoalId>" do `city.fireworks`), cheia, durante os fogos. */
+export function reachedGoalView(goalId: string): GoalView | null {
+  const label = goalId.slice(goalId.lastIndexOf(':') + 1) as CityGoal['label'];
+  const i = CITY_GOAL_IDS.indexOf(label);
+  if (i < 0) return null;
+  return { pct: 1, pctText: '100%', label: cityGoalLabel(label), progressText: tr('Meta batida!'), reached: i + 1 };
+}
+
 /** A placa da prefeitura: os tokens da semana da cidade (em faixa) e os prédios acesos. */
 export function cityHallView(city: WorldSceneCity | undefined | null): { tokens: string; lit: string } | null {
   if (!city) return null;
@@ -271,9 +279,9 @@ export class Fireworks {
     // brilho em volta de cada faísca
     for (let i = 0; i < this.n; i += 2) {
       const left = 1 - this.age[i] / this.life[i];
-      ctx.globalAlpha = left * 0.28 * glow;
+      ctx.globalAlpha = left * 0.22 * glow;
       ctx.fillStyle = SPARK_COLORS[this.color[i] % SPARK_COLORS.length]!;
-      ctx.fillRect(Math.round(this.x[i]) - 2, Math.round(this.y[i]) - 2, 6, 6);
+      ctx.fillRect(Math.round(this.x[i]) - 1, Math.round(this.y[i]) - 1, 4, 4);
     }
     ctx.globalCompositeOperation = 'source-over';
     for (const r of this.rockets) {

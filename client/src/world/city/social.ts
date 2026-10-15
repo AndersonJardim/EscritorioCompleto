@@ -12,7 +12,7 @@
 // desenho do CityRenderer (CityFx), os extras dos cartões e as teclas. Comandos só no formato do protocolo, com os
 // limites do lado de cá (o servidor fecha a conexão depois de 3 recusas por limite num minuto).
 import { tr } from '../../../../shared/i18n';
-import { lotDoor } from '../../../../shared/world/city';
+import { blockAt, chunkOf, lotDoor } from '../../../../shared/world/city';
 import type { WorldSceneCity, WorldSceneCommand, WorldSceneSnapshot } from '../../../../shared/world/api';
 import type { GreetingId, ReportReason, WorldBuildingPublic } from '../../../../shared/world/protocol';
 import { parseCityStatus } from '../../../../shared/world/scene';
@@ -35,8 +35,11 @@ import {
   drawHallBoard,
   drawSeasonal,
   Fireworks,
+  FIREWORKS_MS,
   goalView,
   ornamentFor,
+  reachedGoalView,
+  type GoalView,
   seasonalSpots,
 } from './fireworks';
 import { BalloonBook, GreetingWheel, pickGreetTarget, RateGate, REPLY_WINDOW_MS, suggestedReply, type WheelTarget } from './greetings';
@@ -92,6 +95,12 @@ function isTyping(t: EventTarget | null): boolean {
 }
 
 const obj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+/** O servidor do mundo só aceita cumprimentar quem está no mesmo chunk (os 2×2 quarteirões). */
+const sameChunk = (a: { x: number; y: number }, b: { x: number; y: number }) => {
+  const ca = chunkOf(blockAt(a.x, a.y));
+  const cb = chunkOf(blockAt(b.x, b.y));
+  return ca.x === cb.x && ca.y === cb.y;
+};
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
 export class CitySocial implements CityFx {
@@ -116,6 +125,8 @@ export class CitySocial implements CityFx {
   private readonly testBtn: HTMLButtonElement | null = null;
   private dockKey = '';
   private city: WorldSceneCity | null = null;
+  /** A meta que acabou de bater: o termômetro fica cheio durante os fogos. */
+  private celebrating: { goal: GoalView; until: number } | null = null;
   private replyTo: { id: string; at: number; got: GreetingId } | null = null;
   private pending: Pending | null = null;
   private snapCamera = false;
@@ -163,6 +174,7 @@ export class CitySocial implements CityFx {
     this.pending = null;
     this.replyTo = null;
     this.city = null;
+    this.celebrating = null;
     this.snapCamera = false;
     this.heldPos = null;
     this.fadeEl.hidden = true;
@@ -223,13 +235,11 @@ export class CitySocial implements CityFx {
       }
       case 'city.fireworks': {
         this.fireworks.start(now);
-        const g = goalView(this.city);
+        const g = typeof msg.goalId === 'string' ? reachedGoalView(msg.goalId) : null;
+        if (g) this.celebrating = { goal: g, until: now + FIREWORKS_MS };
         this.o.toast(g ? `🎆 ${tr('A cidade bateu a meta da semana: {0}!', [g.label])}` : `🎆 ${tr('A cidade bateu a meta da semana!')}`);
         return false;
       }
-      case 'knock':
-        this.o.toast(`🚪 ${tr('Alguém bateu na porta do seu prédio.')}`);
-        return false;
       case 'pos':
         if (this.pending?.kind === 'teleport') {
           this.pending = null;
@@ -421,7 +431,7 @@ export class CitySocial implements CityFx {
     const state = this.o.state();
     if (!me) return;
     const near: Array<{ id: string; x: number; y: number }> = [];
-    for (const [id, rp] of state.players) if (!this.blocked.has(id)) near.push({ id, x: rp.info.pos.x, y: rp.info.pos.y });
+    for (const [id, rp] of state.players) if (!this.blocked.has(id) && sameChunk(me, rp.info.pos)) near.push({ id, x: rp.info.pos.x, y: rp.info.pos.y });
     const reply = this.replyTo && now - this.replyTo.at < REPLY_WINDOW_MS ? this.replyTo : null;
     const selected = forceTarget ?? (this.o.cards.kind === 'player' ? this.o.cards.id : null);
     const id = forceTarget && state.players.has(forceTarget) ? forceTarget : pickGreetTarget(me, near, { selected, replyTo: reply?.id ?? null });
@@ -573,7 +583,7 @@ export class CitySocial implements CityFx {
       const k = doorTarget(me, (lot) => state.buildingAt(lot), state.myBuildingId, KNOCK_DISTANCE)?.building ?? null;
       knock = k?.knocks ? k : null;
       for (const rp of state.players.values()) {
-        if ((rp.info.pos.x - me.x) ** 2 + (rp.info.pos.y - me.y) ** 2 <= 144 && !this.blocked.has(rp.info.id)) {
+        if ((rp.info.pos.x - me.x) ** 2 + (rp.info.pos.y - me.y) ** 2 <= 144 && !this.blocked.has(rp.info.id) && sameChunk(me, rp.info.pos)) {
           greet = true;
           break;
         }
@@ -649,6 +659,12 @@ export class CitySocial implements CityFx {
     return { x: v.x + r.x + r.w - 10, y: v.y + r.y + r.h / 2 };
   }
 
+  /** O termômetro agora: a meta que acabou de bater (cheia) durante os fogos, depois a da semana. */
+  private goal(now: number): GoalView | null {
+    if (this.celebrating && now < this.celebrating.until) return this.celebrating.goal;
+    return goalView(this.city);
+  }
+
   /** Px de mundo → px da janela (para pôr a roda no lugar do personagem). */
   private toWindow(wx: number, wy: number): { x: number; y: number } {
     const p = this.o.camera.worldToScreen(wx, wy);
@@ -681,9 +697,9 @@ export class CitySocial implements CityFx {
     const inView = (x: number, y: number, w: number, hh: number) => x < view.x1 && x + w > view.x0 && y < view.y1 && y + hh > view.y0;
     const bw = BOARDS.w;
     const bh = BOARDS.h + BOARDS.posts;
-    if (inView(BOARDS.goal.x - bw / 2, BOARDS.goal.y - bh, bw, bh)) take(BOARDS.goal.y, (ctx, now) => drawGoalBoard(ctx, goalView(this.city), now));
+    if (inView(BOARDS.goal.x - bw / 2, BOARDS.goal.y - bh, bw, bh)) take(BOARDS.goal.y, (ctx, now) => drawGoalBoard(ctx, this.goal(now), now));
     if (inView(BOARDS.hall.x - bw / 2, BOARDS.hall.y - bh, bw, bh)) take(BOARDS.hall.y, (ctx) => drawHallBoard(ctx, (this.city?.lit ?? 0) > 0));
-    const reached = goalView(this.city)?.reached ?? 0;
+    const reached = this.goal(this.lastNow)?.reached ?? 0;
     if (reached < 1) return;
     for (const [x0, y0, x1, y1] of BUNTING) {
       if (inView(x0, y0 - 4, x1 - x0, 30)) take(y0 + 40, (ctx, now) => drawBunting(ctx, x0, y0, x1, y1, now));
@@ -737,15 +753,18 @@ export class CitySocial implements CityFx {
       ctx.fillStyle = `${tint}${(0.07 * night).toFixed(3)})`;
       ctx.fillRect(x - 6, y - 6, BOARDS.w + 6, BOARDS.h + 6);
     }
-    const reached = goalView(this.city)?.reached ?? 0;
+    const reached = this.goal(now)?.reached ?? 0;
     if (reached >= 1) {
       for (const [x0, y0, x1, y1] of BUNTING) if (inView(x0, y0 - 4, x1 - x0, 34)) drawBuntingLights(ctx, x0, y0, x1, y1, now, night);
       if (ornamentFor(new Date()) === 'halloween') {
         for (const s of seasonalSpots('halloween')) {
           if (s.kind !== 'pumpkin' || !inView(s.x - 20, s.y - 30, 40, 40)) continue;
           const flicker = 0.75 + 0.25 * Math.sin(now / 90 + s.x);
-          ctx.fillStyle = `rgba(255,150,40,${(0.22 * night * flicker).toFixed(3)})`;
-          ctx.fillRect(s.x - 12, s.y - 20, 24, 20);
+          const g = ctx.createRadialGradient(s.x, s.y - 10, 0, s.x, s.y - 10, 18);
+          g.addColorStop(0, `rgba(255,150,40,${(0.32 * night * flicker).toFixed(3)})`);
+          g.addColorStop(1, 'rgba(255,150,40,0)');
+          ctx.fillStyle = g;
+          ctx.fillRect(s.x - 18, s.y - 28, 36, 36);
         }
       }
     }
@@ -952,7 +971,7 @@ export class CitySocial implements CityFx {
   private drawBoardTexts(ctx: CanvasRenderingContext2D, map: CityScreenMap): void {
     const rects = boardTextRects();
     const k = map.k;
-    const g = goalView(this.city);
+    const g = this.goal(this.lastNow);
     const hall = cityHallView(this.city);
     const line = (text: string, x: number, y: number, maxW: number, size: number, color: string, weight = 700, align: CanvasTextAlign = 'left') => {
       ctx.font = `${weight} ${size.toFixed(1)}px ${UI_FONT}`;
