@@ -16,7 +16,7 @@ import type { Camera } from '../camera';
 import { ambientAt, ambientDistance, approachAmbient, daylightModeOf, effectiveHour, isNeutral, parseHourParam, rgbCss, type Ambient } from '../render/daylight';
 import { glowSprite, propSprite, shadowSprite } from '../render/props';
 import { flagEmoji } from './cards';
-import { FACADE, facadeModel, facadeSprites, signRect, windowRect, type FacadeModel, type FacadeSprites } from './facade';
+import { FACADE, FACADE_STYLES, facadeModel, facadeReady, facadeSprites, signRect, windowRect, type FacadeModel, type FacadeSprites } from './facade';
 import { cellCanvas, fountainCanvas, gardenCanvas, planterCanvas, plazaCanvas } from './ground';
 import { blockDecor, blockRange, cellPx, gardenKind, isNorthRow, lotDecor, lotKey, lotSeed, lotsOfBlock, type Decor } from './layout';
 import { PROTO_TO_DIR, sampleAt, type LocalPlayer } from './players';
@@ -32,6 +32,8 @@ const SIGN_ZOOM = 1.05;
 /** Nomes sobre as cabeças a partir deste zoom. */
 const NAME_ZOOM = 0.85;
 const FADE_MS = 1_200;
+/** Fachadas novas geradas por quadro (as outras esperam o próximo, desenhadas como um bloco liso). */
+const SPRITES_PER_FRAME = 8;
 /** Quanto (px) o personagem sentado sobe para ficar no assento do banco. */
 const SEAT_LIFT = 6;
 /** Pixels de tela por pixel do mapa de luz da noite (meia resolução: as bordas suaves viram brilho). */
@@ -70,7 +72,8 @@ interface Ent {
 export interface BuildingVis {
   b: WorldBuildingPublic;
   m: FacadeModel;
-  s: FacadeSprites;
+  /** null = o sprite ainda não foi gerado (sai num dos próximos quadros; até lá, um bloco na cor da fachada). */
+  s: FacadeSprites | null;
   /** Canto superior esquerdo do sprite (px de mundo). */
   x: number;
   y: number;
@@ -331,6 +334,7 @@ export class CityRenderer {
     };
     this.nb = 0;
     this.lamps.length = 0;
+    let made = 0;
     for (let by = range.by0; by <= range.by1; by++) {
       for (let bx = range.bx0; bx <= range.bx1; bx++) {
         const info = this.blockInfo(bx, by);
@@ -359,10 +363,16 @@ export class CityRenderer {
           if (b) {
             const m = this.facadeOf(b);
             const north = m.side === 'back';
-            const s = facadeSprites(m);
             const x = lx + TILE;
-            const y = north ? ly : ly + 12 * TILE - s.h;
-            if (!visible(x, y, s.w, s.h)) continue;
+            const y = north ? ly : ly + 12 * TILE - m.height;
+            if (!visible(x, y, FACADE.w + FACADE.shadow, m.height)) continue;
+            // gerar um sprite custa ~1 ms: no máximo alguns por quadro (afastar o zoom de uma vez não engasga)
+            let s: FacadeSprites | null = null;
+            if (facadeReady(m)) s = facadeSprites(m);
+            else if (made < SPRITES_PER_FRAME) {
+              made++;
+              s = facadeSprites(m);
+            }
             let v = this.bPool[this.nb];
             if (!v) this.bPool[this.nb] = v = { b, m, s, x, y, depth: 0 };
             v.b = b;
@@ -370,7 +380,7 @@ export class CityRenderer {
             v.s = s;
             v.x = x;
             v.y = y;
-            v.depth = y + s.h;
+            v.depth = y + m.height;
             this.buildingsDrawn[this.nb] = v;
             this.nb++;
             push(K.Building, v.depth, v);
@@ -424,7 +434,7 @@ export class CityRenderer {
           lctx.globalAlpha = Math.min(1, n * 1.3);
           for (let i = 0; i < this.nb; i++) {
             const v = this.buildingsDrawn[i]!;
-            lctx.drawImage(v.s.glow, v.x, v.y);
+            if (v.s) lctx.drawImage(v.s.glow, v.x, v.y);
           }
           const pool = haloSprite();
           lctx.globalAlpha = Math.min(1, n * 1.1);
@@ -586,13 +596,20 @@ export class CityRenderer {
 
   private drawBuilding(v: BuildingVis, now: number, hovered: boolean): void {
     const { ctx } = this;
-    ctx.drawImage(v.s.canvas, v.x, v.y);
+    if (v.s) ctx.drawImage(v.s.canvas, v.x, v.y);
+    else {
+      const st = FACADE_STYLES[v.m.style]!;
+      ctx.fillStyle = st.roof[0];
+      ctx.fillRect(v.x, v.y, FACADE.w, FACADE.roof);
+      ctx.fillStyle = st.wall[1];
+      ctx.fillRect(v.x, v.y + FACADE.roof, FACADE.w, v.m.height - FACADE.roof);
+    }
     if (hovered) {
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = 0.08 + Math.sin(now / 260) * 0.03;
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(v.x, v.y, FACADE.w, v.s.h);
+      ctx.fillRect(v.x, v.y, FACADE.w, v.m.height);
       ctx.restore();
     }
   }

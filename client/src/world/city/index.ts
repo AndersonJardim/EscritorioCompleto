@@ -64,7 +64,7 @@ export interface CityScene {
   escape(): boolean;
   destroy(): void;
   /** Medição (depuração e o script de desempenho). */
-  perf(): { frames: number; drawAvgMs: number; drawP95Ms: number; fps: number; buildings: number; zoom: number };
+  perf(): { frames: number; drawAvgMs: number; drawP95Ms: number; drawMaxMs: number; fps: number; buildings: number; zoom: number };
   /** Zera a medição (para medir só o regime, sem o quadro que gera os sprites). */
   perfReset(): void;
   readonly camera: Camera;
@@ -285,7 +285,7 @@ export function createCityScene(o: CitySceneOptions): CityScene {
     let best: Hit = null;
     let bestDepth = -Infinity;
     for (const v of renderer.buildingsDrawn) {
-      if (w.x < v.x || w.x > v.x + 192 || w.y < v.y || w.y > v.y + v.s.h) continue;
+      if (w.x < v.x || w.x > v.x + 192 || w.y < v.y || w.y > v.y + v.m.height) continue;
       if (v.depth > bestDepth) {
         bestDepth = v.depth;
         best = { type: 'building', id: v.b.id };
@@ -488,7 +488,7 @@ export function createCityScene(o: CitySceneOptions): CityScene {
       const avg = frameMs.reduce((s, v) => s + v, 0) / Math.max(1, frameMs.length);
       const p95 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))] ?? 0;
       const gapAvg = rafGaps.reduce((s, v) => s + v, 0) / Math.max(1, rafGaps.length);
-      return { frames: frameMs.length, drawAvgMs: avg, drawP95Ms: p95, fps: gapAvg ? 1000 / gapAvg : 0, buildings: renderer.buildingsDrawn.length, zoom: camera.zoom };
+      return { frames: frameMs.length, drawAvgMs: avg, drawP95Ms: p95, drawMaxMs: sorted[sorted.length - 1] ?? 0, fps: gapAvg ? 1000 / gapAvg : 0, buildings: renderer.buildingsDrawn.length, zoom: camera.zoom };
     },
     camera,
     get state() {

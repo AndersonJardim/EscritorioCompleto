@@ -191,6 +191,11 @@ export function facadeSprites(m: FacadeModel): FacadeSprites {
   return s;
 }
 
+/** O sprite desta fachada já está pronto (desenhar não custa nada)? */
+export function facadeReady(m: FacadeModel): boolean {
+  return cache.has(facadeKey(m));
+}
+
 export function facadeCacheSize(): number {
   return cache.size;
 }
