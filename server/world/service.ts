@@ -167,6 +167,9 @@ export class WorldService {
   meta(): WorldMeta {
     const m: WorldMeta = { enabled: this.o.config.enabled && this.configured, configured: this.configured, state: this.state() };
     if (this.uplink && this.hasBuilding()) m.building = this.uplink.meta();
+    // A cena Mundo (botão Mundo da barra): com a conta aprovada e o personagem criado; `available` pede ainda a trava do
+    // terminal (as rotas da cena exigem). Sem conta liberada ou sem personagem, nem aparece.
+    if (this.configured && this.hasBuilding()) m.scene = { available: this.o.terminal };
     return m;
   }
 

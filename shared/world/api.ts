@@ -176,8 +176,8 @@ export interface WorldMeta {
   /** O prédio no mundo (só com a conta aprovada e o personagem criado). */
   building?: WorldBuildingMeta;
   /**
-   * A cena Mundo (Fase 3): `available` com o World configurado, a trava do terminal, a conta aprovada e o personagem
-   * criado (a barra mostra o botão Mundo). Ausente sem HABBLAUD_WORLD_URL.
+   * A cena Mundo (Fase 3), só com o World configurado, a conta aprovada e o personagem criado; `available` pede ainda a
+   * trava do terminal (as rotas da cena exigem). A barra mostra o botão Mundo com `available`.
    */
   scene?: WorldSceneMeta;
 }

@@ -77,6 +77,17 @@ describe('WorldService: lista de espera', () => {
     expect(meFn).toHaveBeenCalledTimes(2);
   });
 
+  it('meta.world.scene: só com a conta aprovada e o personagem; available pede a trava do terminal', () => {
+    const player = { name: 'Ana Pixel', look: 'f' as const, parts: {}, traits: ['games' as const, 'cafeina' as const], intro: 'coffee' as const, visibility: { mode: 'live' as const, closed: false, hideCountry: false, tokensVisible: true, leaderboard: false, compactions: false }, updatedAt: '' };
+    const a = start({ access: 'approved' });
+    expect(a.service.meta()).not.toHaveProperty('scene');
+    store.update({ player });
+    expect(a.service.meta().scene).toEqual({ available: true });
+    const b = start({ access: 'approved', terminal: false });
+    store.update({ player });
+    expect(b.service.meta().scene).toEqual({ available: false });
+  });
+
   it('servidor fora do ar: continua tentando no mesmo ritmo, com lastError network', async () => {
     const { service, meFn } = start({ meFn: async () => ({ ok: false, status: 502, code: 'world_unreachable' }) });
     await vi.advanceTimersByTimeAsync(2 * WAITING_POLL_MS);

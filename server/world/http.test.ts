@@ -372,7 +372,8 @@ describe('de ponta a ponta com o servidor do mundo de mentira', () => {
     // Liberado pelo lote: a próxima leitura (refresh) muda o estado e o snapshot.
     w.accounts.get(EMAIL)!.access = 'approved';
     expect((await call(s.base, 'GET', '/api/world/status?refresh=1')).body.state).toBe('approved');
-    expect(snap()).toEqual({ enabled: true, configured: true, state: 'approved' });
+    // Com o personagem criado, a cena Mundo fica disponível (sem uplink neste teste, sem `building`).
+    expect(snap()).toEqual({ enabled: true, configured: true, state: 'approved', scene: { available: true } });
 
     // Sair: revoga no servidor e apaga o world.json.
     const out = await call(s.base, 'POST', '/api/world/logout', {});
