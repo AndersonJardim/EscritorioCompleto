@@ -799,6 +799,14 @@ hors du monde, votre immeuble reste éteint, mais vous pouvez vous promener dans
 (`?mock=1&world=approved&scene=city`, uniquement des immeubles et des personnes fictifs) : [la ville](docs/screenshots/world-cidade.png)
 et [la carte d'un immeuble](docs/screenshots/world-cartao.png).
 
+Dans la ville, sans aucun texte libre : **L** aime l'immeuble près de la porte, **G** ouvre la roue des salutations
+(phrases toutes faites, traduites pour qui les lit) et **K** frappe à la porte de ceux qui l'acceptent ; la carte de
+chaque personne propose Saluer, Bloquer et Signaler, et la minicarte mène à un immeuble par son code (« Aller à
+HB-XXXX ») ou à n'importe quel immeuble allumé. Sur la place, le thermomètre de l'objectif hebdomadaire de la ville
+et, quand il est atteint, un feu d'artifice. Au bureau, la puce « ❤️ N aujourd'hui » et la carte « Pendant votre
+absence » avec les visites, les j'aime et les tampons laissés à l'accueil. En mode démonstration :
+[la roue des salutations](docs/screenshots/world-social.png) et [la place avec le feu d'artifice](docs/screenshots/world-praca.png).
+
 Le compte reste uniquement sur cet ordinateur, dans `~/.habblaud/world.json` (dans Docker, dans le volume `/data`), et la
 section ne fonctionne que depuis l'ordinateur lui-même. Ce qui sort de l'ordinateur et ce qui n'en sort jamais (en
 portugais) : [docs/world/privacidade.md](docs/world/privacidade.md). L'aspect de la section, en mode démonstration

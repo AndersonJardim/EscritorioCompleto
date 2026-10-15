@@ -761,6 +761,13 @@ building's card shows floors, agents and status, and the minimap sits in the cor
 building stays dark, but you can still walk around the city. In demo mode (`?mock=1&world=approved&scene=city`, only
 fictional buildings and people): [the city](docs/screenshots/world-cidade.png) and [a building's card](docs/screenshots/world-cartao.png).
 
+In the city, with no free text anywhere: **L** likes the building by the door, **G** opens the greeting wheel (ready-made
+phrases, translated for whoever reads them) and **K** knocks on the door of owners who accept it; each person's card has
+Greet, Block and Report, and the minimap takes you to a building by its code ("Go to HB-XXXX") or to any lit building.
+In the square, the thermometer of the city's weekly goal and, when it's reached, fireworks. In the office, the "❤️ N
+today" chip and the "While you were away" card with the visits, likes and stamps left at the front desk. In demo mode:
+[the greeting wheel](docs/screenshots/world-social.png) and [the square with the fireworks](docs/screenshots/world-praca.png).
+
 The account stays only on this computer, in `~/.habblaud/world.json` (in Docker, in the `/data` volume), and the section
 only works from this computer. What leaves your computer and what never does (in Portuguese):
 [docs/world/privacidade.md](docs/world/privacidade.md). How the section looks, in demo mode (`?mock=1&world=logged_out`,

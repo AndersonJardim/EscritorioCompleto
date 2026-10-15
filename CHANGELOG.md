@@ -112,6 +112,28 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
   (`POST /v1/me/building/join`) antes de reconectar; o prédio volta novo, em outro lote. Sair do mundo em outro
   computador também vale aqui: o pacote recusado (`left`) ou a conta marcada como fora do mundo deixam este Habblaud
   fora do mundo, sem enviar nada, até **Voltar ao mundo**.
+- **O social leve (Fase 5), sem nenhum texto livre:** na cidade, **L** (ou o botão ❤️ que aparece perto da porta, até
+  4 passos) curte um prédio, e o coração voa até a placa, cujo contador pula; **G** abre a roda com os 10
+  cumprimentos (teclas 1–9 e 0, setas ou toque), para quem acabou de te cumprimentar, quem está no cartão ou quem está
+  mais perto, com balões de 5 s sobre as cabeças (um não cobre o outro) e "G para responder" quando alguém te
+  cumprimenta; **K** bate na porta de quem aceita (até 2 passos). O cartão do jogador ganha **Cumprimentar**,
+  **Bloquear** (em dois cliques: vocês deixam de se ver) e **Denunciar** (motivos fixos, "Denúncia enviada"); o do
+  prédio, **Curtir**, **Bater**, o código do prédio e o selo "não verificado". No minimapa, **Ir para HB-XXXX** e
+  **Visitar um prédio aleatório**, com um fade enquanto o personagem vai até a calçada da porta. Na praça, o
+  termômetro da meta coletiva da semana ("10 mil horas de agentes trabalhando") e a placa da prefeitura (os prédios
+  acesos e "a cidade consumiu ≈ X esta semana", só com 10 prédios ou mais); batida a meta, 20 s de fogos (às vezes em
+  forma de coração) e, para todos, bandeirinhas com lampadazinhas e o enfeite da estação. Nas fachadas, o medidor de
+  tokens do dia ao lado da porta, o letreiro com 5 intensidades pela faixa da semana (de apagado a neon com faíscas)
+  e confete quando um prédio termina o turno. No celular, os botões ficam no canto, só com os ícones.
+  **No escritório:** o chip da barra ganha "❤️ N hoje"; ao conectar, o cartão **Enquanto você estava fora** (visitas,
+  likes e os carimbos deixados na portaria, sem quem) aparece no canto e também em **Seu prédio**, com o código do
+  prédio para mandar a um amigo; **Avisar quando baterem na porta** (Visibilidade, desligado por padrão) mostra
+  "Alguém bateu na porta do seu prédio"; **Bloqueados** lista quem você bloqueou, com **Desbloquear**. Dentro do
+  prédio de alguém, o botão **Like** e **Deixar um carimbo** (um por prédio por dia) ficam prontos para a cena de
+  visita. **Pelo servidor local:** `POST /api/world/summary/seen` e `/api/world/unblock`, e os comandos `stamp`,
+  `teleport`, `knock` e `summary.seen` na cena, conferidos campo a campo. No modo demonstração, a cidade de mentira
+  tem tudo isso (bots que se cumprimentam e respondem, a meta a 80 % e, com `&fireworks=1`, um botão de teste dos
+  fogos); `npm run shots:world` também fotografa `docs/screenshots/world-social.png` e `world-praca.png`.
 
 ## [0.11.0] - 2026-10-13
 

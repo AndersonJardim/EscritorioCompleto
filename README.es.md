@@ -796,6 +796,14 @@ del mundo, tu edificio queda apagado, pero puedes pasear por la ciudad. En el mo
 (`?mock=1&world=approved&scene=city`, solo edificios y personas ficticios): [la ciudad](docs/screenshots/world-cidade.png)
 y [la tarjeta de un edificio](docs/screenshots/world-cartao.png).
 
+En la ciudad, sin ningún texto libre: **L** da me gusta al edificio junto a la puerta, **G** abre la rueda de saludos
+(frases listas, traducidas para quien las lee) y **K** toca a la puerta de quien lo acepta; la tarjeta de cada persona
+tiene Saludar, Bloquear y Denunciar, y el minimapa lleva a un edificio por su código ("Ir a HB-XXXX") o a cualquier
+edificio encendido. En la plaza, el termómetro de la meta semanal de la ciudad y, cuando se alcanza, fuegos
+artificiales. En la oficina, el chip "❤️ N hoy" y la tarjeta "Mientras no estabas" con las visitas, los me gusta y los
+sellos dejados en la recepción. En el modo demostración: [la rueda de saludos](docs/screenshots/world-social.png) y
+[la plaza con los fuegos](docs/screenshots/world-praca.png).
+
 La cuenta queda solo en esta computadora, en `~/.habblaud/world.json` (en Docker, en el volumen `/data`), y la sección
 solo funciona desde la propia computadora. Lo que sale y lo que nunca sale de la computadora (en portugués):
 [docs/world/privacidade.md](docs/world/privacidade.md). Cómo se ve la sección, en el modo demostración

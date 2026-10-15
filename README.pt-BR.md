@@ -759,6 +759,13 @@ cada prédio mostra andares, agentes e estado, e o minimapa fica no canto; pausa
 apagado, mas dá para andar pela cidade. No modo demonstração (`?mock=1&world=approved&scene=city`, só prédios e
 pessoas fictícios): [a cidade](docs/screenshots/world-cidade.png) e [o cartão de um prédio](docs/screenshots/world-cartao.png).
 
+Na cidade, sem nenhum texto livre: **L** curte o prédio perto da porta, **G** abre a roda de cumprimentos (frases
+prontas, traduzidas para quem lê) e **K** bate na porta de quem aceita; o cartão de cada pessoa tem Cumprimentar,
+Bloquear e Denunciar, e o minimapa leva a um prédio pelo código ("Ir para HB-XXXX") ou a um prédio aceso qualquer.
+Na praça, o termômetro da meta da semana da cidade e, quando ela bate, fogos. No escritório, o chip "❤️ N hoje" e o
+cartão "Enquanto você estava fora" com as visitas, os likes e os carimbos deixados na portaria. No modo demonstração:
+[a roda de cumprimentos](docs/screenshots/world-social.png) e [a praça com os fogos](docs/screenshots/world-praca.png).
+
 A conta fica só neste computador, em `~/.habblaud/world.json` (no Docker, no volume `/data`), e a seção só funciona pelo
 próprio computador. O que sai e o que nunca sai do computador: [docs/world/privacidade.md](docs/world/privacidade.md).
 Como a seção fica, no modo demonstração (`?mock=1&world=logged_out`, `waiting` ou `approved`):
