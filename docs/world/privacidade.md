@@ -19,10 +19,13 @@ por HTTPS, para o servidor do mundo:
 | E-mail e senha | No cadastro, ao entrar e ao trocar a senha | Para a conta existir. A senha não fica gravada no computador; no servidor, só um hash (Argon2id) |
 | Código de 6 dígitos | Ao confirmar o e-mail ou trocar a senha | Provar que o e-mail é seu |
 | Idioma da interface (`pt-BR`, `en`, `es` ou `fr`) | No cadastro | Para os e-mails virem no seu idioma |
+| Aceite dos Termos de Uso (só a versão, `v1`) e o código de convite, se você tiver um | No cadastro | Registrar o aceite; o convite põe a conta no próximo lote da lista de espera |
 | Solução do desafio anti-robô (ALTCHA) | No cadastro, nos pedidos de e-mail e, se o servidor pedir, ao entrar | É só um número calculado pelo seu Habblaud, no lugar de um captcha |
 | Personagem: nome de jogador, aparência (cores e estilos), 2 ou 3 traços e a frase de apresentação | Ao salvar o personagem | É o que os outros jogadores vão ver |
 | Preferências de visibilidade (ao vivo ou discreto, fechado a visitas, esconder o país, mostrar tokens...) | Ao salvar | Para o mundo respeitar a sua escolha |
 | Token do dispositivo | Em cada chamada da conta | Provar que é você, sem mandar a senha de novo |
+| Qual dispositivo desconectar | Ao desconectar um | Só o id que o próprio servidor deu ao dispositivo |
+| Versão do Habblaud | Em toda chamada, no cabeçalho `User-Agent` (`Habblaud/0.11.0`) | Compatibilidade e diagnóstico |
 
 O servidor do mundo vê o IP da conexão (como qualquer site) e guarda só o **país**, que dá para esconder.
 
@@ -39,7 +42,8 @@ Quando o seu prédio entrar no mundo (próximas fases), sai **só** isto:
 | Tarefas concluídas | Por agente, só a faixa do dia (0, 1–2, 3–5, 6+); nunca o título | O "+1" sobre a cabeça do personagem |
 | Compactação de contexto (se você ligar) | Só o fato de ter acontecido | A lixeira da sala enche |
 | Versão do Habblaud | `1.0.0` | Compatibilidade |
-| Primeira mensagem da conexão | O token do dispositivo, a versão e o commit do build, com a marca de "cópia modificada" | Autenticar e saber se é uma versão oficial; nunca o caminho da pasta nem nada da máquina |
+| Idioma da interface | `pt-BR`, `en`, `es` ou `fr`, na primeira mensagem da conexão | Para os avisos virem no seu idioma; não vai no pacote do prédio |
+| Primeira mensagem da conexão | O token do dispositivo, a versão, o idioma e o commit do build, com a marca de "cópia modificada" | Autenticar e saber se é uma versão oficial; nunca o caminho da pasta nem nada da máquina |
 | Comandos do seu personagem no mundo | Andar, entrar e sair de prédios, like, cumprimento, perfil, bloqueio, denúncia | São seus no mundo, nunca do escritório |
 
 Mais nada. O pacote de um escritório com 3 projetos e 5 agentes tem uns 2 KB. O servidor confere cada campo (nomes
