@@ -5,6 +5,7 @@ import { isWalkable, lotDoor, lotSpiral } from '../../../../shared/world/city';
 import { FAKE_ME, FakeWorldStream } from './fake-stream';
 import { CityState } from './state';
 import { readCitySnapshot } from './stream';
+import { MoveSender } from './players';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -68,6 +69,12 @@ describe('FakeWorldStream', () => {
       const ticks = msgs.filter((m) => m.t === 'players');
       expect(ticks.length).toBeGreaterThanOrEqual(45);
       for (const m of ticks) for (const p of m.players!) expect(isWalkable(p.pos.x, p.pos.y, () => true)).toBe(true);
+      // rente à borda oeste do lote (x = 51 − 0,004), truncado para o fio: continua na calçada, sem `pos`
+      const sent: { t: 'move'; x: number; y: number; dir: 's'; moving: boolean }[] = [];
+      new MoveSender((m) => sent.push(m as never)).tick(0, { x: 50.996, y: 5, dir: 'down', moving: false });
+      f.send(sent);
+      vi.advanceTimersByTime(100);
+      expect(msgs.some((m) => m.t === 'pos')).toBe(false);
       expect(isWalkable(55, 5, () => true)).toBe(false);
       f.send([{ t: 'move', x: 55, y: 5, dir: 's', moving: false }]);
       vi.advanceTimersByTime(100);

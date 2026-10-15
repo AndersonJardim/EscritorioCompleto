@@ -238,9 +238,13 @@ export function pathPoints(cells: readonly number[], ox: number, oy: number, goa
   return out;
 }
 
-/** Arredonda a posição para o fio (centésimos de tile). */
+/**
+ * Posição para o fio, em centésimos de tile, sempre truncada para baixo: arredondar poderia levar quem parou rente à
+ * borda norte ou oeste de um lote (y = 11,996) para dentro dele (12,00), e o servidor devolveria `pos`. Truncar
+ * nunca troca de tile.
+ */
 export function wirePos(v: number): number {
-  return Math.round(v * 100) / 100;
+  return Math.floor(v * 100) / 100;
 }
 
 /**

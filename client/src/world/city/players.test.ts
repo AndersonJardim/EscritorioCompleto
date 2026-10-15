@@ -2,7 +2,7 @@
 // nunca acima da de corrida (nem na diagonal), caminho do clique e o envio de `move` até 10 por segundo.
 import { describe, expect, it } from 'vitest';
 import { isWalkable, lotOrigin, spawnPoint } from '../../../../shared/world/city';
-import { DIR_TO_PROTO, LocalPlayer, MOVE_INTERVAL_MS, MoveSender, PROTO_TO_DIR, RUN_TPS, WALK_TPS, dirOf, pathPoints, pushSample, sampleAt, stepMove, type Sample } from './players';
+import { DIR_TO_PROTO, LocalPlayer, MOVE_INTERVAL_MS, MoveSender, PROTO_TO_DIR, RUN_TPS, WALK_TPS, dirOf, pathPoints, pushSample, sampleAt, stepMove, wirePos, type Sample } from './players';
 
 const s = (t: number, x: number, y: number, moving = true): Sample => ({ t, x, y, dir: 'e', moving });
 
@@ -91,6 +91,19 @@ describe('movimento local', () => {
 });
 
 describe('envio de move', () => {
+  it('quem parou rente à borda norte ou oeste de um lote não manda uma posição dentro dele', () => {
+    const o = lotOrigin({ x: 3, y: 0 });
+    for (const p of [
+      { x: o.x - 0.004, y: o.y + 3 },
+      { x: o.x + 3, y: o.y - 0.004 },
+    ]) {
+      expect(isWalkable(p.x, p.y, () => true)).toBe(true);
+      const sent: { x: number; y: number }[] = [];
+      new MoveSender((msg) => sent.push(msg)).tick(0, { ...p, dir: 'down', moving: false });
+      expect(isWalkable(sent[0]!.x, sent[0]!.y, () => true)).toBe(true);
+    }
+  });
+
   it('no máximo um a cada 100 ms, só quando muda, e o "parei" sempre sai', () => {
     const sent: { x: number; moving: boolean; dir: string }[] = [];
     const m = new MoveSender((msg) => sent.push(msg));
@@ -108,10 +121,11 @@ describe('envio de move', () => {
     expect(many.length).toBeLessThanOrEqual(10);
   });
 
-  it('posição em centésimos de tile e direções do protocolo', () => {
+  it('posição em centésimos de tile (truncada: nunca troca de tile) e direções do protocolo', () => {
     const sent: { x: number; y: number }[] = [];
     new MoveSender((msg) => sent.push(msg)).tick(0, { x: 1.23456, y: -7.891, dir: 'up', moving: false });
-    expect(sent[0]).toMatchObject({ x: 1.23, y: -7.89 });
+    expect(sent[0]).toMatchObject({ x: 1.23, y: -7.9 });
+    for (const v of [50.996, -0.004, 11.9999, 12, -3.001, 0.29, 57.3]) expect(Math.floor(wirePos(v))).toBe(Math.floor(v));
     for (const d of ['up', 'down', 'left', 'right'] as const) expect(PROTO_TO_DIR[DIR_TO_PROTO[d]]).toBe(d);
     expect(dirOf(0, 0, 'left')).toBe('left');
     expect(dirOf(-1, 0.5, 'down')).toBe('left');
