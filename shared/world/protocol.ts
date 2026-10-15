@@ -115,9 +115,31 @@ export const GOODBYE_REASONS = [
 ] as const;
 export type GoodbyeReason = (typeof GOODBYE_REASONS)[number];
 
-/** Códigos de recusa do `uplink.ack {error}`: esquema, limites, nome fora do pool, peças, ids, frequência e erro do servidor. */
-export const UPLINK_ACK_ERRORS = ['schema', 'limits', 'name_pool', 'parts', 'ids', 'rate', 'internal'] as const;
+/**
+ * Códigos de recusa do `uplink.ack {error}`: esquema, limites, nome fora do pool, peças, ids, frequência e erro do
+ * servidor. `left` = a conta saiu do mundo (`DELETE /v1/me/building`, deste ou de outro computador): o pacote não cria
+ * prédio até `POST /v1/me/building/join`, e o Habblaud para de enviar até lá.
+ */
+export const UPLINK_ACK_ERRORS = ['schema', 'limits', 'name_pool', 'parts', 'ids', 'rate', 'internal', 'left'] as const;
 export type UplinkAckError = (typeof UPLINK_ACK_ERRORS)[number];
+
+/**
+ * Avisos do servidor do mundo (`notice {level, text}`): o `text` é sempre um destes ids, nunca uma frase; cada cliente
+ * traduz. Só ids novos no fim; um id que o cliente não conhece vira uma mensagem genérica.
+ */
+export const NOTICE_IDS = [
+  'ignored', //        tipo de mensagem que o servidor ainda não trata (ou desconhecido): descartada
+  'invalid', //        mensagem de um tipo conhecido, fora do formato: descartada
+  'rate_limited', //   passou do limite de um tipo de mensagem: descartada (3 vezes num minuto, a conexão fecha)
+  'view_required', //  `move`, `profile` ou `resync` sem a cena Mundo aberta (`view`)
+  'not_found', //      `profile` de quem não está na rua num chunk assinado (ou bloqueado); `resync` de chunk não assinado
+  'street_left', //    5 min sem comando: você saiu da rua (os outros não te veem); volta ao mandar `move`
+  'chunk_full', //     a área está cheia: só os jogadores mais próximos aparecem
+  'afk', //            muito tempo sem comando: o personagem parou
+  'server_restart', // o servidor do mundo vai reiniciar: a conexão cai e volta sozinha
+  'left', //           a conta saiu do mundo: o prédio só volta com "Voltar ao mundo"
+] as const;
+export type NoticeId = (typeof NOTICE_IDS)[number];
 
 /** Versão dos Termos de Uso aceita no cadastro. */
 export const TOS_VERSION = 'v1';
@@ -265,16 +287,24 @@ export interface MeResponse {
   devices: DeviceInfo[];
   /** O prédio da conta, se ela já tem um no mundo. */
   building?: MeBuilding;
+  /** A conta saiu do mundo ("Sair do mundo", deste ou de outro computador) e ainda não voltou (`/v1/me/building/join`). */
+  left?: boolean;
 }
 
 /**
  * O prédio de quem chama (Bearer):
  * - `POST /v1/me/building/pause` → `200 {state}`: apagado na hora para todos; o sinal de vida não acende, só o resume.
  * - `POST /v1/me/building/resume` → `200 {state}`: `online` se a instalação está mandando sinal, senão `away`.
- * - `DELETE /v1/me/building` → `204`: "Sair do mundo" (lote liberado, likes zerados; voltar = prédio novo).
+ * - `DELETE /v1/me/building` → `204`: "Sair do mundo" (lote liberado, likes zerados; voltar = prédio novo). Dali em
+ *   diante o pacote é recusado com `uplink.ack {error: 'left'}` e `GET /v1/me` traz `left: true`.
+ * - `POST /v1/me/building/join` → `200 {state: 'joined'}`: "Voltar ao mundo" depois de sair; o próximo pacote cria um
+ *   prédio novo, em outro lote. Sem ter saído, responde o mesmo (nada muda).
  * Sem prédio, pause e resume respondem `404 not_found`.
  */
 export interface BuildingStateResponse { state: BuildingState }
+
+/** `POST /v1/me/building/join`. */
+export interface BuildingJoinResponse { state: 'joined' }
 
 /**
  * Erros: `{error: {code, message}}`, com o `message` em inglês (cada cliente traduz pelo `code`). Os códigos abaixo
@@ -416,7 +446,10 @@ export interface HelloMessage {
   token: string;              // token do dispositivo: só aqui (por TLS), nunca na URL nem em log
 }
 export interface UplinkMessage { t: 'uplink'; uplink: WorldUplink }
+/** A cena Mundo abriu: o servidor assina os 3×3 chunks em volta da posição validada e manda `pos`, áreas e minimapa. */
 export interface ViewMessage { t: 'view' }
+/** A cena Mundo fechou: o jogador sai da rua e nenhuma área nem jogador desce mais (até o próximo `view`). */
+export interface ViewOffMessage { t: 'view.off' }
 export interface ResyncMessage { t: 'resync'; chunk?: string }
 export interface MoveMessage { t: 'move'; x: number; y: number; dir: Direction; moving: boolean }
 export interface EnterMessage { t: 'enter'; buildingId: string }
@@ -433,6 +466,7 @@ export type ClientMessage =
   | HelloMessage
   | UplinkMessage
   | ViewMessage
+  | ViewOffMessage
   | ResyncMessage
   | MoveMessage
   | EnterMessage
@@ -466,11 +500,18 @@ export interface GoodbyeMessage { t: 'goodbye'; reason: GoodbyeReason }
 /** Resposta a cada `uplink`: aceito, com o horário e os bytes que o servidor contou, ou recusado (UPLINK_ACK_ERRORS). */
 export type UplinkAckMessage = { t: 'uplink.ack'; at: number; bytes: number } | { t: 'uplink.ack'; error: UplinkAckError | (string & {}) };
 export interface AreaMessage { t: 'area'; chunk: string; rev: number; buildings: WorldBuildingPublic[] }
+/**
+ * Mudança nos prédios de um chunk; `rev` sobe de 1 em 1 (quem vê um salto pede `resync {chunk}`). Item de `changes`
+ * SEM `lot`: só os campos (do nível de cima) que mudaram, mesclados campo a campo; item COM `lot`: o prédio inteiro,
+ * que substitui o que havia (prédio novo no chunk, ou um campo opcional que sumiu, como `agents` no modo discreto).
+ * `removed`: prédios que saíram do chunk (dormiu, saiu do mundo, foi para outro chunk).
+ */
 export interface AreaPatchMessage {
   t: 'area.patch';
   chunk: string;
   rev: number;
   changes: Array<Partial<WorldBuildingPublic> & { id: string }>;
+  removed?: string[];
 }
 export interface MinimapMessage { t: 'minimap'; blocks: Array<{ x: number; y: number; lit: number }> }
 export interface PlayersMessage {
@@ -488,10 +529,13 @@ export interface BuildingPatchMessage {
   visitors?: number;
 }
 export interface AfkMessage { t: 'afk' }
+/** Correção do servidor: a posição válida do jogador (no `view` e quando um `move` é recusado); o cliente obedece. */
+export interface PosMessage { t: 'pos'; x: number; y: number }
 export interface LikeUpdateMessage { t: 'like.update'; buildingId: string; likes: number; likedByMe: boolean }
 export interface GreetingMessage { t: 'greeting'; from: string; to: string; greetingId: GreetingId; until: number }
 export interface ProfileMessage { t: 'profile'; player: WorldPlayerPublic }
-export interface NoticeMessage { t: 'notice'; level: 'info' | 'warn' | 'error'; text: string }
+/** `text` é um id de NOTICE_IDS (um id desconhecido vira uma mensagem genérica). */
+export interface NoticeMessage { t: 'notice'; level: 'info' | 'warn' | 'error'; text: NoticeId | (string & {}) }
 
 export type ServerMessage =
   | WelcomeMessage
@@ -506,6 +550,7 @@ export type ServerMessage =
   | BuildingMessage
   | BuildingPatchMessage
   | AfkMessage
+  | PosMessage
   | LikeUpdateMessage
   | GreetingMessage
   | ProfileMessage

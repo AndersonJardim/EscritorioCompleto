@@ -15,11 +15,13 @@ import {
   HAIR_STYLES,
   INTRO_IDS,
   LOCALES,
+  NOTICE_IDS,
   PLAYER_NAME_LIMITS,
   REPORT_REASONS,
   TOP_STYLES,
   TRAIT_CLASHES,
   TRAIT_IDS,
+  UPLINK_ACK_ERRORS,
   UPLINK_LIMITS,
   WORLD_LOCALES,
   type AppearanceParts,
@@ -207,5 +209,14 @@ describe('listas do protocolo', () => {
     expect([...WORLD_LOCALES]).toEqual(UI_LOCALES.map((l) => l.id));
     expect(GOODBYE_REASONS).toEqual(expect.arrayContaining(['waiting', 'unauthorized', 'banned', 'suspended', 'update', 'no_player']));
     expect(PLAYER_NAME_LIMITS).toEqual({ min: 3, max: 20 });
+  });
+
+  it('Fase 3: os ids dos avisos (o `text` do notice) e o `left` do ack, só acrescentados', () => {
+    expect([...NOTICE_IDS]).toEqual([
+      'ignored', 'invalid', 'rate_limited', 'view_required', 'not_found', 'street_left', 'chunk_full', 'afk', 'server_restart', 'left',
+    ]);
+    for (const id of NOTICE_IDS) expect(id).toMatch(/^[a-z]+(_[a-z]+)*$/);
+    // Os códigos da Fase 2 continuam na mesma ordem; `left` entra no fim.
+    expect([...UPLINK_ACK_ERRORS]).toEqual(['schema', 'limits', 'name_pool', 'parts', 'ids', 'rate', 'internal', 'left']);
   });
 });
