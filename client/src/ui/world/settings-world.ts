@@ -506,7 +506,7 @@ export class WorldSettingsGroup {
       h(
         'ul',
         { class: 'ui-world__list' },
-        h('li', {}, h('strong', { text: tr('Sai:') }), ' ', tr('o tema do escritório, um andar por sala aberta (com um código aleatório que muda todo dia), o status, a ferramenta e a aparência de cada agente, os tokens do prédio arredondados em faixas (dá para desligar) e a versão do Habblaud.')),
+        h('li', {}, h('strong', { text: tr('Sai:') }), ' ', tr('o tema do escritório; um andar por sala aberta, com um código aleatório que muda todo dia; de cada agente, se é principal ou subagente, a ferramenta, o status, a aparência, um nome sorteado e a faixa de tarefas concluídas no dia; os tokens do prédio arredondados em faixas (dá para desligar); se você ligar, o fato de um agente ter compactado o contexto; a versão e o commit do Habblaud, com a marca de cópia modificada; e o idioma da interface, só para os e-mails.')),
         h('li', {}, h('strong', { text: tr('Nunca sai:') }), ' ', tr('caminhos e nomes de projetos, títulos de sessão, comandos, mensagens, código, custo, a sua conta do Claude, o seu e-mail e o nome do computador.')),
       ),
       para('ui-world__key', tr('Com os dados que saem não dá para saber quem você é nem em que trabalha.')),
