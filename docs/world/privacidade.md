@@ -9,10 +9,9 @@ e agentes você está rodando e o que cada personagem está fazendo. A regra que
 aparece e nada sai do computador. Esta página é a lista completa do que pode sair quando ele estiver ligado; qualquer
 mudança nela entra no código e nesta página no mesmo pull request.
 
-## O que sai hoje (conta e personagem)
+## O que sai: a conta e o personagem
 
-Nesta primeira fase, só a conta e o personagem existem. O prédio ainda não sobe. Ao usar o World, sai do computador,
-por HTTPS, para o servidor do mundo:
+Ao usar o World, sai do computador, por HTTPS, para o servidor do mundo:
 
 | Sai | Quando | Por quê |
 | --- | --- | --- |
@@ -22,9 +21,10 @@ por HTTPS, para o servidor do mundo:
 | Aceite dos Termos de Uso (só a versão, `v1`) e o código de convite, se você tiver um | No cadastro | Registrar o aceite; o convite põe a conta no próximo lote da lista de espera |
 | Solução do desafio anti-robô (ALTCHA) | No cadastro, nos pedidos de e-mail e, se o servidor pedir, ao entrar | É só um número calculado pelo seu Habblaud, no lugar de um captcha |
 | Personagem: nome de jogador, aparência (cores e estilos), 2 ou 3 traços e a frase de apresentação | Ao salvar o personagem | É o que os outros jogadores vão ver |
-| Preferências de visibilidade (ao vivo ou discreto, fechado a visitas, esconder o país, mostrar tokens...) | Ao salvar | Para o mundo respeitar a sua escolha |
+| Preferências de visibilidade (ao vivo ou discreto, fechado a visitas, esconder o país, mostrar tokens, placar, compactações) | Ao salvar | Para o mundo respeitar a sua escolha |
 | Token do dispositivo | Em cada chamada da conta | Provar que é você, sem mandar a senha de novo |
 | Qual dispositivo desconectar | Ao desconectar um | Só o id que o próprio servidor deu ao dispositivo |
+| Pausar e retomar o prédio | Ao clicar em Pausar ou Retomar (`POST /v1/me/building/pause` e `/resume`, só com o token) | Para o prédio apagar na hora para todos e voltar quando você quiser |
 | Versão do Habblaud | Em toda chamada, no cabeçalho `User-Agent` (`Habblaud/0.11.0`) | Compatibilidade e diagnóstico |
 
 Enquanto a conta está na lista de espera, o Habblaud aberto pergunta ao servidor do mundo, a cada 30 minutos, se o
@@ -32,26 +32,44 @@ acesso já foi liberado (`GET /v1/me`, só com o token do dispositivo, sem mais 
 
 O servidor do mundo vê o IP da conexão (como qualquer site) e guarda só o **país**, que dá para esconder.
 
-## A lista fechada (quando o prédio subir)
+## O que sai: o prédio (a lista fechada)
 
-Quando o seu prédio entrar no mundo (próximas fases), sai **só** isto:
+Com a conta liberada e o personagem criado, o seu Habblaud abre uma conexão (WebSocket, por TLS) com o servidor do
+mundo e o seu prédio entra na cidade. Pela conexão sai **só** isto:
 
 | Sai | Como | Por quê |
 | --- | --- | --- |
-| Tema em uso | `none`, `halloween` ou `christmas` (o "Automático" vira o tema do dia) | O prédio e o interior com o seu tema |
-| Andares | Um por sala com sessão aberta: só um id aleatório, que não vem do caminho da pasta e **troca a cada 24 h** (com sorteio de ±6 h). Sem horário nenhum | Altura do prédio e as salas do interior. Quem visita hoje e amanhã não sabe se é o mesmo projeto |
-| Agentes | Por agente: id aleatório, principal ou subagente (e o id do pai), ferramenta (`claude` ou `codex`), status (`working`, `waiting`, `idle`, `shell`), dica visual (`f`/`m`), um nome sorteado (nunca o nome do escritório, editado ou não) e as cores e estilos da aparência. **Sem** "desde quando" | O personagem fazendo a coisa certa na mesa certa |
-| Consumo de tokens | Total do prédio no dia e na semana, arredondado a 2 algarismos; os outros só veem a **faixa** (até 100 mil, 1 milhão, 10 milhões, 100 milhões, acima). Dá para desligar | O medidor da fachada |
-| Tarefas concluídas | Por agente, só a faixa do dia (0, 1–2, 3–5, 6+); nunca o título | O "+1" sobre a cabeça do personagem |
-| Compactação de contexto (se você ligar) | Só o fato de ter acontecido | A lixeira da sala enche |
-| Versão do Habblaud | `1.0.0` | Compatibilidade |
-| Idioma da interface | `pt-BR`, `en`, `es` ou `fr`, na primeira mensagem da conexão | Para os avisos virem no seu idioma; não vai no pacote do prédio |
-| Primeira mensagem da conexão | O token do dispositivo, a versão, o idioma e o commit do build, com a marca de "cópia modificada" | Autenticar e saber se é uma versão oficial; nunca o caminho da pasta nem nada da máquina |
-| Comandos do seu personagem no mundo | Andar, entrar e sair de prédios, like, cumprimento, perfil, bloqueio, denúncia | São seus no mundo, nunca do escritório |
+| Primeira mensagem da conexão (`hello`) | O `token` do dispositivo, a `version` do Habblaud, o `build` (`commit` do código em uso e `dirty`, a marca de "cópia modificada") e o `locale` da interface (`pt-BR`, `en`, `es` ou `fr`) | Autenticar, saber se é uma versão oficial e mandar os avisos no seu idioma. O token vai só aqui, nunca na URL; o idioma não vai no pacote do prédio. Nunca o caminho da pasta nem nada da máquina |
+| O pacote do prédio | Ao conectar e, depois, quando o escritório muda: no máximo um a cada 5 segundos, e nada se o pacote não mudou | É o prédio ao vivo |
+| Sinal de vida (`ping`) | A cada 30 segundos, sem conteúdo | Para o prédio ficar aceso enquanto o Habblaud está aberto |
+| Comandos do seu personagem no mundo (próximas fases) | Andar, entrar e sair de prédios, like, cumprimento, perfil, bloqueio, denúncia | São seus no mundo, nunca do escritório |
 
-Mais nada. O pacote de um escritório com 3 projetos e 5 agentes tem uns 2 KB. O servidor confere cada campo (nomes
-dentro da lista de nomes, cores dentro das paletas, ids no formato, no máximo 64 andares, 64 agentes por andar e 256
-no total) e recusa o pacote inteiro se aparecer qualquer campo fora da lista.
+O pacote do prédio tem estes campos e mais nenhum (o formato exato está em
+[`shared/world/schema.json`](../../shared/world/schema.json); um teste confere que cada campo dele está nesta página):
+
+| Campo | O que é | Por quê |
+| --- | --- | --- |
+| `v` | Versão do formato do pacote (`1`) | Compatibilidade |
+| `version` | Versão do Habblaud (`0.11.0`) | Compatibilidade do protocolo |
+| `theme` | `none`, `halloween` ou `christmas`, já resolvido: o "Automático" vira o tema do calendário (Halloween em outubro, Natal de 1º de novembro a 26 de dezembro), pela data do computador (no Docker, UTC) | O prédio e o interior com o seu tema |
+| `floors` | Um andar por sala com alguém presente, em ordem embaralhada | Altura do prédio e as salas do interior |
+| `id` (do andar) | Um id aleatório por sala (`f_` e 10 caracteres), que não vem do caminho da pasta, **troca a cada 24 h** (com sorteio de ±6 h) e troca também quando a sala some e volta ou quando o Habblaud reinicia. Sem horário nenhum | Quem visita hoje e amanhã não sabe se é o mesmo projeto |
+| `agents` (do andar) | Um por agente principal ou subagente trabalhando, esperando, à toa ou de olho num shell | O personagem fazendo a coisa certa na mesa certa |
+| `id` (do agente) | Id aleatório (`a_` e 8 caracteres), com as mesmas trocas do id do andar | Saber quem é quem no pacote |
+| `kind` e `parentId` | Principal (`main`) ou subagente (`sub`) e, no subagente, o id **do mundo** do agente que o chamou (ausente se esse agente já saiu) | O subagente perto de quem o chamou |
+| `provider` | `claude` ou `codex` | O visual da ferramenta |
+| `status` | `working`, `waiting`, `idle` ou `shell`. **Sem** "desde quando" | O que o personagem está fazendo |
+| `look` | A dica visual do personagem (`f` ou `m`) | O corpo e o nome combinarem |
+| `name` | Um nome sorteado da lista de nomes do Habblaud a partir do id aleatório do mundo (nunca o nome do escritório, editado ou não) | O personagem ter um nome |
+| `parts` | As cores e os estilos da aparência (`skin`, `hair`, `hairStyle`, `eyes`, `top`, `topAccent`, `topStyle`, `bottom`, `bottomStyle`, `shoes`, `accessory`, `accessoryColor`, `facialHair`), sorteados a partir do id aleatório do mundo, com as peças que você escolheu no editor por cima | O personagem com a cara certa |
+| `tasksDone` | Tarefas concluídas hoje por aquele agente, só a faixa: `0` (nenhuma), `1` (1 ou 2), `2` (3 a 5), `3` (6 ou mais). Nunca o título | O "+1" sobre a cabeça do personagem |
+| `compacted` | Só se você ligou "compactações": `true` quando o agente compactou o contexto desde o pacote anterior (o `/clear` não conta) | A lixeira da sala enche |
+| `tokens` | Só se "mostrar tokens" estiver ligado (vem ligado; dá para desligar): `day` (hoje) e `week` (hoje e os 6 dias anteriores), o total do prédio (entrada + saída de todos os agentes, do "Meu dia", sem o modo demonstração), arredondado a 2 algarismos (ex.: 1.200.000). Os outros só veem a **faixa** (até 100 mil, 1 milhão, 10 milhões, 100 milhões, acima) | O medidor da fachada |
+
+Mais nada. O pacote de um escritório com 3 projetos e 5 agentes tem uns 2 KB. Os limites são 64 andares, 64 agentes
+por andar, 256 no total e 64 KB (na prática, uns 170 agentes); acima disso, o Habblaud corta os últimos e avisa no log.
+O servidor confere cada campo (nomes dentro da lista de nomes, cores dentro das paletas, ids no formato) e recusa o
+pacote inteiro se aparecer qualquer campo fora da lista.
 
 ### Exemplo real de um pacote
 
@@ -80,8 +98,8 @@ no total) e recusa o pacote inteiro se aparecer qualquer campo fora da lista.
 }
 ```
 
-(`"...": "..."` abrevia peças iguais às da Marina. O formato exato está em
-[`shared/world/schema.json`](../../shared/world/schema.json), e um teste confere este exemplo contra ele.)
+(`"...": "..."` abrevia peças iguais às da Marina. Um teste confere este exemplo contra o
+[`schema.json`](../../shared/world/schema.json).)
 
 ## O que nunca sai
 
@@ -90,10 +108,11 @@ no total) e recusa o pacote inteiro se aparecer qualquer campo fora da lista.
 | Caminho e nome do projeto, nome que você deu à sala | `/Users/voce/projetos/cliente-x`, "Projeto secreto" |
 | Título da sessão, branch, modo de permissão, modelo | "Corrigir o login", `feat/pagamentos`, `opus` |
 | O que os agentes fazem | Atividades, tarefas, comandos, shells, pedidos de permissão, perguntas, mensagens, o terminal |
-| Custo e números de trabalho | Dinheiro gasto, linhas de código, chamadas de ferramenta (tokens saem só como o total do prédio, arredondado) |
+| Custo e números de trabalho | Dinheiro gasto, linhas de código, chamadas de ferramenta, tokens por agente (tokens saem só como o total do prédio, arredondado) |
 | A sua conta do Claude ou do Codex | E-mail, organização, plano, uso de 5 horas e semanal |
 | O nome que você deu a um personagem | Pode ser o seu nome real: no mundo, o personagem ganha outro nome sorteado |
 | A semente do personagem | A aparência no mundo é sorteada a partir de um id aleatório; só as peças escolhidas no editor sobem iguais |
+| Horários | Quando a sessão começou, quando o status mudou, quando a sala nasceu: o pacote não tem tempo nenhum |
 | Coisas da máquina | Nome do computador, usuário do sistema, fuso horário. O dispositivo aparece só como "Dispositivo 1/2/3" |
 | O seu histórico | Estatísticas do Meu dia, a linha do tempo do timelapse, o histórico de sessões |
 | Agentes do modo demonstração | Ficam de fora antes de montar o pacote |
@@ -126,11 +145,17 @@ exemplo). Quem não quiser nem isso usa o modo discreto ou pausa.
 ## Neste computador
 
 - A conta do World fica em `~/.habblaud/world.json` (no Docker, no volume `/data`), com permissão só para o seu
-  usuário. O token do dispositivo sai dali só para o servidor do mundo, por HTTPS, e nunca vai para o navegador, para
-  os logs ou para a URL.
+  usuário. O token do dispositivo sai dali só para o servidor do mundo, por HTTPS e na primeira mensagem da conexão
+  do prédio, e nunca vai para o navegador, para os logs ou para a URL. O mesmo arquivo guarda o tema escolhido para o
+  prédio (que fica mesmo depois de sair da conta) e se o prédio está pausado.
+- A última remessa do prédio (o pacote exato, a hora, o tamanho e a resposta do servidor) fica em
+  `~/.habblaud/world-last-uplink.json`, também só para o seu usuário, e some ao sair da conta.
+- Os ids aleatórios do mundo vivem só na memória do Habblaud: reiniciar o Habblaud gera ids novos.
 - A seção do World só funciona pelo próprio computador (`http://localhost`), nunca pelo celular, e só com o Habblaud
   acessível apenas pelo próprio computador. Como acontece com as mensagens pelo escritório, qualquer programa deste
   computador que alcance o `localhost` consegue agir pela conta.
+- **Pausar** fecha a conexão do prédio antes de responder e avisa o servidor do mundo: o prédio apaga na hora para
+  todos. **Retomar** reabre.
 - **Sair** apaga o token deste computador e o desconecta no servidor. A lista de dispositivos mostra onde a conta está
   conectada (até 3) e desconecta um por um.
 
@@ -138,9 +163,12 @@ exemplo). Quem não quiser nem isso usa o modo discreto ou pausa.
 
 1. **O protocolo é público e fechado:** [`shared/world/protocol.ts`](../../shared/world/protocol.ts) e
    [`schema.json`](../../shared/world/schema.json) definem cada campo; o servidor recusa qualquer outro.
-2. **Um arquivo só monta o pacote do prédio** (próximas fases), com testes que conferem cada chave e que nenhum texto
-   do escritório (caminhos, títulos, comandos, nomes) aparece no pacote.
-3. **Você vê o que foi enviado:** Configurações › Habblaud World › Ver o que foi enviado mostrará o JSON exato da última
-   remessa (próximas fases).
+2. **Um arquivo só monta o pacote do prédio:** [`shared/world/projection.ts`](../../shared/world/projection.ts), que
+   recebe das salas só o id e nunca recebe contas, uso nem estatísticas. Os testes conferem cada chave do pacote
+   contra a lista do `schema.json`, que nenhum texto do escritório (caminhos, nomes de sala, títulos, atividades,
+   comandos, tarefas, branch, modelo, conta, e-mail, nomes editados) aparece nele e que nenhum número parece um horário.
+3. **Você vê o que foi enviado:** Configurações › Habblaud World › Ver o que foi enviado mostra o JSON exato da última
+   remessa, a hora, o tamanho e a resposta do servidor (aceito, ou o motivo da recusa). É o mesmo objeto que foi para
+   o fio.
 4. **Código aberto:** quem revisa um pull request que mexe em `shared/world/` ou `server/world/` confere esta lista
    contra o que o código manda ([`CONTRIBUTING.md`](../../CONTRIBUTING.md)).
