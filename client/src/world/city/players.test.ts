@@ -1,8 +1,28 @@
-// Jogadores: interpolação dos outros (150 ms atrás), movimento local com colisão pelo isWalkable, velocidade
+// Jogadores: interpolação dos outros (atraso pela cadência das amostras: 5/s e 2,5/s sem tremer), movimento local com colisão pelo isWalkable, velocidade
 // nunca acima da de corrida (nem na diagonal), caminho do clique e o envio de `move` até 10 por segundo.
 import { describe, expect, it } from 'vitest';
 import { isWalkable, lotOrigin, spawnPoint } from '../../../../shared/world/city';
-import { DIR_TO_PROTO, LocalPlayer, MOVE_INTERVAL_MS, MoveSender, PROTO_TO_DIR, RUN_TPS, WALK_TPS, dirOf, pathPoints, pushSample, sampleAt, stepMove, wirePos, type Sample } from './players';
+import { mulberry32 } from '../../../../shared/hash';
+import {
+  DIR_TO_PROTO,
+  INTERP_MAX_MS,
+  INTERP_MIN_MS,
+  LocalPlayer,
+  MOVE_INTERVAL_MS,
+  MoveSender,
+  PROTO_TO_DIR,
+  RUN_TPS,
+  WALK_TPS,
+  dirOf,
+  interpDelay,
+  pathPoints,
+  pushSample,
+  sampleAt,
+  stepDelay,
+  stepMove,
+  wirePos,
+  type Sample,
+} from './players';
 
 const s = (t: number, x: number, y: number, moving = true): Sample => ({ t, x, y, dir: 'e', moving });
 
@@ -28,6 +48,80 @@ describe('interpolação dos outros jogadores', () => {
     expect(list.length).toBe(10);
     pushSample(list, s(5, 99, 0));
     expect(list[list.length - 1]!.t).toBe(290);
+  });
+});
+
+/**
+ * Alguém andando reto a 3 tiles/s, com as amostras saindo do servidor a cada `cadence(t)` ms e chegando com 50 ms de
+ * rede ±`jitter` (sorteio fixo); a cena desenha a 60 quadros por segundo como scene.ts (atraso por jogador, levado aos
+ * poucos até o alvo). Devolve o x desenhado em cada quadro depois de `warmupMs`.
+ */
+function walkAndDraw(cadence: (t: number) => number, jitter: number, ms: number, warmupMs = 1500, fixedDelay?: number): Array<{ t: number; x: number; moving: boolean }> {
+  const rng = mulberry32(7);
+  const samples: Sample[] = [];
+  let sentAt = 0;
+  let arrives = 50;
+  let delay: number | undefined;
+  const out: Array<{ t: number; x: number; moving: boolean }> = [];
+  const frame = 1000 / 60;
+  for (let now = 0; now <= ms; now += frame) {
+    while (arrives <= now) {
+      pushSample(samples, { t: arrives, x: (sentAt / 1000) * 3, y: 0, dir: 'e', moving: true });
+      sentAt += cadence(sentAt);
+      arrives = sentAt + 50 + (rng() * 2 - 1) * jitter;
+    }
+    const target = interpDelay(samples);
+    delay = fixedDelay ?? (delay === undefined ? target : stepDelay(delay, target, frame));
+    const p = sampleAt(samples, now - delay)!;
+    if (now >= warmupMs) out.push({ t: now, x: p.x, moving: p.moving });
+  }
+  return out;
+}
+
+/** Quadros em que o desenho não saiu do lugar (ou voltou) andando. */
+const frozen = (xs: Array<{ x: number }>) => xs.filter((p, i) => i > 0 && p.x <= xs[i - 1]!.x).length;
+
+describe('interpolação com a cadência do servidor (5/s para os 20 mais perto, 2,5/s para os outros)', () => {
+  it('o atraso segue o maior intervalo recente, com folga, entre o mínimo e o máximo; parado não conta', () => {
+    const at = (gaps: number[]) => {
+      const list: Sample[] = [];
+      let t = 0;
+      pushSample(list, s(t, 0, 0));
+      for (const g of gaps) pushSample(list, s((t += g), 0, 0));
+      return interpDelay(list);
+    };
+    expect(at([])).toBe(INTERP_MIN_MS);
+    expect(at([200, 200, 200])).toBe(260);
+    expect(at([400, 400])).toBe(460);
+    expect(at([200, 430, 200])).toBe(490);
+    // 5 s parado (o servidor não manda nada) e de volta a 5/s: a pausa não vira cadência
+    expect(at([200, 5_000, 200])).toBe(260);
+    expect(at([900, 900])).toBe(INTERP_MAX_MS);
+    // o atraso muda devagar: subindo, metade do relógio; descendo, um quarto
+    expect(stepDelay(260, 460, 100)).toBe(310);
+    expect(stepDelay(460, 260, 100)).toBe(435);
+    expect(stepDelay(300, 310, 100)).toBe(310);
+  });
+
+  it('a 5/s e a 2,5/s, com a rede variando ±30 ms, quem anda nunca para nem volta', () => {
+    for (const cadence of [200, 400]) {
+      const xs = walkAndDraw(() => cadence, 30, 12_000);
+      expect(frozen(xs), `${cadence} ms`).toBe(0);
+      expect(xs.every((p) => p.moving), `${cadence} ms`).toBe(true);
+    }
+  });
+
+  it('com o atraso fixo de antes (150 ms) a 2,5/s, o desenho parava a cada amostra', () => {
+    expect(frozen(walkAndDraw(() => 400, 30, 12_000, 1500, 150))).toBeGreaterThan(50);
+    expect(frozen(walkAndDraw(() => 200, 30, 12_000, 1500, 150))).toBeGreaterThan(20);
+  });
+
+  it('quem passa dos 20 mais perto (5/s → 2,5/s) e volta: nunca volta atrás, e não para depois de se ajustar', () => {
+    const cadence = (t: number) => (t >= 4_000 && t < 9_000 ? 400 : 200);
+    const xs = walkAndDraw(cadence, 30, 14_000);
+    expect(xs.every((p, i) => i === 0 || p.x >= xs[i - 1]!.x)).toBe(true);
+    expect(frozen(xs.filter((p) => p.t >= 5_500 && p.t < 9_000))).toBe(0);
+    expect(frozen(xs.filter((p) => p.t >= 10_500))).toBe(0);
   });
 });
 
@@ -64,17 +158,16 @@ describe('movimento local', () => {
     expect(q.dir).toBe('left');
   });
 
-  it('segue o caminho do clique até o fim e senta no banco se pedido', () => {
+  it('segue o caminho do clique até o fim e para; uma tecla cancela o caminho', () => {
     const p = new LocalPlayer(21.5, 15.5);
-    p.follow([22.5, 15.5, 23.5, 15.5, 23.5, 16.5], false, { x: 23.5, y: 16.5, dir: 'down' });
+    p.follow([22.5, 15.5, 23.5, 15.5, 23.5, 16.5], false);
     for (let i = 0; i < 30 && p.hasPath; i++) p.update(0.1, { dx: 0, dy: 0, run: false });
     expect(p.x).toBeCloseTo(23.5);
     expect(p.y).toBeCloseTo(16.5);
     expect(p.moving).toBe(false);
-    expect(p.seat).toEqual({ x: 23.5, y: 16.5, dir: 'down' });
-    // uma tecla levanta e cancela
+    p.follow([30.5, 16.5], false);
     p.update(0.05, { dx: 0, dy: -1, run: false });
-    expect(p.seat).toBeNull();
+    expect(p.hasPath).toBe(false);
   });
 
   it('a correção do servidor (`pos`) vale na hora', () => {

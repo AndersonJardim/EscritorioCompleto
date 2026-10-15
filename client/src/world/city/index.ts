@@ -1,25 +1,27 @@
-// Cena da cidade do Habblaud World: liga o stream (o de verdade ou o falso do modo demonstração), o estado, o meu
-// jogador, a câmera, o desenho, a entrada, os cartões e o minimapa. Montada por app.ts quando o botão Mundo abre a
-// cena; o stream só existe com a cena na tela (abre ao mostrar, fecha ao esconder).
+// Cena da cidade do Habblaud World: liga o stream (net/world-stream.ts: o do servidor local ou a cidade falsa do modo
+// demonstração), o estado, o meu jogador, a câmera, o desenho, a entrada, os cartões e o minimapa. Montada por app.ts
+// quando o botão Mundo abre a cena; o stream só existe com a cena na tela (abre ao mostrar, fecha ao esconder).
+// O meu personagem só entra na rua com a posição que o servidor validou (`pos` do snapshot ou da mensagem): nenhum
+// `move` sai de um lugar adivinhado. Ausente (`afk`), ele fica parado onde está; parado em cima de um banco, senta.
 import * as artModule from '../../art';
 import type { ArtModule } from '../../art/api';
 import { TILE } from '../../art/api';
 import { tr } from '../../../../shared/i18n';
-import { lotDoor, spawnPoint } from '../../../../shared/world/city';
+import { blockAt, chunkOf, lotDoor } from '../../../../shared/world/city';
+import type { WorldStream, WorldStreamEvent } from '../../net/world-stream';
 import type { WorldOptions } from '../api';
 import { Camera } from '../camera';
 import { PathFinder } from '../path/astar';
 import { h } from '../../ui/dom';
+import { worldErrorText } from '../../ui/world/world-model';
 import { CityCards } from './cards';
 import { CityInput } from './input';
-import { buildWalkGrid, nearestDoor, nearestSeat, nearestWalkableTile, walkRectFor, walkable } from './layout';
+import { buildWalkGrid, nearestDoor, nearestWalkableTile, walkRectFor, walkable } from './layout';
 import { Minimap } from './minimap';
+import { noticeText } from './notice';
 import { LocalPlayer, MoveSender, pathPoints } from './players';
 import { CityRenderer } from './scene';
 import { CityState, type CityEffect } from './state';
-import type { WorldStream } from './stream';
-
-export { emptyWorldStream } from './stream';
 
 const art: ArtModule = artModule;
 
@@ -43,7 +45,7 @@ export interface CitySceneOptions {
   canvas: HTMLCanvasElement;
   /** Onde entram o cartão, o minimapa, as dicas e os avisos (o #ui, com os estilos da interface). */
   uiRoot: HTMLElement;
-  /** Abre o stream (o de verdade ou o falso). Chamado a cada vez que a cena aparece. */
+  /** Abre o stream (net/world-stream.ts: o do servidor local ou o falso). Chamado a cada vez que a cena aparece. */
   openStream: () => WorldStream;
   /** As opções do escritório (dia/noite, nomes). */
   options: () => WorldOptions;
@@ -90,6 +92,8 @@ export function createCityScene(o: CitySceneOptions): CityScene {
   let lastTs = 0;
   let mouse: { x: number; y: number } | null = null;
   let keepAlive: ReturnType<typeof setInterval> | null = null;
+  /** O chunk em que estou (ao trocar, os chunks fora dos 3×3 saem do estado). */
+  let myChunk = '';
   const finder = new PathFinder(buildWalkGrid({ x: 0, y: 0, w: 4, h: 4 }).grid);
   const frameMs: number[] = [];
   const rafGaps: number[] = [];
@@ -145,16 +149,15 @@ export function createCityScene(o: CitySceneOptions): CityScene {
 
   // ------------------------------------------------------------------ meu jogador
 
+  /** Põe o meu personagem na rua, na posição que o servidor validou (sem ela, espera o `pos`). */
   const placeMe = () => {
     const self = state.me;
-    if (!self || me) return;
     let p = state.startPos;
-    const mine = state.myBuilding();
-    if (!p && mine) p = lotDoor(mine.lot).front;
-    if (!p) p = spawnPoint();
+    if (!self || me || !p) return;
+    state.startPos = null;
     if (!walkable(p.x, p.y)) {
-      const t = nearestWalkableTile(p.x, p.y) ?? spawnPoint();
-      p = { x: t.x + 0.5, y: t.y + 0.5 };
+      const t = nearestWalkableTile(p.x, p.y);
+      if (t) p = { x: t.x + 0.5, y: t.y + 0.5 };
     }
     me = new LocalPlayer(p.x, p.y);
     sender = new MoveSender((m) => stream?.send([m]));
@@ -167,8 +170,8 @@ export function createCityScene(o: CitySceneOptions): CityScene {
     loading.hidden = true;
   };
 
-  /** Caminho do A* da minha posição até (x, y) tiles; `seat` = sentar no fim. */
-  const walkTo = (x: number, y: number, run: boolean, seat: { x: number; y: number; dir: 'down' | 'up' | 'left' | 'right' } | null = null): boolean => {
+  /** Caminho do A* da minha posição até (x, y) tiles. */
+  const walkTo = (x: number, y: number, run: boolean): boolean => {
     if (!me) return false;
     let goal = { x, y };
     if (!walkable(x, y)) {
@@ -184,7 +187,7 @@ export function createCityScene(o: CitySceneOptions): CityScene {
     const gy = Math.floor(goal.y) - win.oy;
     const cells: number[] = [];
     if (!finder.find(sx, sy, gx, gy, cells)) return false;
-    me.follow(pathPoints(cells, win.ox, win.oy, goal), run, seat);
+    me.follow(pathPoints(cells, win.ox, win.oy, goal), run);
     following = true;
     return true;
   };
@@ -205,15 +208,16 @@ export function createCityScene(o: CitySceneOptions): CityScene {
         if (me) {
           me.correct(eff.x, eff.y);
           sender?.reset();
+        } else {
+          // o nascimento (o servidor decide onde, no primeiro `view`)
+          state.startPos = { x: eff.x, y: eff.y };
+          placeMe();
         }
         break;
-      case 'afk': {
-        // ausente: senta no banco mais perto (ou fica parado)
-        if (!me || me.moving || me.seat) break;
-        const seat = nearestSeat(renderer.seatsNear(me.x, me.y), me.x, me.y, 10);
-        if (seat) walkTo(seat.x, seat.y, false, seat);
+      case 'afk':
+        // Ausente: fica parado onde está (andar sozinho até um banco mandaria `move` e adiaria a saída da rua). Parado
+        // em cima de um banco, a cena desenha sentado, como os outros.
         break;
-      }
       case 'profile':
         if (cards.kind === 'player' && cards.id === eff.player.id) {
           const rp = state.players.get(eff.player.id);
@@ -231,36 +235,58 @@ export function createCityScene(o: CitySceneOptions): CityScene {
 
   // ------------------------------------------------------------------ stream
 
+  const offline = () => tr('Sem conexão com o Habblaud World agora; o Habblaud tenta de novo sozinho.');
+
+  const onStream = (ev: WorldStreamEvent) => {
+    switch (ev.type) {
+      case 'snapshot': {
+        state.applySnapshot(ev.snapshot, performance.now());
+        placeMe();
+        if (me) myChunk = '';
+        // sem conexão com o servidor do mundo, nada desce: diz isso em vez de "Entrando na cidade…"
+        loading.textContent = state.connected ? tr('Entrando na cidade…') : offline();
+        loading.hidden = state.connected && !!me;
+        return;
+      }
+      case 'message': {
+        const eff = state.apply(ev.msg, performance.now());
+        if (eff) onEffect(eff);
+        return;
+      }
+      case 'status':
+        // o SSE com o servidor local caiu: o navegador reabre e um snapshot novo troca tudo
+        if (ev.status === 'retrying') {
+          loading.textContent = offline();
+          loading.hidden = false;
+        }
+        return;
+      case 'error':
+        // comando recusado pelo servidor local; sem conexão com o mundo, o aviso fica até o snapshot da volta
+        if (ev.code === 'not_connected') {
+          loading.textContent = offline();
+          loading.hidden = false;
+        } else if (ev.code !== 'no_stream') showToast(worldErrorText(ev.code, 'scene'));
+        return;
+    }
+  };
+
   const openStream = () => {
     state = new CityState();
     renderer = new CityRenderer(o.canvas, art, camera, state);
     me = null;
     sender = null;
+    myChunk = '';
+    loading.textContent = tr('Entrando na cidade…');
     loading.hidden = false;
     cards.hide();
     const s = o.openStream();
     stream = s;
-    s.on('world.snapshot', (snap) => {
+    s.on((ev) => {
       if (stream !== s) return;
       try {
-        const read = state.applySnapshot(snap, performance.now());
-        placeMe();
-        // sem conexão com o servidor do mundo, nada desce: diz isso em vez de "Entrando na cidade…"
-        loading.textContent = read.connected === false ? tr('Sem conexão com o Habblaud World agora; o Habblaud tenta de novo sozinho.') : tr('Entrando na cidade…');
-        if (read.connected === false) loading.hidden = false;
-        if (read.afk) onEffect({ type: 'afk' });
+        onStream(ev);
       } catch (err) {
-        console.error('[cidade] snapshot inválido ignorado', err);
-      }
-    });
-    s.on('world', (msg) => {
-      if (stream !== s) return;
-      try {
-        const eff = state.apply(msg, performance.now());
-        if (!me) placeMe();
-        if (eff) onEffect(eff);
-      } catch (err) {
-        console.error('[cidade] mensagem inválida ignorada', err);
+        console.error('[cidade] evento do stream ignorado', err);
       }
     });
   };
@@ -391,6 +417,13 @@ export function createCityScene(o: CitySceneOptions): CityScene {
       if (me && self) {
         me.update(dt, input.intent());
         sender?.tick(now, me);
+        // o servidor não avisa quando deixa de assinar: ao trocar de chunk, saem os prédios fora dos 3×3
+        const c = chunkOf(blockAt(me.x, me.y));
+        const key = `${c.x},${c.y}`;
+        if (key !== myChunk) {
+          myChunk = key;
+          state.keepAround(me.x, me.y);
+        }
       }
       const target = following && me ? camera.centerFor(me.x * TILE, me.y * TILE - 12, camera.zoom) : null;
       camera.update(Date.now(), target, dt);
@@ -498,37 +531,8 @@ export function createCityScene(o: CitySceneOptions): CityScene {
       frameMs.length = 0;
       rafGaps.length = 0;
     },
-    me: () => (me ? { x: me.x, y: me.y, moving: me.moving, seated: !!me.seat } : null),
+    me: () => (me ? { x: me.x, y: me.y, moving: me.moving, seated: !me.moving && renderer.onBench(me.x, me.y) } : null),
     toScreen: (x, y) => camera.worldToScreen(x * TILE, y * TILE),
   };
   return scene;
-}
-
-/**
- * Texto de um `notice` (o `text` é um id de NOTICE_IDS do protocolo, traduzido aqui; um id desconhecido vira um aviso
- * genérico). null = nada para mostrar (ids que só interessam a quem depura).
- */
-export function noticeText(id: string): string | null {
-  switch (id) {
-    case 'ignored':
-    case 'invalid':
-    case 'view_required':
-      return null;
-    case 'rate_limited':
-      return tr('Devagar: o mundo pediu um tempo entre as ações.');
-    case 'not_found':
-      return tr('Essa pessoa não está mais por perto.');
-    case 'street_left':
-      return tr('Você ficou um bom tempo parado e saiu da rua: ande para voltar.');
-    case 'chunk_full':
-      return tr('A área está cheia: só os jogadores mais perto aparecem.');
-    case 'afk':
-      return tr('Você ficou um tempo parado.');
-    case 'server_restart':
-      return tr('O Habblaud World vai reiniciar: a conexão cai e volta sozinha.');
-    case 'left':
-      return tr('Sua conta saiu do mundo: o prédio volta com "Voltar ao mundo", em Configurações.');
-    default:
-      return tr('Aviso do Habblaud World.');
-  }
 }

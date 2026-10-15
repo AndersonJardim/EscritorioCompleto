@@ -3,7 +3,6 @@
 // conta liberada), nunca no timelapse. A cena em si é montada por app.ts (CitySceneHost); aqui fica o botão, o
 // estado "na cidade" da interface (classe `is-city` no #ui) e a ida e volta.
 import { tr } from '../../../../shared/i18n';
-import type { OfficeSnapshot } from '../../../../shared/types';
 import type { WorldSource } from '../../net/world';
 import type { UiComponent, UiContext } from '../context';
 import { h, setAttr, setHidden, setText, setTitle } from '../dom';
@@ -22,13 +21,11 @@ export interface CitySceneHost {
 }
 
 /**
- * A cena Mundo está disponível? Pelo servidor local (`meta.world.scene.available`, do servidor do mundo); sem o
- * campo, não. No modo demonstração, com a conta liberada.
+ * A cena Mundo está disponível? `meta.world.scene.available` (do servidor local: conta liberada, personagem criado, a
+ * trava do terminal e sem banimento nem suspensão; no modo demonstração, o do FakeWorldApi); sem o campo, não.
  */
-export function citySceneAvailable(src: WorldSource, live: OfficeSnapshot | null): boolean {
-  if (src.fake) return src.meta()?.state === 'approved';
-  const w = live?.meta.world as { scene?: { available?: unknown } } | undefined;
-  return w?.scene?.available === true;
+export function citySceneAvailable(src: WorldSource): boolean {
+  return src.meta()?.scene?.available === true;
 }
 
 export class SceneSwitch implements UiComponent {
@@ -56,7 +53,7 @@ export class SceneSwitch implements UiComponent {
   }
 
   private available(): boolean {
-    return citySceneAvailable(this.src, this.ctx.store.liveSnapshot) && !this.ctx.store.replaying && !this.ctx.isTimelapseOpen();
+    return citySceneAvailable(this.src) && !this.ctx.store.replaying && !this.ctx.isTimelapseOpen();
   }
 
   async toggle(): Promise<void> {

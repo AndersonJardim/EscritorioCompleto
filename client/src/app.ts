@@ -6,7 +6,6 @@ import { createWorld, type WorldApi } from './world';
 import { createUI } from './ui';
 import type { CitySceneHost } from './ui/world/scene-switch';
 import type { CityScene } from './world/city';
-import type { WorldStream } from './world/city/stream';
 import { migrateLegacyKeys, safeLocalStorage } from './ui/prefs';
 import { getLocale, tr } from '../../shared/i18n';
 
@@ -62,16 +61,15 @@ function cityHost(o: { world: WorldApi; worldCanvas: HTMLCanvasElement; uiRoot: 
   canvas.hidden = true;
   o.worldCanvas.after(canvas);
   const load = (): Promise<CityScene> =>
-    (loading ??= Promise.all([import('./world/city'), o.mock ? import('./world/city/fake-stream') : Promise.resolve(null)]).then(([m, fake]) => {
+    (loading ??= Promise.all([import('./world/city'), import('./net/world-stream')]).then(([m, ws]) => {
+      // Modo demonstração: a cidade de mentira (`?perf=N` enche N lotes, para medir). Ao vivo: o stream do servidor
+      // local (GET /api/world/stream e POST /api/world/cmd).
       const perf = Number(o.params.get('perf'));
-      const openStream = (): WorldStream =>
-        // Modo demonstração: a cidade de mentira. Ao vivo: o stream do servidor local (net/world-stream.ts, na junção
-        // com o lado do servidor; até lá, um stream vazio).
-        fake ? fake.createFakeWorldStream(Number.isFinite(perf) && perf > 0 ? { buildings: perf } : {}) : m.emptyWorldStream();
+      const buildings = o.mock && Number.isFinite(perf) && perf > 0 ? { buildings: perf } : {};
       scene = m.createCityScene({
         canvas,
         uiRoot: o.uiRoot,
-        openStream,
+        openStream: () => ws.createWorldStream({ mock: o.mock, ...buildings }),
         options: () => o.world.getOptions(),
         topInset: () => o.uiRoot.querySelector('.ui-topbar')?.getBoundingClientRect().bottom ?? 64,
       });

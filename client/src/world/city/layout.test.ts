@@ -14,7 +14,6 @@ import {
   lotDecor,
   lotsOfBlock,
   nearestDoor,
-  nearestSeat,
   nearestWalkableTile,
   plazaDecor,
   sidewalkDecor,
@@ -157,8 +156,7 @@ describe('decoração determinística', () => {
     expect(seats.length).toBeGreaterThanOrEqual(4);
     for (const d of seats) expect(isWalkable(d.seat!.x, d.seat!.y, anyLot)).toBe(true);
     expect(p.some((d) => d.kind === 'totem')).toBe(true);
-    const s = nearestSeat(p, spawnPoint().x, spawnPoint().y, 10);
-    expect(s).not.toBeNull();
+    expect(seats.some((d) => Math.hypot(d.seat!.x - spawnPoint().x, d.seat!.y - spawnPoint().y) <= 10)).toBe(true);
   });
 
   it('os bancos da calçada também ficam em tile caminhável', () => {

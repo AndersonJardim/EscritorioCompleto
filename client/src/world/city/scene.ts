@@ -19,9 +19,9 @@ import { flagEmoji } from './cards';
 import { FACADE, FACADE_STYLES, facadeModel, facadeReady, facadeSprites, signRect, windowRect, type FacadeModel, type FacadeSprites } from './facade';
 import { cellCanvas, fountainCanvas, gardenCanvas, planterCanvas, plazaCanvas } from './ground';
 import { blockDecor, blockRange, cellPx, gardenKind, isNorthRow, lotDecor, lotKey, lotSeed, lotsOfBlock, type Decor } from './layout';
-import { PROTO_TO_DIR, sampleAt, type LocalPlayer } from './players';
+import { PROTO_TO_DIR, interpDelay, sampleAt, stepDelay, type LocalPlayer } from './players';
 import type { CityState, RemotePlayer } from './state';
-import type { CitySelf } from './stream';
+import type { WorldSceneMe } from '../../../../shared/world/api';
 
 const UI_FONT = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif';
 const EMOJI_FONT = '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
@@ -293,7 +293,7 @@ export class CityRenderer {
 
   // ------------------------------------------------------------------ quadro
 
-  frame(now: number, dt: number, opts: WorldOptions, me: { player: LocalPlayer; self: CitySelf } | null, hl: CityHighlight): void {
+  frame(now: number, dt: number, opts: WorldOptions, me: { player: LocalPlayer; self: WorldSceneMe } | null, hl: CityHighlight): void {
     const t0 = performance.now();
     const { ctx, camera } = this;
     if (!this.cell) this.cell = cellCanvas(this.art);
@@ -390,17 +390,20 @@ export class CityRenderer {
     }
     this.buildingsDrawn.length = this.nb;
 
-    // ---- personagens: eu e os outros (150 ms atrás, interpolados)
+    // ---- personagens: eu e os outros (um pouco atrás, interpolados; o atraso acompanha a cadência de cada um)
     this.nc = 0;
-    const renderT = now - 150;
     for (const [id, rp] of this.state.players) {
-      const v = this.charVis(id, rp, renderT, dt, visible);
+      const target = interpDelay(rp.samples);
+      rp.delay = rp.delay === undefined ? target : stepDelay(rp.delay, target, dt * 1000);
+      const v = this.charVis(id, rp, now - rp.delay, dt, visible);
       if (v) push(K.Char, v.y, v);
     }
     if (me) {
       const p = me.player;
-      const pose: Pose = p.seat ? 'sit' : p.moving ? (p.running ? 'run' : 'walk') : 'stand';
-      const v = this.takeChar(me.self.id, me.self.name, true, p.x * TILE, p.y * TILE, p.dir, pose, this.animOf(me.self.id, pose, dt), this.appearanceOf(me.self.id, me.self.look, me.self.parts));
+      // parado em cima de um banco = sentado (só o desenho: a direção que vai no `move` não muda)
+      const seated = !p.moving && this.onBench(p.x, p.y);
+      const pose: Pose = seated ? 'sit' : p.moving ? (p.running ? 'run' : 'walk') : 'stand';
+      const v = this.takeChar(me.self.id, me.self.name, true, p.x * TILE, p.y * TILE, seated ? 'down' : p.dir, pose, this.animOf(me.self.id, pose, dt), this.appearanceOf(me.self.id, me.self.look, me.self.parts));
       if (visible(v.x - 24, v.y - 48, 48, 56)) push(K.Char, v.y + 0.25, v);
       else v.visible = false;
     }
@@ -489,7 +492,7 @@ export class CityRenderer {
     const x = s.x * TILE;
     const y = s.y * TILE;
     if (!visible(x - 24, y - 48, 48, 56)) return null;
-    // parado em cima de um banco = sentado (o servidor põe quem está ausente no banco mais perto)
+    // parado em cima de um banco = sentado (quem parou num banco, ausente ou não)
     const seated = !s.moving && this.onBench(s.x, s.y);
     const pose: Pose = seated ? 'sit' : s.moving ? (s.speed > 4.6 ? 'run' : 'walk') : 'stand';
     const dir = seated ? 'down' : PROTO_TO_DIR[s.dir] ?? 'down';

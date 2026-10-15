@@ -420,18 +420,3 @@ export function blockDecor(b: CityPoint): Decor[] {
   if (isPlaza(b)) out.push(...plazaDecor());
   return out;
 }
-
-/** O assento de banco mais perto de (x, y) a até `maxDist` tiles, entre as decorações dadas. */
-export function nearestSeat(decor: Iterable<Decor>, x: number, y: number, maxDist = 8): Decor['seat'] | null {
-  let best: Decor['seat'] | null = null;
-  let bestD = maxDist * maxDist;
-  for (const d of decor) {
-    if (!d.seat) continue;
-    const dd = (d.seat.x - x) ** 2 + (d.seat.y - y) ** 2;
-    if (dd <= bestD) {
-      bestD = dd;
-      best = d.seat;
-    }
-  }
-  return best;
-}

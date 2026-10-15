@@ -1,6 +1,7 @@
 // Jogadores na rua (puro): o meu (movimento local imediato, colisão pelo `isWalkable` do city.ts, caminho do A*,
-// envio de `move` até 10 por segundo) e os outros (amostras de posição a ~5/s, desenhados 150 ms atrás e
-// interpolados entre elas). Posições em TILES (o ponto dos pés; o mesmo do protocolo).
+// envio de `move` até 10 por segundo) e os outros (amostras de posição a 5/s para os 20 mais perto e a 2,5/s para os
+// outros, desenhados um pouco atrás e interpolados entre elas; o atraso acompanha o intervalo entre as amostras de
+// cada um). Posições em TILES (o ponto dos pés; o mesmo do protocolo).
 import type { Dir } from '../../art/api';
 import type { Direction } from '../../../../shared/world/protocol';
 import { walkable as cityWalkable } from './layout';
@@ -8,8 +9,20 @@ import { walkable as cityWalkable } from './layout';
 /** Velocidades (tiles/s): as do escritório. O servidor aceita até 6 × 1,2. */
 export const WALK_TPS = 3.2;
 export const RUN_TPS = 6;
-/** Atraso com que os outros são desenhados (ms): sempre há uma amostra adiante para interpolar. */
-export const INTERP_DELAY_MS = 150;
+/**
+ * Atraso com que os outros são desenhados (ms): o maior intervalo recente entre as amostras de cada um mais uma folga
+ * para a rede, para sempre haver uma amostra adiante (5/s: ~260 ms; 2,5/s: ~460 ms), entre o mínimo e o máximo.
+ */
+export const INTERP_MIN_MS = 150;
+export const INTERP_MAX_MS = 700;
+const INTERP_MARGIN_MS = 60;
+/** Intervalos maiores que isto não são a cadência (o jogador parou e o servidor não mandou nada): não contam. */
+const CADENCE_MAX_GAP_MS = 1_000;
+/** Quantos intervalos recentes contam. */
+const CADENCE_GAPS = 4;
+/** Quanto o atraso muda por ms de relógio (subindo, o desenho anda a 0,5×; descendo, a 1,25×): nunca volta atrás. */
+const DELAY_UP_RATE = 0.5;
+const DELAY_DOWN_RATE = 0.25;
 /** Intervalo mínimo entre dois `move` (10/s). */
 export const MOVE_INTERVAL_MS = 100;
 /** Amostras guardadas por jogador. */
@@ -50,6 +63,25 @@ export interface Interpolated {
   moving: boolean;
   /** Velocidade estimada (tiles/s) entre as duas amostras. */
   speed: number;
+}
+
+/** Atraso alvo (ms) para as amostras de um jogador: o maior dos últimos intervalos entre elas, mais a folga. */
+export function interpDelay(samples: readonly Sample[]): number {
+  let worst = 0;
+  let n = 0;
+  for (let i = samples.length - 1; i > 0 && n < CADENCE_GAPS; i--) {
+    const gap = samples[i]!.t - samples[i - 1]!.t;
+    if (gap <= 0 || gap > CADENCE_MAX_GAP_MS) continue;
+    worst = Math.max(worst, gap);
+    n++;
+  }
+  return Math.min(INTERP_MAX_MS, Math.max(INTERP_MIN_MS, worst + INTERP_MARGIN_MS));
+}
+
+/** Leva o atraso atual até o alvo aos poucos (`dtMs` de relógio), sem o desenho voltar no tempo. */
+export function stepDelay(current: number, target: number, dtMs: number): number {
+  if (target > current) return Math.min(target, current + dtMs * DELAY_UP_RATE);
+  return Math.max(target, current - dtMs * DELAY_DOWN_RATE);
 }
 
 /**
@@ -105,12 +137,6 @@ export interface MoveIntent {
   run: boolean;
 }
 
-export interface Seat {
-  x: number;
-  y: number;
-  dir: Dir;
-}
-
 export class LocalPlayer {
   x: number;
   y: number;
@@ -121,10 +147,6 @@ export class LocalPlayer {
   private path: number[] = [];
   private pathI = 0;
   private pathRun = false;
-  /** Sentado num banco (ausente). */
-  seat: Seat | null = null;
-  /** Indo sentar no banco ao chegar ao fim do caminho. */
-  private seatAfterPath: Seat | null = null;
   /** Tempo (ms) na pose atual, para os quadros da animação. */
   animT = 0;
 
@@ -141,19 +163,16 @@ export class LocalPlayer {
     return this.pathI < this.path.length;
   }
 
-  /** Caminho (pontos em tiles) a seguir; `seat` = sentar no fim. */
-  follow(points: number[], run: boolean, seat: Seat | null = null): void {
+  /** Caminho (pontos em tiles) a seguir. */
+  follow(points: number[], run: boolean): void {
     this.path = points;
     this.pathI = 0;
     this.pathRun = run;
-    this.seatAfterPath = seat;
-    this.seat = null;
   }
 
   stopPath(): void {
     this.path = [];
     this.pathI = 0;
-    this.seatAfterPath = null;
   }
 
   /** Correção do servidor (`pos`): vai para lá na hora e esquece o caminho. */
@@ -161,7 +180,6 @@ export class LocalPlayer {
     this.x = x;
     this.y = y;
     this.stopPath();
-    this.seat = null;
   }
 
   /** Avança `dt` segundos. Teclas têm prioridade sobre o caminho do clique. */
@@ -173,7 +191,6 @@ export class LocalPlayer {
     let dy = intent.dy;
     if (dx || dy) {
       this.stopPath();
-      this.seat = null;
       const len = Math.hypot(dx, dy);
       // diagonal normalizada: nunca mais rápido que a velocidade de corrida
       dx /= len;
@@ -211,11 +228,6 @@ export class LocalPlayer {
       if (!this.hasPath) {
         this.moving = false;
         this.running = false;
-        if (this.seatAfterPath) {
-          this.seat = this.seatAfterPath;
-          this.dir = this.seat.dir;
-          this.seatAfterPath = null;
-        }
       }
     } else {
       this.moving = false;

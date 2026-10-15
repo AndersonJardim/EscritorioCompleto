@@ -8,24 +8,42 @@
 //   ws.close();                                    // fecha o SSE (o servidor local manda `view.off` se era o último)
 //
 // O servidor local já conferiu o `rev` dos patches e descartou o que não é da cena: o navegador aplica cada `message`
-// na ordem em que chega (dá para usar o mesmo `SceneState` de shared/world/scene.ts, a partir do snapshot). O
-// servidor do mundo nunca é chamado daqui, e o token nunca chega à página.
-import type { WorldSceneCommand, WorldSceneMessage, WorldSceneSnapshot } from '../../../shared/world/api';
+// na ordem em que chega (a cena usa client/src/world/city/state.ts, a partir do snapshot). O servidor do mundo nunca é
+// chamado daqui, e o token nunca chega à página.
+//
+// A cidade falsa (só dados fictícios, nada do escritório): 20 prédios nos primeiros lotes da espiral, o meu no lote
+// (3,1) com a porta na calçada sul (onde eu nasço, como o servidor faz), 5 pessoas dando a volta nos quarteirões e uma
+// sentada num banco da praça, um prédio mudando a cada 3 s e o `afk` depois de 60 s sem andar; `?perf=N` enche N lotes.
+import type { WorldSceneCommand, WorldSceneMe, WorldSceneMessage, WorldSceneSnapshot } from '../../../shared/world/api';
 import { WORLD_SCENE_LIMITS, WORLD_SCENE_MESSAGES } from '../../../shared/world/api';
 import { flattenAppearance } from '../../../shared/world/appearance-flat';
+import { mulberry32 } from '../../../shared/hash';
 import {
   BLOCK_TILES,
+  FOUNTAIN,
+  PLAZA,
   blockAt,
   blockOf,
   blockOrigin,
   chunkId,
   chunkOf,
   isWalkable,
+  lotDoor,
   lotSpiral,
   spawnPoint,
   type CityPoint,
 } from '../../../shared/world/city';
-import type { Direction, GreetingId, TraitId, WorldBuildingPublic, WorldPlayerPublic, WorldPosition, WorldTheme } from '../../../shared/world/protocol';
+import type {
+  Direction,
+  GreetingId,
+  IntroId,
+  TokenBand,
+  TraitId,
+  WorldBuildingPublic,
+  WorldPlayerPublic,
+  WorldPosition,
+  WorldTheme,
+} from '../../../shared/world/protocol';
 import { reduceSceneBatch } from '../../../shared/world/scene';
 import { reconnectDelay, type EventSourceLike } from './store';
 
@@ -268,34 +286,65 @@ function parse(ev: Event): unknown {
 
 // ------------------------------------------------------------------------------------------------ o de mentira
 
-/** Cidade falsa (modo demonstração e testes): os mesmos eventos, sem servidor. Tudo sai do relógio dado. */
+/** Cidade falsa (modo demonstração, capturas e testes): os mesmos eventos, sem servidor. Tudo sai do relógio dado. */
 export interface FakeWorldStreamOptions {
   now?: () => number;
   /** Anda sozinho (um passo a cada 200 ms) e entrega o snapshot no próximo microtask. Padrão: true. */
   autoplay?: boolean;
+  /** Quantos prédios, nos primeiros lotes da espiral (padrão 20; `?perf=N` mede com centenas na tela; teto 2000). */
+  buildings?: number;
 }
 
 const DISTRICT = 'centro';
-const ME_ID = 'p_voce';
-/** Nomes de mentira (apelidos), um por prédio. */
-const OWNERS = [
-  'Bit Coruja', 'Lua Pixel', 'Tato Loop', 'Nina Byte', 'Zeca Stack', 'Bia Cache', 'Rafa Tab', 'Duda Vim', 'Gabi Commit', 'Leo Queue',
-  'Mia Patch', 'Teo Lint', 'Ivy Merge', 'Otto Shell', 'Maya Hook', 'Rui Diff', 'Sol Script', 'Noa Build', 'Kai Debug', 'Lis Deploy',
-] as const;
-const COUNTRIES = ['BR', 'PT', 'AR', 'ES', 'FR', 'MX', 'CL', 'US'] as const;
-const THEMES: readonly WorldTheme[] = ['none', 'none', 'halloween', 'none', 'christmas', 'none', 'none'];
-const TRAITS: readonly (readonly [TraitId, TraitId])[] = [['games', 'cafeina'], ['leitura', 'calma'], ['piadas', 'esporte'], ['series', 'sonecas'], ['fofoca', 'vaidade']];
+/** Sem `move` por isto, o falso manda `afk` (como o servidor). */
+const FAKE_AFK_MS = 60_000;
 
-/** Os 5 que andam: o quarteirão em volta do qual dão a volta, o sentido, a velocidade (tiles/s) e onde começam. */
-const WALKERS: ReadonlyArray<{ name: string; look: 'f' | 'm'; block: CityPoint; cw: boolean; speed: number; phase: number }> = [
-  { name: 'Pipoca Dev', look: 'f', block: { x: 0, y: 0 }, cw: true, speed: 2.4, phase: 10 },
-  { name: 'Turbo Rex', look: 'm', block: { x: 1, y: 0 }, cw: false, speed: 3.1, phase: 40 },
-  { name: 'Mel Kernel', look: 'f', block: { x: 0, y: 1 }, cw: true, speed: 2.0, phase: 75 },
-  { name: 'Juca Null', look: 'm', block: { x: -1, y: 0 }, cw: false, speed: 2.7, phase: 5 },
-  { name: 'Flor Async', look: 'f', block: { x: 1, y: 1 }, cw: true, speed: 4.5, phase: 120 },
+/** Eu na cidade falsa: o personagem da conta de exemplo do FakeWorldApi (net/world.ts), o das Configurações. */
+export const FAKE_ME: WorldSceneMe = {
+  id: 'p_voce',
+  name: 'Pixel Dev',
+  look: 'f',
+  parts: {
+    skin: '#d69f78', hair: '#2b2530', hairStyle: 'bob', eyes: '#2f5f9e', top: '#4a86d8', topAccent: '#f4f4f0',
+    topStyle: 'hoodie', bottom: '#2c2c35', bottomStyle: 'pants', shoes: '#ececec', accessory: 'glasses',
+    accessoryColor: '#2b2b33', facialHair: 'none',
+  },
+  traits: ['cafeina', 'games'],
+  intro: 'night_owl',
+  country: 'BR',
+  buildingId: 'p_voce',
+};
+/** O meu prédio é o 4º lote da espiral: (3,1), com a porta na calçada sul do quarteirão (1,0). */
+const MY_LOT_INDEX = 3;
+
+/** Donos fictícios (nomes de jogador inventados). */
+const OWNERS: ReadonlyArray<readonly [string, string | undefined]> = [
+  ['Ana Pixel', 'BR'], ['Bruno Byte', 'PT'], ['Camille Code', 'FR'], ['Diego Deploy', 'MX'], ['Emma Stack', 'US'],
+  ['Felipe Fork', 'AR'], ['Gabi Git', 'BR'], ['Hiro Hash', 'JP'], ['Inês Infra', 'ES'], ['Jonas Json', 'DE'],
+  ['Kai Kernel', 'CA'], ['Lia Lambda', 'IT'], ['Marco Merge', 'CL'], ['Nina Node', 'CO'], ['Oscar Ops', 'GB'],
+  ['Priya Patch', 'IN'], ['Quim Query', undefined], ['Rosa Regex', 'BR'], ['Sami Shell', 'KR'], ['Téo Test', 'PT'],
 ];
+const FLOORS = [2, 6, 13, 4, 9, 3, 16, 5, 0, 11, 4, 7, 2, 20, 8, 3, 12, 1, 6, 10] as const;
+const THEMES: readonly WorldTheme[] = ['none', 'halloween', 'none', 'christmas', 'none', 'halloween'];
+const TRAITS: readonly (readonly TraitId[])[] = [['games', 'piadas'], ['leitura', 'calma'], ['competicao', 'esporte', 'cafeina'], ['series', 'fofoca'], ['esporte', 'cafeina'], ['timidez', 'leitura']];
+const INTROS: readonly IntroId[] = ['coffee', 'tabs', 'pixel_art', 'cats', 'ship_fast', 'music'];
 
-/** O retângulo do meio da calçada em volta de um quarteirão (2 tiles de largura: o meio é a junta dos dois). */
+/**
+ * Os 5 que andam (o quarteirão em volta do qual dão a volta, o sentido, a velocidade em tiles/s e onde começam) e o
+ * dono de qual prédio cada um é (índice na espiral; o id do jogador é o do prédio). O 6º fica sentado num banco da praça.
+ */
+const WALKERS: ReadonlyArray<{ name: string; look: 'f' | 'm'; block: CityPoint; cw: boolean; speed: number; phase: number; owns?: number }> = [
+  { name: 'Luna Loop', look: 'f', block: { x: 1, y: 0 }, cw: true, speed: 3.0, phase: 12, owns: 1 },
+  { name: 'Max Merge', look: 'm', block: { x: 1, y: 0 }, cw: false, speed: 3.2, phase: 70 },
+  { name: 'Zoe Zip', look: 'f', block: { x: 0, y: 0 }, cw: true, speed: 2.9, phase: 40, owns: 7 },
+  { name: 'Rafa Runtime', look: 'm', block: { x: 1, y: 1 }, cw: false, speed: 3.1, phase: 110 },
+  { name: 'Yuki Yarn', look: 'f', block: { x: 0, y: 1 }, cw: true, speed: 5.6, phase: 25, owns: 13 },
+];
+const SITTER = { name: 'Ravi Repo', look: 'm' as const };
+/** O país de cada um (o 4º não mostra). */
+const COUNTRY_OF_WALKER: readonly string[] = ['BR', 'US', 'FR', 'ES', 'JP', 'IN'];
+
+/** O meio da calçada em volta de um quarteirão (2 tiles de largura: o meio é a junta dos dois). */
 function sidewalkLoop(block: CityPoint): { x0: number; y0: number; x1: number; y1: number; length: number } {
   const o = blockOrigin(block);
   const x0 = o.x - 1;
@@ -322,35 +371,64 @@ export function loopPosition(block: CityPoint, dist: number, cw: boolean): World
   return at(l.x0, l.y1 - d, 'n', 's');
 }
 
+/** O assento do banco ao sul da fonte, à direita (tiles): onde o 6º jogador fica sentado. */
+export function fakeBenchSeat(): CityPoint {
+  const o = blockOrigin(PLAZA);
+  return { x: o.x + FOUNTAIN.x + FOUNTAIN.w / 2 + 5, y: o.y + FOUNTAIN.y + FOUNTAIN.h + 2 + 0.85 };
+}
+
+/** Onde eu nasço: na calçada em frente à porta do meu prédio (como o servidor faz com quem tem prédio). */
+export function fakeMyDoor(): CityPoint {
+  return lotDoor(fakeLots(MY_LOT_INDEX + 1)[MY_LOT_INDEX]!).front;
+}
+
 const chunkOfPos = (x: number, y: number) => chunkId(DISTRICT, chunkOf(blockAt(x, y)));
 
-/** Os 20 prédios da cidade falsa: um a cada 7 lotes da espiral (nos quarteirões em volta da praça). */
-export function fakeCityBuildings(): WorldBuildingPublic[] {
+function fakeLots(n: number): CityPoint[] {
   const lots: CityPoint[] = [];
   for (const lot of lotSpiral()) {
-    if (lots.length >= 140) break;
+    if (lots.length >= n) break;
     lots.push(lot);
   }
-  return OWNERS.map((name, i) => {
-    const lot = lots[i * 7]!;
-    const floors = 1 + ((i * 5) % 12);
-    const total = floors + (i % 4);
-    const working = Math.min(total, 1 + (i % 3));
-    const waiting = Math.min(total - working, i % 2);
+  return lots;
+}
+
+/** Os prédios da cidade falsa, nos `n` primeiros lotes da espiral (o meu no 4º); tudo fictício e determinístico. */
+export function fakeCityBuildings(n = 20): WorldBuildingPublic[] {
+  const rng = mulberry32(0xc17c17);
+  const count = Math.max(1, Math.min(2000, Math.floor(n)));
+  const owners = new Map<number, number>();
+  WALKERS.forEach((w, k) => w.owns !== undefined && owners.set(w.owns, k));
+  return fakeLots(count).map((lot, i) => {
+    const mine = i === MY_LOT_INDEX;
+    const [name, country] = OWNERS[i % OWNERS.length]!;
+    const walker = owners.get(i);
+    const floors = mine ? 4 : FLOORS[i % FLOORS.length]!;
+    const total = Math.max(1, Math.round(floors * (1 + rng() * 1.5)));
+    const working = Math.round(total * rng());
+    const waiting = Math.min(total - working, rng() < 0.4 ? 1 + Math.floor(rng() * 2) : 0);
+    const away = !mine && (i % 7 === 5 || i % 11 === 9);
+    const discreet = !mine && i % 9 === 7;
+    const id = mine ? FAKE_ME.id : walker !== undefined ? `p_${walker + 1}` : `b_${i.toString(36).padStart(3, '0')}`;
+    const owner = mine
+      ? { id, name: FAKE_ME.name, country: FAKE_ME.country }
+      : walker !== undefined
+        ? { id, name: WALKERS[walker]!.name, country: COUNTRY_OF_WALKER[walker] }
+        : { id, name: count > OWNERS.length ? `${name} ${Math.floor(i / OWNERS.length) + 1}` : name, ...(country ? { country } : {}) };
     const b: WorldBuildingPublic = {
-      id: `b_${String(i + 1).padStart(2, '0')}`,
+      id,
       lot: { district: DISTRICT, x: lot.x, y: lot.y },
-      owner: { id: `b_${String(i + 1).padStart(2, '0')}`, name, ...(i % 5 === 2 ? {} : { country: COUNTRIES[i % COUNTRIES.length] }) },
-      state: i % 5 === 3 ? 'away' : 'online',
-      theme: THEMES[i % THEMES.length]!,
+      owner,
+      state: away ? 'away' : 'online',
+      theme: mine ? 'halloween' : THEMES[i % THEMES.length]!,
       floors,
       rev: 1,
-      likes: (i * 13) % 40,
-      sinceMonth: '2026-10',
+      likes: Math.floor(rng() * 240),
+      sinceMonth: `2026-${String(8 + (i % 3)).padStart(2, '0')}`,
     };
-    if (i % 6 !== 4) b.agents = { total, working, waiting, idle: total - working - waiting };
-    if (i % 4 !== 1) b.tokens = { day: (i % 5) as 0 | 1 | 2 | 3 | 4, week: Math.min(5, (i % 5) + 1) as 1 | 2 | 3 | 4 | 5 };
-    if (i % 9 === 4) b.closed = true;
+    if (!discreet) b.agents = { total, working, waiting, idle: total - working - waiting };
+    if (i % 4 !== 1) b.tokens = { day: (i % 5) as TokenBand, week: Math.min(5, (i % 5) + 1) as TokenBand };
+    if (i % 8 === 6) b.closed = true;
     return b;
   });
 }
@@ -359,13 +437,15 @@ export class FakeWorldStream implements WorldStream {
   private readonly listeners = new Listeners();
   private readonly now: () => number;
   private readonly start: number;
-  private readonly buildings = fakeCityBuildings();
+  private readonly buildings: WorldBuildingPublic[];
   private readonly revs = new Map<string, number>();
   private readonly walkers: WorldPlayerPublic[];
-  private me: WorldPosition = { ...spawnPoint(), dir: 's', moving: false };
+  private me: WorldPosition;
   private viewing = true;
   private closed = false;
   private ticks = 0;
+  private lastMoveAt: number;
+  private afkSent = false;
   private timer: ReturnType<typeof setInterval> | null = null;
   /** Respostas aos comandos: saem no próximo passo, como uma ida e volta. */
   private pending: WorldSceneMessage[] = [];
@@ -373,19 +453,34 @@ export class FakeWorldStream implements WorldStream {
   constructor(o: FakeWorldStreamOptions = {}) {
     this.now = o.now ?? Date.now;
     this.start = this.now();
+    this.lastMoveAt = this.start;
+    this.buildings = fakeCityBuildings(o.buildings ?? 20);
     for (const b of this.buildings) this.revs.set(this.chunkOfBuilding(b), 1);
-    this.walkers = WALKERS.map((w, i) => ({
-      id: `p_${i + 1}`,
-      name: w.name,
-      ...(i === 2 ? {} : { country: COUNTRIES[(i * 3) % COUNTRIES.length] }),
-      look: w.look,
-      parts: flattenAppearance(1_000 + i * 97, undefined, w.look),
-      traits: [...TRAITS[i % TRAITS.length]!],
-      intro: 'hello',
-      likesReceived: i * 3,
-      pos: loopPosition(w.block, w.phase, w.cw),
-      where: 'street',
-    }));
+    const mine = this.buildings.find((b) => b.id === FAKE_ME.id);
+    const door = mine ? lotDoor(mine.lot).front : spawnPoint();
+    this.me = { x: door.x, y: door.y, dir: 's', moving: false };
+    const prng = mulberry32(0x9e1a);
+    const player = (k: number, name: string, look: 'f' | 'm', pos: WorldPosition): WorldPlayerPublic => {
+      const owns = WALKERS[k]?.owns;
+      const id = `p_${k + 1}`;
+      return {
+        id,
+        name,
+        ...(k === 3 ? {} : { country: COUNTRY_OF_WALKER[k]! }),
+        look,
+        parts: flattenAppearance(1_000 + k * 97, undefined, look),
+        traits: [...TRAITS[k % TRAITS.length]!],
+        intro: INTROS[k % INTROS.length]!,
+        ...(owns !== undefined && owns < this.buildings.length ? { buildingId: id } : {}),
+        likesReceived: Math.floor(prng() * 60),
+        pos,
+        where: 'street',
+      };
+    };
+    this.walkers = WALKERS.map((w, k) => player(k, w.name, w.look, loopPosition(w.block, w.phase, w.cw)));
+    // sentado no banco ao sul da fonte: parado em cima de um banco, a cena desenha sentado
+    const seat = fakeBenchSeat();
+    this.walkers.push(player(WALKERS.length, SITTER.name, SITTER.look, { x: seat.x, y: seat.y, dir: 's', moving: false }));
     if (o.autoplay !== false) {
       this.timer = setInterval(() => this.tick(), CMD_BATCH_MS);
     }
@@ -415,9 +510,9 @@ export class FakeWorldStream implements WorldStream {
       connected: true,
       viewing: this.viewing,
       district: DISTRICT,
-      me: { id: ME_ID, name: 'Pixel Dev', look: 'f', parts: flattenAppearance(7, undefined, 'f'), traits: ['cafeina', 'games'], intro: 'coffee', country: 'BR' },
+      me: FAKE_ME,
       pos: this.me,
-      afk: false,
+      afk: this.afkSent,
       chunks: this.viewing ? [...byChunk.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([chunk, buildings]) => ({ chunk, rev: this.revs.get(chunk) ?? 1, buildings })) : [],
       players: this.viewing ? this.walkers : [],
       minimap: this.viewing ? this.minimap() : null,
@@ -438,7 +533,7 @@ export class FakeWorldStream implements WorldStream {
     this.listeners.clear();
   }
 
-  /** Um passo (200 ms): as respostas pendentes, os 5 andando e, a cada 3 s, um prédio que muda. */
+  /** Um passo (200 ms): as respostas pendentes, os 5 andando, a cada 3 s um prédio que muda e o `afk`. */
   tick(): void {
     if (this.closed) return;
     this.ticks++;
@@ -446,30 +541,38 @@ export class FakeWorldStream implements WorldStream {
     this.pending = [];
     for (const m of out) this.emit(m);
     if (!this.viewing) return;
-    const t = (this.now() - this.start) / 1000;
+    const now = this.now();
+    const t = (now - this.start) / 1000;
     const byChunk = new Map<string, Array<{ id: string; pos: WorldPosition }>>();
-    this.walkers.forEach((p, i) => {
-      const w = WALKERS[i]!;
+    WALKERS.forEach((w, i) => {
+      const p = this.walkers[i]!;
       p.pos = loopPosition(w.block, w.phase + w.speed * t, w.cw);
       const c = chunkOfPos(p.pos.x, p.pos.y);
       if (!byChunk.has(c)) byChunk.set(c, []);
       byChunk.get(c)!.push({ id: p.id, pos: { ...p.pos } });
     });
     for (const [chunk, players] of byChunk) this.emit({ t: 'players', chunk, players });
-    if (this.ticks % 15 === 0) {
-      const b = this.buildings[(this.ticks / 15) % this.buildings.length]!;
-      if (b.agents) {
-        const working = (b.agents.working + 1) % (b.agents.total + 1);
-        b.agents = { ...b.agents, working, waiting: Math.min(b.agents.waiting, b.agents.total - working), idle: 0 };
-        b.agents.idle = b.agents.total - b.agents.working - b.agents.waiting;
-        b.rev++;
-        const chunk = this.chunkOfBuilding(b);
-        const rev = (this.revs.get(chunk) ?? 1) + 1;
-        this.revs.set(chunk, rev);
-        this.emit({ t: 'area.patch', chunk, rev, changes: [{ id: b.id, agents: { ...b.agents }, rev: b.rev }] });
-      }
-    }
+    if (this.ticks % 15 === 0) this.changeBuilding(this.ticks / 15);
     if (this.ticks % 300 === 0) this.emit({ t: 'minimap', blocks: this.minimap() });
+    if (!this.afkSent && now - this.lastMoveAt >= FAKE_AFK_MS) {
+      this.afkSent = true;
+      this.emit({ t: 'afk' });
+    }
+  }
+
+  /** Agentes começam ou param de trabalhar e chegam likes num prédio (area.patch com o `rev` + 1). */
+  private changeBuilding(n: number): void {
+    const b = this.buildings[(n * 7) % this.buildings.length]!;
+    if (!b.agents || b.state !== 'online') return;
+    const working = (b.agents.working + 1) % (b.agents.total + 1);
+    const waiting = Math.min(b.agents.total - working, n % 2);
+    b.agents = { total: b.agents.total, working, waiting, idle: b.agents.total - working - waiting };
+    if (n % 3 === 0) b.likes++;
+    b.rev++;
+    const chunk = this.chunkOfBuilding(b);
+    const rev = (this.revs.get(chunk) ?? 1) + 1;
+    this.revs.set(chunk, rev);
+    this.emit({ t: 'area.patch', chunk, rev, changes: [{ id: b.id, agents: { ...b.agents }, likes: b.likes, rev: b.rev }] });
   }
 
   private command(c: WorldSceneCommand): void {
@@ -481,7 +584,12 @@ export class FakeWorldStream implements WorldStream {
           this.pending.push({ t: 'pos', x: this.me.x, y: this.me.y });
           return;
         }
+        const changed = c.x !== this.me.x || c.y !== this.me.y || c.dir !== this.me.dir || c.moving !== this.me.moving;
         this.me = { x: c.x, y: c.y, dir: c.dir, moving: c.moving };
+        if (changed) {
+          this.lastMoveAt = this.now();
+          this.afkSent = false;
+        }
         return;
       }
       case 'profile': {
@@ -500,7 +608,7 @@ export class FakeWorldStream implements WorldStream {
         return;
       }
       case 'greet':
-        this.pending.push({ t: 'greeting', from: ME_ID, to: c.playerId, greetingId: c.greetingId as GreetingId, until: this.now() + 5_000 });
+        this.pending.push({ t: 'greeting', from: FAKE_ME.id, to: c.playerId, greetingId: c.greetingId as GreetingId, until: this.now() + 5_000 });
         return;
       case 'resync':
         for (const ch of this.snapshot().chunks) {

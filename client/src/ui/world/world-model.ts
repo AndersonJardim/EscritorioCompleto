@@ -10,7 +10,7 @@ import { appearanceFromSeed } from '../../art/character/appearance';
 import { PLAYER_TRAITS } from '../../../../shared/world/protocol';
 import { parsePlayerTraits, traitsClash, type TraitId } from '../../../../shared/world/traits';
 import type { WorldBuildingStatus, WorldBuildingStop, WorldErrorCode, WorldLastUplink, WorldMeta, WorldServerState, WorldVisibility } from '../../net/world';
-import { UPLINK_ACK_ERRORS, type NoticeId, type WorldUplink } from '../../../../shared/world/protocol';
+import { UPLINK_ACK_ERRORS, type WorldUplink } from '../../../../shared/world/protocol';
 import { formatInt, relativeTime } from '../format';
 import { isWorldKnownErrorCode } from '../../../../shared/world/api';
 import { isIntroId } from '../../../../shared/world/intro';
@@ -308,7 +308,9 @@ export type WorldAction =
   | 'join'
   | 'leave'
   | 'sent'
-  | 'theme';
+  | 'theme'
+  /** Um comando da cena Mundo (POST /api/world/cmd) recusado pelo servidor local. */
+  | 'scene';
 
 /**
  * Texto de um erro (o `message` do servidor, em inglês, nunca aparece). O switch cobre todo WorldErrorCode (o
@@ -381,7 +383,7 @@ export function worldErrorText(raw: WorldErrorCode | string, action: WorldAction
     case 'no_stream':
       return tr('A cena Mundo perdeu a conexão com o Habblaud. Abra a cidade de novo.');
     case 'not_connected':
-      return tr('O prédio não está conectado ao Habblaud World agora (pausado, fora do mundo ou reconectando).');
+      return tr('Sem conexão com o Habblaud World agora; o Habblaud tenta de novo sozinho.');
     case 'offline':
       return tr('Sem conexão com o Habblaud.');
     case 'forbidden':
@@ -481,37 +483,6 @@ export function uplinkRejectText(code: string | undefined): string {
       return tr('A conta saiu do mundo (por este ou por outro computador): nada mais sai até você voltar ao mundo.');
     default:
       return tr('Um motivo que esta versão do Habblaud não conhece.');
-  }
-}
-
-/**
- * Texto de um aviso do servidor do mundo na cena (`notice {text}`, um id de NOTICE_IDS do protocolo); um id que esta
- * versão não conhece vira o genérico.
- */
-export function worldNoticeText(id: string): string {
-  switch (id as NoticeId) {
-    case 'ignored':
-      return tr('O mundo ainda não entende esse comando.');
-    case 'invalid':
-      return tr('O mundo recusou um comando fora do formato. Atualize o Habblaud.');
-    case 'rate_limited':
-      return tr('Comandos demais em pouco tempo: vá com calma.');
-    case 'view_required':
-      return tr('A cidade ainda não está aberta. Espere um instante.');
-    case 'not_found':
-      return tr('O que foi pedido não está mais por perto.');
-    case 'street_left':
-      return tr('Muito tempo parado: você saiu da rua. Ande para voltar.');
-    case 'chunk_full':
-      return tr('A área está cheia: só quem está mais perto aparece.');
-    case 'afk':
-      return tr('Você está ausente: o seu personagem parou.');
-    case 'server_restart':
-      return tr('O mundo vai reiniciar: a conexão cai e volta sozinha.');
-    case 'left':
-      return tr('Você saiu do mundo: o prédio só volta com "Voltar ao mundo".');
-    default:
-      return tr('Aviso do mundo.');
   }
 }
 
