@@ -165,7 +165,7 @@ interface LastRecord extends WorldLastUplink {
 }
 
 /** Motivos que param até o dono retomar (ou reabrir o Habblaud, ou entrar de novo). */
-const HARD_STOPS: readonly WorldBuildingStop[] = ['banned', 'suspended', 'update', 'other-device'];
+const HARD_STOPS: readonly WorldBuildingStop[] = ['banned', 'suspended', 'update', 'other-device', 'deleted'];
 const OPEN = 1;
 
 const isGoodbye = (v: unknown): v is GoodbyeReason => typeof v === 'string' && (GOODBYE_REASONS as readonly string[]).includes(v);

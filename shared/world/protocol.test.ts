@@ -23,8 +23,12 @@ import {
   TRAIT_IDS,
   UPLINK_ACK_ERRORS,
   UPLINK_LIMITS,
+  VISIBILITY_DEFAULTS,
+  WORLD_ERROR_CODES,
   WORLD_LOCALES,
   type AppearanceParts,
+  type Visibility,
+  type WorldBuildingPublic,
   type WorldAgentStatus,
   type WorldTheme,
   type WorldUplink,
@@ -218,5 +222,16 @@ describe('listas do protocolo', () => {
     for (const id of NOTICE_IDS) expect(id).toMatch(/^[a-z]+(_[a-z]+)*$/);
     // Os códigos da Fase 2 continuam na mesma ordem; `left` entra no fim.
     expect([...UPLINK_ACK_ERRORS]).toEqual(['schema', 'limits', 'name_pool', 'parts', 'ids', 'rate', 'internal', 'left']);
+  });
+
+  it('Fase 6: `deleted` no goodbye, `maintenance` nos erros, o aviso de inatividade e o selo "não verificado", só acrescentados', () => {
+    expect([...GOODBYE_REASONS]).toEqual(['deploy', 'other-device', 'banned', 'suspended', 'waiting', 'update', 'unauthorized', 'no_player', 'deleted']);
+    expect(WORLD_ERROR_CODES.at(-1)).toBe('maintenance');
+    expect(WORLD_ERROR_CODES.indexOf('internal')).toBe(WORLD_ERROR_CODES.length - 2);
+    // Opcionais: um corpo sem eles continua valendo, e o padrão da visibilidade não muda.
+    const v: Visibility = { ...VISIBILITY_DEFAULTS };
+    expect('notifyInactivity' in v).toBe(false);
+    const b: Pick<WorldBuildingPublic, 'unverified'> = {};
+    expect(b.unverified).toBeUndefined();
   });
 });

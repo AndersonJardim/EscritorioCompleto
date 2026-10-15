@@ -65,7 +65,7 @@ import { backoffDelay, UPLINK_TIMING, type BuildingUplink } from './uplink';
 export type Outcome<T> = WorldResult<T>;
 
 /** Paradas pedidas pelo servidor do mundo em que a cena Mundo não abre (a conexão não volta sozinha). */
-const SCENE_STOPS: readonly WorldBuildingStop[] = ['banned', 'suspended', 'update', 'other-device'];
+const SCENE_STOPS: readonly WorldBuildingStop[] = ['banned', 'suspended', 'update', 'other-device', 'deleted'];
 
 /** Avisos do prédio ao servidor do mundo (REST, com o token). */
 type BuildingCall = 'pause' | 'resume' | 'leave' | 'join';

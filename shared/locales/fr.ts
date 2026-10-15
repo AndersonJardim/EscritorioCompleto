@@ -3035,4 +3035,7 @@ export const FR: Readonly<Record<string, string>> = {
   "Você ficou um tempo parado.": "Vous êtes resté immobile un moment.",
   "O Habblaud World vai reiniciar: a conexão cai e volta sozinha.": "Habblaud World va redémarrer : la connexion coupe et revient toute seule.",
   "Sua conta saiu do mundo: o prédio volta com \"Voltar ao mundo\", em Configurações.": "Votre compte a quitté le monde : l'immeuble revient avec « Revenir dans le monde », dans Réglages.",
+  "O mundo está em manutenção; tentamos de novo em instantes.": "Le monde est en maintenance ; nous réessayons dans un instant.",
+  "Conta excluída": "Compte supprimé",
+  "A conta do Habblaud World foi excluída: o prédio e o perfil saíram do mundo e nada mais sai deste computador.": "Le compte Habblaud World a été supprimé : l'immeuble et le profil ont quitté le monde, et plus rien ne sort de cet ordinateur.",
 };

@@ -359,6 +359,8 @@ export function worldErrorText(raw: WorldErrorCode | string, action: WorldAction
       return tr('Crie o personagem primeiro.');
     case 'unavailable':
       return tr('O Habblaud World está em manutenção. Tente de novo mais tarde.');
+    case 'maintenance':
+      return tr('O mundo está em manutenção; tentamos de novo em instantes.');
     case 'not_found':
       return action === 'revoke' ? tr('Este dispositivo não está mais na conta.') : tr('O servidor do Habblaud World não encontrou o que foi pedido.');
     case 'invalid_json':
@@ -453,6 +455,8 @@ export function buildingStopView(reason: WorldBuildingStop): { label: string; de
       return { label: tr('Sem personagem'), desc: tr('O mundo não encontrou o seu personagem: crie de novo para o prédio voltar.'), toggle: null };
     case 'unauthorized':
       return { label: tr('Entre de novo'), desc: tr('O servidor do mundo não reconheceu este computador: entre de novo na conta.'), toggle: null };
+    case 'deleted':
+      return { label: tr('Conta excluída'), desc: tr('A conta do Habblaud World foi excluída: o prédio e o perfil saíram do mundo e nada mais sai deste computador.'), toggle: null };
   }
 }
 

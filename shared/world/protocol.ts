@@ -108,10 +108,11 @@ export type ReportReason = (typeof REPORT_REASONS)[number];
 
 /**
  * Por que o servidor fecha a conexão (`goodbye`). `waiting` = conta na lista de espera; `no_player` = conta aprovada
- * sem personagem; `unauthorized` = token inválido ou revogado; `update` = versão abaixo de `minVersion`.
+ * sem personagem; `unauthorized` = token inválido ou revogado; `update` = versão abaixo de `minVersion`; `deleted` = a
+ * conta foi excluída (`POST /v1/me/delete/confirm`, deste ou de outro computador): o Habblaud apaga a sessão daqui.
  */
 export const GOODBYE_REASONS = [
-  'deploy', 'other-device', 'banned', 'suspended', 'waiting', 'update', 'unauthorized', 'no_player',
+  'deploy', 'other-device', 'banned', 'suspended', 'waiting', 'update', 'unauthorized', 'no_player', 'deleted',
 ] as const;
 export type GoodbyeReason = (typeof GOODBYE_REASONS)[number];
 
@@ -219,6 +220,11 @@ export interface Visibility {
   leaderboard: boolean;
   /** Mostra as compactações de contexto (opt-in). */
   compactions: boolean;
+  /**
+   * Avisa por e-mail 3 dias antes de retirar o prédio por inatividade (seção 9). Ausente no corpo = não muda; o padrão
+   * da conta é `true`.
+   */
+  notifyInactivity?: boolean;
 }
 
 export const VISIBILITY_DEFAULTS: Readonly<Visibility> = {
@@ -306,6 +312,15 @@ export interface BuildingStateResponse { state: BuildingState }
 /** `POST /v1/me/building/join`. */
 export interface BuildingJoinResponse { state: 'joined' }
 
+/*
+ * A conta e os dados (Fase 6), com Bearer:
+ * - `POST /v1/me/delete` → `2xx {}`: manda um código de 6 dígitos ao e-mail da conta.
+ * - `POST /v1/me/delete/confirm {code}` → `2xx`: o prédio e o perfil somem do mundo na hora, as conexões da conta
+ *   recebem `goodbye: deleted` e o resto é apagado do banco em 7 dias (e dos backups em até 30); `400 invalid_code`.
+ * - `GET /v1/me/export` → `200` com o JSON dos dados da conta (acesso e portabilidade), uma vez por dia
+ *   (`429 rate_limited`).
+ */
+
 /**
  * Erros: `{error: {code, message}}`, com o `message` em inglês (cada cliente traduz pelo `code`). Os códigos abaixo
  * são os conhecidos; um código fora da lista deve virar uma mensagem genérica, nunca quebrar o cliente.
@@ -339,6 +354,7 @@ export const WORLD_ERROR_CODES = [
   'unsupported_media_type', // sem Content-Type: application/json (415)
   'method_not_allowed', // método errado para a rota (405)
   'internal', // erro do próprio servidor do mundo (500)
+  'maintenance', // o mundo está em manutenção (503; `MAINTENANCE=1`): tente de novo em instantes
 ] as const;
 export type WorldErrorCode = (typeof WORLD_ERROR_CODES)[number];
 
@@ -399,6 +415,7 @@ export interface WorldBuildingPublic {
   likes: number;
   likedByMe?: boolean;
   sinceMonth: string;         // "2026-10": só o mês de entrada no mundo
+  unverified?: true;          // selo "não verificado" (dados fora do plausível, em revisão; fora de placares e destaques)
 }
 
 export type Direction = 'n' | 's' | 'e' | 'w';
