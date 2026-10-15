@@ -1,12 +1,14 @@
 // Botão Mundo na barra do topo: troca o escritório pela cidade do Habblaud World e volta (botão Escritório ou Esc).
 // Só aparece com a cena disponível: `meta.world.scene.available` do servidor local (no modo demonstração, com a
-// conta liberada), nunca no timelapse. A cena em si é montada por app.ts (CitySceneHost); aqui fica o botão, o
+// conta liberada), pela página do próprio computador (nunca pela porta do celular) e nunca no timelapse. A cena em si é montada por app.ts (CitySceneHost); aqui fica o botão, o
 // estado "na cidade" da interface (classe `is-city` no #ui) e a ida e volta.
 import { tr } from '../../../../shared/i18n';
 import type { WorldSource } from '../../net/world';
 import type { UiComponent, UiContext } from '../context';
 import { h, setAttr, setHidden, setText, setTitle } from '../dom';
 import { ICONS } from '../icons';
+import { worldGate } from './settings-world';
+import { worldSectionMode, type WorldGate } from './world-model';
 
 /** O que a interface precisa da cena da cidade (implementado em app.ts, com a cena carregada sob demanda). */
 export interface CitySceneHost {
@@ -22,10 +24,13 @@ export interface CitySceneHost {
 
 /**
  * A cena Mundo está disponível? `meta.world.scene.available` (do servidor local: conta liberada, personagem criado, a
- * trava do terminal e sem banimento nem suspensão; no modo demonstração, o do FakeWorldApi); sem o campo, não.
+ * trava do terminal e sem banimento nem suspensão; no modo demonstração, o do FakeWorldApi; sem o campo, não) e a
+ * página aberta pelo próprio computador: o snapshot também vai ao celular, mas as rotas da cena não (como a seção do
+ * World e o selo da barra).
  */
-export function citySceneAvailable(src: WorldSource): boolean {
-  return src.meta()?.scene?.available === true;
+export function citySceneAvailable(src: WorldSource, gate: WorldGate): boolean {
+  const meta = src.meta();
+  return meta?.scene?.available === true && worldSectionMode(meta, gate) === 'active';
 }
 
 export class SceneSwitch implements UiComponent {
@@ -53,7 +58,7 @@ export class SceneSwitch implements UiComponent {
   }
 
   private available(): boolean {
-    return citySceneAvailable(this.src) && !this.ctx.store.replaying && !this.ctx.isTimelapseOpen();
+    return citySceneAvailable(this.src, worldGate(this.ctx, this.src)) && !this.ctx.store.replaying && !this.ctx.isTimelapseOpen();
   }
 
   async toggle(): Promise<void> {
