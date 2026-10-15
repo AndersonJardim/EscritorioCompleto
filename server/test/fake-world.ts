@@ -1,0 +1,198 @@
+// Servidor do Habblaud World de mentira, para os testes do lado local (server/world/): as rotas REST do contrato da
+// Fase 1, em memória, com um ALTCHA de verdade (pequeno) e o registro de cada requisição recebida.
+import { createHash, createHmac, randomBytes } from 'node:crypto';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { VISIBILITY_DEFAULTS, type Player, type PlayerInput, type Visibility, type WorldAccess } from '../../shared/world/protocol';
+
+export interface FakeRequest {
+  method: string;
+  path: string;
+  authorization?: string;
+  userAgent?: string;
+  contentType?: string;
+  body?: Record<string, unknown>;
+}
+
+interface Account {
+  email: string;
+  password: string;
+  verified: boolean;
+  access: WorldAccess;
+  code: string;
+  player?: Player;
+  locale: string;
+  invite?: string;
+}
+
+export interface FakeWorld {
+  base: string;
+  requests: FakeRequest[];
+  accounts: Map<string, Account>;
+  /** token -> {email, deviceId} (só os válidos). */
+  devices: Map<string, { email: string; deviceId: string }>;
+  /** Login exige ALTCHA (simula "muitas tentativas"). */
+  options: { loginNeedsAltcha: boolean; altchaMax: number; delayMs: number };
+  close(): Promise<void>;
+}
+
+const SECRET = 'fake-world-secret';
+export const FAKE_CODE = '123456';
+
+function sha256(s: string): string {
+  return createHash('sha256').update(s).digest('hex');
+}
+
+export async function startFakeWorld(): Promise<FakeWorld> {
+  const requests: FakeRequest[] = [];
+  const accounts = new Map<string, Account>();
+  const devices = new Map<string, { email: string; deviceId: string }>();
+  const options = { loginNeedsAltcha: false, altchaMax: 2_000, delayMs: 0 };
+  let deviceSeq = 0;
+
+  const send = (res: http.ServerResponse, status: number, body?: unknown) => {
+    if (body === undefined) {
+      res.writeHead(status);
+      res.end();
+      return;
+    }
+    const data = JSON.stringify(body);
+    res.writeHead(status, { 'Content-Type': 'application/json' });
+    res.end(data);
+  };
+  const error = (res: http.ServerResponse, status: number, code: string) => send(res, status, { error: { code, message: `fake ${code}` } });
+
+  const altchaOk = (payload: unknown): boolean => {
+    try {
+      const p = JSON.parse(Buffer.from(String(payload), 'base64').toString('utf8')) as Record<string, unknown>;
+      const signature = createHmac('sha256', SECRET).update(String(p.challenge)).digest('hex');
+      return p.algorithm === 'SHA-256' && p.signature === signature && sha256(`${p.salt}${p.number}`) === p.challenge && typeof p.took === 'number';
+    } catch {
+      return false;
+    }
+  };
+  const newDevice = (email: string) => {
+    const token = randomBytes(32).toString('base64url');
+    const deviceId = `dev_${++deviceSeq}`;
+    devices.set(token, { email, deviceId });
+    return { deviceId, token, access: accounts.get(email)!.access };
+  };
+  const me = (email: string, token: string) => {
+    const a = accounts.get(email)!;
+    const list = [...devices.entries()].filter(([, d]) => d.email === email);
+    return {
+      account: { emailMasked: `${email[0]}***${email.slice(email.indexOf('@'))}`, access: a.access, locale: a.locale, createdAt: '2026-10-15T00:00:00Z' },
+      ...(a.player ? { player: a.player } : {}),
+      devices: list.map(([t, d], i) => ({ id: d.deviceId, label: `Dispositivo ${i + 1}`, createdAt: '2026-10-15T00:00:00Z', lastSeenAt: '2026-10-15T00:00:00Z', current: t === token })),
+    };
+  };
+
+  const server = http.createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (c: Buffer) => chunks.push(c));
+    req.on('end', async () => {
+      const raw = Buffer.concat(chunks).toString('utf8');
+      let body: Record<string, unknown> | undefined;
+      try {
+        body = raw ? (JSON.parse(raw) as Record<string, unknown>) : undefined;
+      } catch {
+        return error(res, 400, 'invalid');
+      }
+      const path = (req.url ?? '/').split('?')[0];
+      const method = req.method ?? 'GET';
+      requests.push({
+        method,
+        path,
+        authorization: req.headers.authorization,
+        userAgent: req.headers['user-agent'],
+        contentType: req.headers['content-type'],
+        body,
+      });
+      if (options.delayMs) await new Promise((ok) => setTimeout(ok, options.delayMs));
+      const b = body ?? {};
+      const bearer = /^Bearer (\S+)$/.exec(req.headers.authorization ?? '')?.[1];
+      const device = bearer ? devices.get(bearer) : undefined;
+      const needAuth = path.startsWith('/v1/me') || path === '/v1/auth/logout';
+      if (needAuth && !device) return error(res, 401, 'unauthorized');
+
+      if (method === 'GET' && path === '/v1/altcha') {
+        const salt = `s${randomBytes(6).toString('hex')}?expires=${Date.now() + 600_000}`;
+        const n = Math.floor(Math.random() * options.altchaMax);
+        const challenge = sha256(`${salt}${n}`);
+        return send(res, 200, { algorithm: 'SHA-256', challenge, salt, maxnumber: options.altchaMax, signature: createHmac('sha256', SECRET).update(challenge).digest('hex') });
+      }
+      if (method === 'POST' && path === '/v1/auth/register') {
+        if (!altchaOk(b.altcha)) return error(res, 400, 'altcha_invalid');
+        if (b.tos !== 'v1' || typeof b.email !== 'string' || typeof b.password !== 'string') return error(res, 400, 'invalid');
+        if (!accounts.has(b.email)) {
+          accounts.set(b.email, { email: b.email, password: b.password, verified: false, access: 'waiting', code: FAKE_CODE, locale: String(b.locale), invite: b.invite as string | undefined });
+        }
+        return send(res, 202, {});
+      }
+      if (method === 'POST' && path === '/v1/auth/verify') {
+        const a = accounts.get(String(b.email));
+        if (!a || b.code !== a.code) return error(res, 400, 'invalid_code');
+        a.verified = true;
+        return send(res, 200, newDevice(a.email));
+      }
+      if (method === 'POST' && path === '/v1/auth/login') {
+        if (options.loginNeedsAltcha && !altchaOk(b.altcha)) return error(res, 400, 'altcha_required');
+        const a = accounts.get(String(b.email));
+        if (!a || a.password !== b.password) return error(res, 401, 'invalid_credentials');
+        if (!a.verified) return error(res, 403, 'email_not_verified');
+        return send(res, 200, newDevice(a.email));
+      }
+      if (method === 'POST' && path === '/v1/auth/logout') {
+        devices.delete(bearer!);
+        return send(res, 204);
+      }
+      if (method === 'POST' && (path === '/v1/auth/resend' || path === '/v1/auth/password/forgot')) {
+        return altchaOk(b.altcha) ? send(res, 202, {}) : error(res, 400, 'altcha_invalid');
+      }
+      if (method === 'POST' && path === '/v1/auth/password/reset') {
+        const a = accounts.get(String(b.email));
+        if (!a || b.code !== a.code) return error(res, 400, 'invalid_code');
+        a.password = String(b.password);
+        for (const [t, d] of devices) if (d.email === a.email) devices.delete(t);
+        return send(res, 204);
+      }
+      if (method === 'GET' && path === '/v1/me') return send(res, 200, me(device!.email, bearer!));
+      if (method === 'PUT' && path === '/v1/me/player') {
+        const a = accounts.get(device!.email)!;
+        const input = b as unknown as PlayerInput;
+        for (const other of accounts.values()) {
+          if (other !== a && other.player?.name.toLowerCase() === String(input.name).toLowerCase()) return error(res, 409, 'name_taken');
+        }
+        a.player = { ...input, visibility: a.player?.visibility ?? { ...VISIBILITY_DEFAULTS }, updatedAt: '2026-10-15T12:00:00Z', country: 'BR' };
+        return send(res, 200, { ...a.player, internalScore: 99 });
+      }
+      if (method === 'PUT' && path === '/v1/me/visibility') {
+        const a = accounts.get(device!.email)!;
+        const v = b as unknown as Visibility;
+        if (a.player) a.player.visibility = v;
+        return send(res, 200, v);
+      }
+      const revoke = /^\/v1\/me\/devices\/([^/]+)\/revoke$/.exec(path);
+      if (method === 'POST' && revoke) {
+        const found = [...devices.entries()].find(([, d]) => d.email === device!.email && d.deviceId === revoke[1]);
+        if (!found) return error(res, 404, 'not_found');
+        devices.delete(found[0]);
+        return send(res, 204);
+      }
+      return error(res, 404, 'not_found');
+    });
+  });
+  await new Promise<void>((ok) => server.listen(0, '127.0.0.1', ok));
+  return {
+    base: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    requests,
+    accounts,
+    devices,
+    options,
+    close: () =>
+      new Promise<void>((ok) => {
+        server.closeAllConnections();
+        server.close(() => ok());
+      }),
+  };
+}

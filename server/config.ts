@@ -56,6 +56,22 @@ export interface ServerConfig {
   remote?: RemoteConfig;
   /** Por que o acesso remoto ficou desligado quando as variáveis estão incompletas. */
   remoteWarning?: string;
+  /** Habblaud World (server/world/): conta, personagem e, nas próximas fases, o prédio no mundo. */
+  world: WorldConfig;
+}
+
+export interface WorldConfig {
+  /** HABBLAUD_WORLD diferente de 0 (false, off, no): as rotas /api/world/* existem e a interface mostra a seção. */
+  enabled: boolean;
+  /**
+   * Base HTTP(S) do servidor do mundo, sem barra no fim (de HABBLAUD_WORLD_URL; `wss://` vira `https://`). Ausente =
+   * não configurado: o recurso fica desligado e nada sai do computador. O WebSocket é a mesma origem com /v1/socket.
+   */
+  url?: string;
+  /** `--dev` ou HABBLAUD_WORLD_DEV=1: aceita também http://127.0.0.1 e ws://127.0.0.1 (servidor do mundo local). */
+  dev: boolean;
+  /** Por que HABBLAUD_WORLD_URL foi recusada (vai para o log ao iniciar). */
+  warning?: string;
 }
 
 export function isTruthy(v: string | undefined): boolean {
@@ -149,6 +165,45 @@ export function messagesOffReason(env: NodeJS.ProcessEnv, host: string, inDocker
   return terminal ? tr('mesma trava do terminal: {0}', [terminal]) : undefined;
 }
 
+/**
+ * Habblaud World a partir do ambiente. A URL só vale com `https://` ou `wss://` (o token do dispositivo nunca anda sem
+ * TLS); `http://127.0.0.1` e `ws://127.0.0.1` só no modo de desenvolvimento. Nada de caminho, usuário, senha ou
+ * parâmetros: só o endereço do servidor.
+ */
+export function parseWorldConfig(env: NodeJS.ProcessEnv, argv: string[]): WorldConfig {
+  const flag = env.HABBLAUD_WORLD?.trim();
+  const enabled = !flag || isTruthy(flag);
+  const dev = argv.includes('--dev') || isTruthy(env.HABBLAUD_WORLD_DEV);
+  const raw = env.HABBLAUD_WORLD_URL?.trim();
+  if (!enabled || !raw) return { enabled, dev };
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return { enabled, dev, warning: tr('HABBLAUD_WORLD_URL não é um endereço válido') };
+  }
+  const secure = u.protocol === 'https:' || u.protocol === 'wss:';
+  const loopback = (u.protocol === 'http:' || u.protocol === 'ws:') && u.hostname === '127.0.0.1';
+  if (!secure && !(loopback && dev)) {
+    return {
+      enabled,
+      dev,
+      warning: loopback
+        ? tr('HABBLAUD_WORLD_URL com http://127.0.0.1 só vale no modo de desenvolvimento (--dev ou HABBLAUD_WORLD_DEV=1)')
+        : tr('HABBLAUD_WORLD_URL precisa começar com https:// ou wss://'),
+    };
+  }
+  if (u.username || u.password || u.search || u.hash || (u.pathname !== '/' && u.pathname !== '')) {
+    return { enabled, dev, warning: tr('HABBLAUD_WORLD_URL deve ter só o endereço do servidor (sem caminho, usuário, senha ou parâmetros)') };
+  }
+  return { enabled, dev, url: `${secure ? 'https:' : 'http:'}//${u.host}` };
+}
+
+/** Endereço do WebSocket do mundo a partir da base HTTP(S) (ServerConfig.world.url). */
+export function worldSocketUrl(base: string): string {
+  return `${base.replace(/^http/, 'ws').replace(/\/+$/, '')}/v1/socket`;
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env, argv: string[] = process.argv): ServerConfig {
   const home = env.HOME || homedir();
   const inDocker = detectDocker(env);
@@ -178,5 +233,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, argv: string[] 
     codex: !env.HABBLAUD_CODEX?.trim() || isTruthy(env.HABBLAUD_CODEX),
     remote: remote.config,
     remoteWarning: remote.warning,
+    world: parseWorldConfig(env, argv),
   };
 }
