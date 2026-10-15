@@ -1,6 +1,8 @@
 // Cena da cidade do Habblaud World: liga o stream (net/world-stream.ts: o do servidor local ou a cidade falsa do modo
 // demonstração), o estado, o meu jogador, a câmera, o desenho, a entrada, os cartões e o minimapa. Montada por app.ts
 // quando o botão Mundo abre a cena; o stream só existe com a cena na tela (abre ao mostrar, fecha ao esconder).
+// O social leve (Fase 5: like, cumprimentos, bater na porta, perfil, "Ir para", a praça e as fachadas) fica em
+// social.ts, ligado por poucos ganchos (mensagens, snapshot, quadro, desenho, cartões e teclas).
 // O meu personagem só entra na rua com a posição que o servidor validou (`pos` do snapshot ou da mensagem): nenhum
 // `move` sai de um lugar adivinhado. Ausente (`afk`), ele fica parado onde está; parado em cima de um banco, senta.
 import * as artModule from '../../art';
@@ -21,6 +23,7 @@ import { Minimap } from './minimap';
 import { noticeText } from './notice';
 import { LocalPlayer, MoveSender, pathPoints } from './players';
 import { CityRenderer } from './scene';
+import { CitySocial } from './social';
 import { CityState, type CityEffect } from './state';
 
 const art: ArtModule = artModule;
@@ -100,7 +103,8 @@ export function createCityScene(o: CitySceneOptions): CityScene {
 
   // ------------------------------------------------------------------ DOM: cartão, minimapa, dicas, avisos
 
-  const cards = new CityCards({ showBuilding: (id) => focusBuilding(id), topInset: () => o.topInset() });
+  let social: CitySocial | null = null;
+  const cards = new CityCards({ showBuilding: (id) => focusBuilding(id), topInset: () => o.topInset(), extras: (kind, id) => social?.cardExtras(kind, id) ?? null });
   const minimap = new Minimap((tile) => {
     following = false;
     const z = camera.zoom;
@@ -120,6 +124,34 @@ export function createCityScene(o: CitySceneOptions): CityScene {
   );
   const layer = h('div', { class: 'ui-city', hidden: true }, cards.el, minimap.el, help, toast, loading);
   o.uiRoot.append(layer);
+  social = new CitySocial({
+    state: () => state,
+    renderer: () => renderer,
+    camera,
+    canvas: o.canvas,
+    send: (cmds) => stream?.send(cmds),
+    me: () => (me ? { x: me.x, y: me.y } : null),
+    cards,
+    toast: (text) => showToast(text),
+    active: () => visible,
+    teleported: () => {
+      // o teletransporte: a câmera vai junto (sem atravessar a cidade) e os chunks em volta se atualizam
+      if (!me) return;
+      following = true;
+      camera.stop();
+      const c = camera.centerFor(me.x * TILE, me.y * TILE - 12, camera.zoom);
+      camera.x = c.x;
+      camera.y = c.y;
+      myChunk = '';
+    },
+    replay: (msg) => {
+      const eff = state.apply(msg, performance.now());
+      if (eff) onEffect(eff);
+    },
+    testFireworks: () => (stream as { celebrate?: () => void } | null)?.celebrate?.(),
+  });
+  layer.append(social.el);
+  help.append(...social.helpItems());
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
   const showToast = (text: string) => {
     toast.textContent = text;
@@ -241,6 +273,7 @@ export function createCityScene(o: CitySceneOptions): CityScene {
     switch (ev.type) {
       case 'snapshot': {
         state.applySnapshot(ev.snapshot, performance.now());
+        social?.snapshot(ev.snapshot);
         placeMe();
         if (me) myChunk = '';
         // sem conexão com o servidor do mundo, nada desce: diz isso em vez de "Entrando na cidade…"
@@ -249,6 +282,8 @@ export function createCityScene(o: CitySceneOptions): CityScene {
         return;
       }
       case 'message': {
+        // o social vê a mensagem antes do estado (o valor de antes) e responde aos avisos dos comandos dele
+        if (social?.message(ev.msg, performance.now())) return;
         const eff = state.apply(ev.msg, performance.now());
         if (eff) onEffect(eff);
         return;
@@ -273,6 +308,8 @@ export function createCityScene(o: CitySceneOptions): CityScene {
   const openStream = () => {
     state = new CityState();
     renderer = new CityRenderer(o.canvas, art, camera, state);
+    renderer.fx = social;
+    social?.reset();
     me = null;
     sender = null;
     myChunk = '';
@@ -425,6 +462,7 @@ export function createCityScene(o: CitySceneOptions): CityScene {
           state.keepAround(me.x, me.y);
         }
       }
+      social?.frame(now, dt);
       const target = following && me ? camera.centerFor(me.x * TILE, me.y * TILE - 12, camera.zoom) : null;
       camera.update(Date.now(), target, dt);
       const door = me ? nearestDoor(me.x, me.y, (lot) => !!state.buildingAt(lot), 1.8) : null;
@@ -484,6 +522,7 @@ export function createCityScene(o: CitySceneOptions): CityScene {
       o.canvas.hidden = true;
       layer.hidden = true;
       cards.hide();
+      social?.hide();
       input.clearKeys();
       closeStream();
       window.removeEventListener('resize', resize);
@@ -505,6 +544,7 @@ export function createCityScene(o: CitySceneOptions): CityScene {
       camera.y = c.y;
     },
     escape() {
+      if (social?.escape()) return true;
       if (cards.open) {
         cards.hide();
         return true;
@@ -514,6 +554,7 @@ export function createCityScene(o: CitySceneOptions): CityScene {
     destroy() {
       scene.hide();
       input.destroy();
+      social?.destroy();
       layer.remove();
     },
     perf() {

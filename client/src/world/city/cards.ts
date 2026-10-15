@@ -119,6 +119,11 @@ export interface CardActions {
   showBuilding(id: string): void;
   /** Até onde vai a barra do topo (px): o cartão fica abaixo dela. */
   topInset(): number;
+  /**
+   * O que mais vai no fim do cartão (Fase 5, city/social.ts: curtir, bater, cumprimentar, bloquear, denunciar): um
+   * elemento que se atualiza sozinho, posto de volta a cada vez que o cartão é refeito.
+   */
+  extras?(kind: 'building' | 'player', id: string): HTMLElement | null;
 }
 
 /** Os dois cartões (um de cada vez), posicionados perto do ponto da tela. */
@@ -193,6 +198,8 @@ export class CityCards {
       } else rows.push(h('div', { class: 'ui-city-card__muted', text: tr('Modo discreto: o dono não mostra os agentes.') }));
       if (m.closed) rows.push(h('div', { class: 'ui-city-card__muted', text: `🔒 ${tr('Fechado a visitas')}` }));
       rows.push(h('div', { class: 'ui-city-card__row ui-city-card__foot' }, h('span', { text: `❤️ ${m.likes}` }), m.since ? h('span', { class: 'ui-city-card__since', text: tr('No mundo desde {0}', [m.since]) }) : null));
+      const extra = this.actions.extras?.('building', b.id);
+      if (extra) rows.push(extra);
       this.body.replaceChildren(...rows);
     }
     this.place(at);
@@ -232,6 +239,8 @@ export class CityCards {
         );
       } else foot.append(h('span', { class: 'ui-city-card__muted', text: m.hasBuilding ? tr('Prédio longe daqui') : tr('Ainda sem prédio') }));
       rows.push(foot);
+      const extra = this.actions.extras?.('player', p.id);
+      if (extra) rows.push(extra);
       this.body.replaceChildren(...rows);
     }
     if (at) this.place(at);
