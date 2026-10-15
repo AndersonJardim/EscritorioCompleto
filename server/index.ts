@@ -54,6 +54,7 @@ import { WorldClient } from './world/client';
 import { createWorldRoutes } from './world/http';
 import { WorldService } from './world/service';
 import { WorldSettingsStore } from './world/settings';
+import { OwnerSocial } from './world/social';
 import { BuildingTokens } from './world/tokens';
 import { BuildingUplink } from './world/uplink';
 import { WorldViewer } from './world/viewer';
@@ -92,6 +93,8 @@ updates.load();
 // sai do computador); HABBLAUD_WORLD=0 esconde tudo (rotas 404 e nada na interface).
 const worldStore = new WorldSettingsStore(join(config.dataDir, 'world.json'));
 if (config.world.enabled && config.world.url) worldStore.load();
+// O social leve do dono (world/social.ts): likes do dia, "enquanto você estava fora", batidas na porta e bloqueados.
+const worldSocial = config.world.enabled ? new OwnerSocial({ session: () => worldStore.get()?.deviceId, onChange: () => late.office?.markDirty() }) : undefined;
 const world = config.world.enabled
   ? new WorldService({
       config: config.world,
@@ -99,6 +102,7 @@ const world = config.world.enabled
       store: worldStore,
       client: config.world.url ? new WorldClient({ baseUrl: config.world.url, version: config.version }) : undefined,
       onChange: () => late.office?.markDirty(),
+      social: worldSocial,
     })
   : undefined;
 const accounts = new AccountsService({
@@ -176,6 +180,10 @@ const worldViewer = worldUplink ? new WorldViewer() : undefined;
 if (worldUplink && worldViewer) {
   worldViewer.attach(worldUplink);
   worldUplink.attachCity(worldViewer);
+}
+if (worldUplink && worldSocial) {
+  worldSocial.attach(worldUplink);
+  worldUplink.attachOwner(worldSocial);
 }
 // Terminal: só existe com bind local (ver terminalOffReason em config.ts).
 // Cada agente com o parser da ferramenta dele (o do Claude Code por padrão).
@@ -366,7 +374,7 @@ const api = createApiHandler({
   stats,
   updates,
   remote: config.remote ? { is: isRemoteRequest, allows: (f) => config.remote!.allow.has(f) } : undefined,
-  world: world ? createWorldRoutes(world, worldViewer) : undefined,
+  world: world ? createWorldRoutes(world, worldViewer, worldSocial) : undefined,
 });
 
 const server = http.createServer();

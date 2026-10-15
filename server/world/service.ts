@@ -60,6 +60,7 @@ import { log } from '../log';
 import { encodeAltchaPayload, solveAltcha } from './altcha';
 import { CLIENT_ERROR, type WorldClient, type WorldResult } from './client';
 import type { WorldSession, WorldSettingsStore } from './settings';
+import type { OwnerSocial } from './social';
 import { backoffDelay, UPLINK_TIMING, type BuildingUplink } from './uplink';
 
 export type Outcome<T> = WorldResult<T>;
@@ -90,6 +91,8 @@ export interface WorldServiceOptions {
   random?: () => number;
   /** Retomada sem resposta: primeira espera e teto (padrão: os da reconexão do uplink, 2 s → 60 s). */
   resumeBackoff?: { minMs: number; maxMs: number };
+  /** O social leve do dono (social.ts, Fase 5): lê o /v1/me e entra no meta e no status do prédio. */
+  social?: OwnerSocial;
 }
 
 /** Teto da espera pedida pelo servidor do mundo (Retry-After) entre duas tentativas da retomada. */
@@ -173,7 +176,7 @@ export class WorldService {
   /** OfficeSnapshot.meta.world. Sem HABBLAUD_WORLD_URL, `enabled: false`: o recurso está desligado e nada aparece. */
   meta(): WorldMeta {
     const m: WorldMeta = { enabled: this.o.config.enabled && this.configured, configured: this.configured, state: this.state() };
-    if (this.uplink && this.hasBuilding()) m.building = this.uplink.meta();
+    if (this.uplink && this.hasBuilding()) m.building = { ...this.uplink.meta(), ...this.o.social?.meta() };
     // A cena Mundo (botão Mundo da barra): com a conta aprovada e o personagem criado; `available` pede ainda a trava do
     // terminal (as rotas da cena exigem) e a conexão possível: conta banida ou suspensa, versão recusada ou o prédio
     // conectado em outro computador, a cidade não abre. Pausado ou fora do mundo, abre (anda-se com o prédio apagado).
@@ -591,6 +594,7 @@ export class WorldService {
     this.me = me;
     this.meToken = s.token;
     this.lastError = undefined;
+    this.o.social?.fromMe(me, this.lastFetchAt);
     if (me.left === true && !s.left && seq === this.joinSeq) this.leftElsewhere();
     const access = me.account.access;
     if (s.access !== access || !sameJson(s.player, me.player)) {
@@ -634,7 +638,9 @@ export class WorldService {
       if (me) st.devices = me.devices;
     }
     if (this.lastError) st.lastError = this.lastError;
-    if (this.uplink && this.hasBuilding()) st.building = this.uplink.status();
+    if (this.uplink && this.hasBuilding()) st.building = { ...this.uplink.status(), ...this.o.social?.status() };
+    const blocked = me ? this.o.social?.blocked() : undefined;
+    if (blocked) st.blocked = blocked;
     const theme = this.o.store.getTheme();
     if (theme !== 'auto') st.theme = theme;
     return st;

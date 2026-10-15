@@ -45,6 +45,8 @@ interface Account {
   left?: boolean;
   /** Quantas vezes voltou ao mundo (POST /v1/me/building/join). */
   buildingJoined?: number;
+  /** Campos a mais no GET /v1/me (Fase 5: `building` com likes do dia, código e resumo; `blocked`). */
+  meExtra?: Record<string, unknown>;
 }
 
 /** Uma conexão do WebSocket de mentira. */
@@ -156,6 +158,7 @@ export async function startFakeWorld(): Promise<FakeWorld> {
       ...(a.player ? { player: a.player } : {}),
       left: !!a.left,
       devices: list.map(([t, d], i) => ({ id: d.deviceId, label: `Dispositivo ${i + 1}`, createdAt: '2026-10-15T00:00:00Z', lastSeenAt: '2026-10-15T00:00:00Z', current: t === token })),
+      ...a.meExtra,
     };
   };
 

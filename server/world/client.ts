@@ -45,6 +45,7 @@ import {
 } from '../../shared/world/protocol';
 import { isTraitId } from '../../shared/world/traits';
 import { parseAltchaChallenge } from './altcha';
+import { parseBlocked, parseMeBuilding } from './social';
 import { DEVICE_ID_RE, TOKEN_RE } from './settings';
 
 export type WorldResult<T> =
@@ -95,7 +96,7 @@ export function parseVisibility(raw: unknown): Visibility | undefined {
   if (!v || (v.mode !== 'live' && v.mode !== 'discreet')) return undefined;
   const keys = ['closed', 'hideCountry', 'tokensVisible', 'leaderboard', 'compactions'] as const;
   if (!keys.every((k) => typeof v[k] === 'boolean')) return undefined;
-  return {
+  const out: Visibility = {
     mode: v.mode,
     closed: v.closed as boolean,
     hideCountry: v.hideCountry as boolean,
@@ -103,6 +104,12 @@ export function parseVisibility(raw: unknown): Visibility | undefined {
     leaderboard: v.leaderboard as boolean,
     compactions: v.compactions as boolean,
   };
+  // "Bater na porta" (Fase 5): opcional; ausente no PUT = o servidor do mundo não muda.
+  if (v.knocks !== undefined) {
+    if (typeof v.knocks !== 'boolean') return undefined;
+    out.knocks = v.knocks;
+  }
+  return out;
 }
 
 export function parseDeviceAuth(raw: unknown): DeviceAuth | undefined {
@@ -162,6 +169,11 @@ export function parseMe(raw: unknown): MeResponse | undefined {
   if (player) me.player = player;
   // Saiu do mundo (deste ou de outro computador) e ainda não voltou: só o `true` vale.
   if (v.left === true) me.left = true;
+  // O prédio (likes do dia, código e resumo da Fase 5) e quem a conta bloqueou.
+  const building = parseMeBuilding(v.building);
+  if (building) me.building = building;
+  const blocked = parseBlocked(v.blocked);
+  if (blocked) me.blocked = blocked;
   return me;
 }
 
