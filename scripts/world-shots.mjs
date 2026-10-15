@@ -1,8 +1,8 @@
 // Capturas da seção do Habblaud World no modo demonstração (?mock=1&world=approved: só dados fictícios do
 // FakeWorldApi, nada do escritório de verdade): o cartão "Seu prédio" (docs/screenshots/world-predio.png), a janela
 // "Ver o que foi enviado" (docs/screenshots/world-enviado.png) e a cidade de mentira (&scene=city: só prédios e
-// jogadores fictícios de client/src/world/city/fake-stream.ts) no fim da tarde (world-cidade.png) e o cartão de um
-// prédio (world-cartao.png). Sobe o Vite sozinho (ou usa --url de um Habblaud já rodando) e fotografa com o Chromium
+// jogadores fictícios do FakeWorldStream de client/src/net/world-stream.ts) no fim da tarde (world-cidade.png) e o
+// cartão de um prédio (world-cartao.png). Sobe o Vite sozinho (ou usa --url de um Habblaud já rodando) e fotografa com o Chromium
 // headless do Playwright, sem tocar no navegador de quem roda.
 //
 // Uso: npm run shots:world [-- --url http://localhost:4747] [--out docs/screenshots] [--chromium /caminho/do/chrome]

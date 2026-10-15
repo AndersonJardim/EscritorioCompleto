@@ -43,7 +43,7 @@ mundo e o seu prédio entra na cidade. Pela conexão sai **só** isto:
 | --- | --- | --- |
 | Primeira mensagem da conexão (`hello`) | O `token` do dispositivo, a `version` do Habblaud, o `build` (`commit` do código em uso e `dirty`, a marca de "cópia modificada") e o `locale` da interface (`pt-BR`, `en`, `es` ou `fr`) | Autenticar, saber se é uma versão oficial e mandar os avisos no seu idioma. O token vai só aqui, nunca na URL; o idioma não vai no pacote do prédio. Nunca o caminho da pasta nem nada da máquina |
 | O pacote do prédio | Ao conectar e, depois, quando o escritório muda: no máximo um a cada 5 segundos, e nada se o pacote não mudou | É o prédio ao vivo |
-| Sinal de vida (`ping`) | A cada 30 segundos, sem conteúdo | Para o prédio ficar aceso enquanto o Habblaud está aberto (pausado ou fora do mundo, não acende nada: só mantém a conexão da cena Mundo) |
+| Sinal de vida (`ping`, e o `pong` quando o servidor pergunta) | A cada 30 segundos, sem conteúdo | Para o prédio ficar aceso enquanto o Habblaud está aberto (pausado ou fora do mundo, não acende nada: só mantém a conexão da cena Mundo) |
 | Cena Mundo aberta ou fechada (`view` e `view.off`) | Ao abrir e ao fechar a cidade no navegador, sem conteúdo | Para o servidor mandar o pedaço da cidade em volta do seu personagem só enquanto você olha; com a cena fechada, nada desce |
 | Os passos do seu personagem (`move`) | Enquanto você anda na cidade (no máximo 5 por segundo): a posição na cidade (`x`, `y`, em tiles), a direção (`dir`: `n`, `s`, `e` ou `w`) e se está andando (`moving`) | É o seu personagem na rua; a posição é na cidade do mundo, nunca nada do escritório. Com a aba em segundo plano, um passo parado a cada 30 s |
 | Pedido de área de novo (`resync`) | Quando chega uma mudança de prédio fora de ordem: só o id do pedaço da cidade (`chunk`) | Para o seu Habblaud mostrar os prédios certos |
@@ -164,8 +164,8 @@ exemplo). Quem não quiser nem isso usa o modo discreto ou pausa.
   para todos e o lote fica guardado. **Retomar** volta a enviar (sem resposta do servidor, o Habblaud tenta avisar de
   novo).
 - **Pausado: seu prédio está apagado, mas você pode andar pela cidade.** Com a cena Mundo aberta, a conexão continua
-  (ou abre) levando só a primeira mensagem (`hello`), o sinal de vida e os comandos da cena (`view`, `view.off`,
-  `move`, `profile`): nenhum pacote do prédio sai, e o sinal de vida não acende o prédio. Fechada a cena, a conexão
+  (ou abre) levando só a primeira mensagem (`hello`), o sinal de vida (`ping`/`pong`) e os comandos da cena (`view`,
+  `view.off`, `move`, `profile`, `resync`): nenhum pacote do prédio sai, e o sinal de vida não acende o prédio. Fechada a cena, a conexão
   fecha e nada sai. Fora do mundo vale o mesmo.
 - **Sair do mundo** para o envio do pacote e só responde depois que o servidor do mundo retira o prédio e libera o
   lote. A conta e o personagem continuam (dá para andar pela cidade, como pausado); nenhum pacote do prédio sai até

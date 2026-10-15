@@ -93,7 +93,8 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
   ou **Escritório** voltam; Configurações continua aberta na cidade, e o escritório para de desenhar enquanto isso. A cena é carregada só quando abre. **Pausado ou fora do
   mundo, seu prédio fica apagado, mas você pode andar pela cidade**: com a cena aberta, a conexão leva só a primeira
   mensagem, o sinal de vida e os comandos da cena, nunca o pacote do prédio, e fecha junto com a cena. Conta banida ou
-  suspensa (ou o prédio parado por versão antiga ou por outro computador): o botão Mundo some. No modo demonstração,
+  suspensa (ou o prédio parado por versão antiga ou por outro computador): o botão Mundo some; ele também só aparece
+  pela página do próprio computador (nunca pela porta do celular nem sem o acesso só local). No modo demonstração,
   `?mock=1&world=approved&scene=city` abre uma cidade de mentira (20 prédios, o seu no lote (3,1), 5 pessoas andando e
   uma sentada num banco da praça; `&perf=N` enche N lotes); `npm run shots:world` também fotografa
   `docs/screenshots/world-cidade.png` e `world-cartao.png`.
