@@ -15,8 +15,9 @@
 //   GET  /api/world/devices                  → {devices: DeviceInfo[]}
 //   POST /api/world/devices/:id/revoke       {} → 204 (o próprio dispositivo: sai daqui também)
 //   PUT  /api/world/theme                    {theme: WorldThemeChoice} → 200 {theme} (com ou sem conta: fica em world.json)
-//   POST /api/world/pause                    {} → 200 WorldStatus (fecha o uplink antes de responder)
-//   POST /api/world/resume                   {} → 200 WorldStatus (reabre o uplink)
+//   POST /api/world/pause                    {} → 200 WorldStatus (fecha o uplink antes de responder; avisa
+//                                                POST /v1/me/building/pause, documentada em protocol.ts)
+//   POST /api/world/resume                   {} → 200 WorldStatus (avisa POST /v1/me/building/resume e reabre o uplink)
 //   GET  /api/world/last-uplink              → WorldLastUplink | {} (o que foi enviado por último, exato)
 //
 // Erros: {error: {code, message?, retryAfter?}} com o status do servidor do mundo quando vêm de lá (códigos em

@@ -100,6 +100,8 @@ export class WorldService {
   private pollTimer?: ReturnType<typeof setTimeout>;
   private stopped = false;
   private uplink?: BuildingUplink;
+  /** Pausa e retomada chegam ao servidor do mundo na ordem em que foram pedidas (uma por vez). */
+  private buildingQueue: Promise<void> = Promise.resolve();
 
   constructor(private readonly o: WorldServiceOptions) {
     this.now = o.now ?? Date.now;
@@ -167,7 +169,7 @@ export class WorldService {
     if (!s.paused) this.o.store.update({ paused: true });
     await this.uplink?.pause();
     this.o.onChange?.();
-    void this.buildingCall('pause', s.token);
+    void this.queueBuilding('pause', s.token);
     return { ok: true, status: 200, data: this.compose() };
   }
 
@@ -177,8 +179,9 @@ export class WorldService {
     if (!s) return { ok: false, status: 401, code: 'not_logged_in' };
     if (s.paused) this.o.store.update({ paused: undefined });
     this.o.onChange?.();
-    // O servidor do mundo não acende um prédio pausado com o sinal de vida: o resume vai antes de reconectar.
-    void this.buildingCall('resume', s.token).finally(() => this.uplink?.resume());
+    // O servidor do mundo não acende um prédio pausado com o sinal de vida: o resume vai (depois de uma pausa ainda
+    // a caminho) antes de reconectar.
+    void this.queueBuilding('resume', s.token).finally(() => this.uplink?.resume());
     return { ok: true, status: 200, data: this.compose() };
   }
 
@@ -495,6 +498,13 @@ export class WorldService {
   private changed(): void {
     this.o.onChange?.();
     this.uplink?.sync();
+  }
+
+  /** Põe o aviso de pausa ou retomada na fila: um "pausar, retomar" rápido nunca chega invertido ao servidor. */
+  private queueBuilding(what: 'pause' | 'resume', token: string): Promise<void> {
+    const run = this.buildingQueue.then(() => this.buildingCall(what, token));
+    this.buildingQueue = run.catch(() => undefined);
+    return run;
   }
 
   /** Avisa o servidor do mundo da pausa ou da retomada (sem prédio lá ainda, 404: tudo bem). */

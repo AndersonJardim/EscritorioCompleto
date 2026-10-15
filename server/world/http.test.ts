@@ -560,6 +560,28 @@ describe('o prédio no mundo (uplink) pelas rotas', () => {
     expect(JSON.parse(readFileSync(s.file, 'utf8'))).toEqual({ theme: 'christmas' });
   });
 
+  it('pausar e retomar em seguida: o servidor do mundo recebe na ordem, e o prédio fica aceso', async () => {
+    const s = await start({ uplink: true });
+    const w = s.world!;
+    s.office.addMain({ id: '.claude:7', account: '.claude', sessionId: 'sess-7', cwd: '/p/a', role: 'Agente principal', startedAt: Date.now(), status: 'working' });
+    await call(s.base, 'POST', '/api/world/register', { email: EMAIL, password: PASSWORD });
+    await call(s.base, 'POST', '/api/world/verify', { email: EMAIL, code: FAKE_CODE });
+    await call(s.base, 'PUT', '/api/world/character', CHARACTER);
+    w.accounts.get(EMAIL)!.access = 'approved';
+    await call(s.base, 'GET', '/api/world/status?refresh=1');
+    await waitFor(() => w.ws.uplinks.length === 1, 'primeira remessa');
+    // A resposta da pausa demora: sem a fila, o resume chegaria antes e o prédio ficaria pausado lá.
+    w.options.pauseDelayMs = 80;
+    await call(s.base, 'POST', '/api/world/pause', {});
+    await call(s.base, 'POST', '/api/world/resume', {});
+    await waitFor(() => w.ws.uplinks.length === 2, 'de volta');
+    // Espera a pausa atrasada terminar do lado do servidor.
+    await new Promise((ok) => setTimeout(ok, 150));
+    const order = w.requests.filter((r) => r.path.startsWith('/v1/me/building/')).map((r) => r.path);
+    expect(order).toEqual(['/v1/me/building/pause', '/v1/me/building/resume']);
+    expect(w.accounts.get(EMAIL)!.buildingPaused).toBe(false);
+  });
+
   it('sem conta: tema grava, pausa e retomada pedem a conta, última remessa vazia', async () => {
     const s = await start({ uplink: true });
     expect((await call(s.base, 'PUT', '/api/world/theme', { theme: 'halloween' })).body).toEqual({ theme: 'halloween' });

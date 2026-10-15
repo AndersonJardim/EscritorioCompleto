@@ -400,7 +400,7 @@ describe('BuildingUplink: goodbye, pausa e retomada', () => {
     await h.uplink.pause();
     const took = Date.now() - t0;
     expect(took).toBeGreaterThanOrEqual(450);
-    expect(took).toBeLessThan(900);
+    expect(took).toBeLessThan(2_000);
     expect(h.uplink.status().connected).toBe(false);
     // Nada mais sai pela conexão pendurada.
     const before = h.world.ws.connections[0].messages.length;

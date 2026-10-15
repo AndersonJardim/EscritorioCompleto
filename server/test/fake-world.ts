@@ -91,8 +91,8 @@ export interface FakeWorld {
   accounts: Map<string, Account>;
   /** token -> {email, deviceId} (só os válidos). */
   devices: Map<string, { email: string; deviceId: string }>;
-  /** Login exige ALTCHA (simula "muitas tentativas"). */
-  options: { loginNeedsAltcha: boolean; altchaMax: number; delayMs: number };
+  /** Login exige ALTCHA (simula "muitas tentativas"); `pauseDelayMs` atrasa só a resposta de /v1/me/building/pause. */
+  options: { loginNeedsAltcha: boolean; altchaMax: number; delayMs: number; pauseDelayMs: number };
   close(): Promise<void>;
 }
 
@@ -107,7 +107,7 @@ export async function startFakeWorld(): Promise<FakeWorld> {
   const requests: FakeRequest[] = [];
   const accounts = new Map<string, Account>();
   const devices = new Map<string, { email: string; deviceId: string }>();
-  const options = { loginNeedsAltcha: false, altchaMax: 2_000, delayMs: 0 };
+  const options = { loginNeedsAltcha: false, altchaMax: 2_000, delayMs: 0, pauseDelayMs: 0 };
   let deviceSeq = 0;
 
   const send = (res: http.ServerResponse, status: number, body?: unknown) => {
@@ -234,6 +234,7 @@ export async function startFakeWorld(): Promise<FakeWorld> {
       }
       if (method === 'POST' && (path === '/v1/me/building/pause' || path === '/v1/me/building/resume')) {
         const a = accounts.get(device!.email)!;
+        if (path.endsWith('/pause') && options.pauseDelayMs) await new Promise((ok) => setTimeout(ok, options.pauseDelayMs));
         a.buildingPaused = path.endsWith('/pause');
         return send(res, 200, { state: a.buildingPaused ? 'paused' : 'online' });
       }
