@@ -211,9 +211,11 @@ describe('listas do protocolo', () => {
     expect(PLAYER_NAME_LIMITS).toEqual({ min: 3, max: 20 });
   });
 
-  it('Fase 3: os ids dos avisos (o `text` do notice) e o `left` do ack, só acrescentados', () => {
+  it('Fases 3 e 4: os ids dos avisos (o `text` do notice) e o `left` do ack, só acrescentados', () => {
     expect([...NOTICE_IDS]).toEqual([
       'ignored', 'invalid', 'rate_limited', 'view_required', 'not_found', 'street_left', 'chunk_full', 'afk', 'server_restart', 'left',
+      // Fase 4 (a porta de um prédio): só no fim.
+      'too_far', 'closed', 'blocked', 'full',
     ]);
     for (const id of NOTICE_IDS) expect(id).toMatch(/^[a-z]+(_[a-z]+)*$/);
     // Os códigos da Fase 2 continuam na mesma ordem; `left` entra no fim.

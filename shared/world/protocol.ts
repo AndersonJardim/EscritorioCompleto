@@ -138,6 +138,10 @@ export const NOTICE_IDS = [
   'afk', //            muito tempo sem comando: o personagem parou
   'server_restart', // o servidor do mundo vai reiniciar: a conexão cai e volta sozinha
   'left', //           a conta saiu do mundo: o prédio só volta com "Voltar ao mundo"
+  'too_far', //        `enter` longe da porta (mais de 2 tiles de `lotDoor(lot).front`, pela posição validada)
+  'closed', //         `enter` num prédio fechado a visitas (ou o dono fechou com você dentro: você sai)
+  'blocked', //        `enter` num prédio de quem você bloqueou ou que te bloqueou (ou o bloqueio veio com você dentro)
+  'full', //           `enter` num prédio com 20 visitantes (lotação)
 ] as const;
 export type NoticeId = (typeof NOTICE_IDS)[number];
 
@@ -278,6 +282,8 @@ export interface MeBuilding {
   likes: number;
   /** "2026-10": só o mês de entrada no mundo. */
   firstOnlineMonth: string;
+  /** Visitantes dentro do prédio agora (o dono vendo o próprio prédio não conta). */
+  visitors?: number;
 }
 
 /** `GET /v1/me`. */
@@ -421,11 +427,15 @@ export interface WorldPlayerPublic {
   greeting?: { id: GreetingId; until: number };
 }
 
-/** Interior de um prédio (só para quem está dentro). */
+/**
+ * Interior de um prédio (só para quem está dentro), montado do último pacote aceito (só em memória; depois de um
+ * reinício do servidor, sem andares até o próximo pacote). Apagado (`away`, também o pausado): os andares só com o id e
+ * o rótulo, `agents: []`. Modo discreto: `building.discreet: true` e `agents: []` em todos os andares.
+ */
 export interface WorldBuildingDetail {
   building: WorldBuildingPublic;
   floors: Array<{ id: string; label: string /* id do nome fictício ("ipe"), traduzido no cliente */; agents: WorldAgent[] }>;
-  visitors: number;           // só a contagem na v1
+  visitors: number;           // só a contagem na v1 (o dono vendo o próprio prédio não conta)
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -451,9 +461,20 @@ export interface UplinkMessage { t: 'uplink'; uplink: WorldUplink }
 export interface ViewMessage { t: 'view' }
 /** A cena Mundo fechou: o jogador sai da rua e nenhuma área nem jogador desce mais (até o próximo `view`). */
 export interface ViewOffMessage { t: 'view.off' }
-export interface ResyncMessage { t: 'resync'; chunk?: string }
+/** `chunk`: a `area` inteira de um chunk assinado (sem nada: todas); `building`: o `building` inteiro do prédio onde está. */
+export interface ResyncMessage { t: 'resync'; chunk?: string; building?: string }
 export interface MoveMessage { t: 'move'; x: number; y: number; dir: Direction; moving: boolean }
+/**
+ * Entrar num prédio: com a cena aberta e a até 2 tiles de `lotDoor(lot).front` (posição validada; o servidor dá 1 de
+ * folga). Recusa: `notice` `not_found`, `too_far`, `closed`, `blocked` ou `full` (20 visitantes). O próprio prédio
+ * entra de qualquer lugar ("ver como os outros veem"), fechado ou cheio. Já dentro de outro: sai dele antes.
+ */
 export interface EnterMessage { t: 'enter'; buildingId: string }
+/**
+ * Sair do prédio: o servidor responde `pos` (a calçada em frente à porta) e o jogador volta à rua. Dentro do prédio,
+ * qualquer `pos` quer dizer "você está na rua de novo" (saiu, ou foi posto para fora com um `notice`: `closed`,
+ * `blocked`, `not_found`).
+ */
 export interface LeaveMessage { t: 'leave' }
 export interface LikeMessage { t: 'like' | 'unlike'; buildingId: string }
 export interface GreetMessage { t: 'greet'; playerId: string; greetingId: GreetingId }
@@ -522,7 +543,15 @@ export interface PlayersMessage {
 }
 export interface PlayerJoinMessage { t: 'player.join'; player: WorldPlayerPublic }
 export interface PlayerLeaveMessage { t: 'player.leave'; id: string }
+/**
+ * Ao entrar (e no `resync {building}`): o interior inteiro. Substitui tudo, inclusive o `rev` (mesmo menor). Enquanto
+ * o jogador está dentro, nenhuma `area`, `players` nem `minimap` desce (e os outros o veem sair da rua).
+ */
 export interface BuildingMessage { t: 'building'; rev: number; detail: WorldBuildingDetail }
+/**
+ * Mudança no interior, na hora: a cada pacote aceito do dono que muda algo (`floors` inteiro, `building` inteiro) e a
+ * cada visitante que entra ou sai (só `visitors`). `rev` próprio do prédio, de 1 em 1; salto → `resync {building}`.
+ */
 export interface BuildingPatchMessage {
   t: 'building.patch';
   rev: number;
@@ -530,6 +559,8 @@ export interface BuildingPatchMessage {
   visitors?: number;
   building?: WorldBuildingPublic; // mudou o prédio (ficou discreto, apagado, fechado...): o cartão inteiro de novo
 }
+/** Para o dono, na conexão do pacote: quantos visitantes há no prédio agora, a cada mudança (nada se fechado a visitas). */
+export interface VisitorsMessage { t: 'visitors'; count: number }
 export interface AfkMessage { t: 'afk' }
 /** Correção do servidor: a posição válida do jogador (no `view` e quando um `move` é recusado); o cliente obedece. */
 export interface PosMessage { t: 'pos'; x: number; y: number }
@@ -551,6 +582,7 @@ export type ServerMessage =
   | PlayerLeaveMessage
   | BuildingMessage
   | BuildingPatchMessage
+  | VisitorsMessage
   | AfkMessage
   | PosMessage
   | LikeUpdateMessage
