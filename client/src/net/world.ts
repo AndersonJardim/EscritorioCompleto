@@ -2,6 +2,10 @@
 // servidor do mundo; o token do dispositivo nunca chega ao navegador) e um FakeWorldApi para o modo demonstração
 // (?mock=1&world=...) e para os testes. Erros chegam como `{error: {code}}`; a interface traduz o código
 // (ui/world/world-model.ts) e nunca mostra o `message` do servidor.
+//
+// Fase 2 (prédio no mundo): `building` em meta.world e no status, GET /api/world/last-uplink (a última remessa, para
+// "Ver o que foi enviado"), POST /api/world/pause e /resume e PUT /api/world/theme. Os tipos do prédio ficam aqui
+// enquanto o servidor local não os publica em shared/world/api.ts (mesmo formato do contrato da Fase 2).
 import type { AppearanceParts } from '../../../shared/appearance';
 import type { Locale } from '../../../shared/i18n';
 import type { OfficeSnapshot } from '../../../shared/types';
@@ -9,13 +13,55 @@ import { WORLD_KNOWN_ERROR_CODES, type WorldKnownErrorCode } from '../../../shar
 import type { TraitId } from '../../../shared/world/traits';
 import type { IntroId } from '../../../shared/world/intro';
 import { parsePlayerName, playerNameKey } from '../../../shared/world/names-rules';
+import type { WorldTheme, WorldUplink } from '../../../shared/world/protocol';
+import { seasonalThemeFor } from '../world/api';
 import { emailLooksValid, passwordProblem, traitsValid, DEFAULT_VISIBILITY } from '../ui/world/world-model';
 
 export type WorldServerState = 'off' | 'logged_out' | 'waiting' | 'approved';
 export type WorldAccess = 'waiting' | 'approved';
 
-/** OfficeSnapshot.meta.world: o que a interface precisa para decidir se o World aparece. */
-export type WorldMeta = NonNullable<OfficeSnapshot['meta']['world']>;
+/**
+ * O prédio no mundo, como o snapshot conta (`meta.world.building`): só com a conta aprovada. Nada do escritório:
+ * contagens e o estado da conexão.
+ */
+export interface WorldBuildingMeta {
+  /** O WebSocket com o servidor do mundo está aberto: o prédio está aceso. */
+  connected: boolean;
+  /** Pausado aqui: nada sai do computador e o prédio fica apagado no mundo. */
+  paused: boolean;
+  /** Andares (salas com sessão aberta) da última remessa. */
+  floors: number;
+  /** Agentes da última remessa. */
+  agents: number;
+  /** Quando saiu a última remessa (hora deste computador, em ms). */
+  lastUplinkAt?: number;
+}
+
+/** Resposta do mundo a uma remessa: aceita, ou recusada com o código do motivo (`schema`, `limits`, `rate`...). */
+export interface WorldUplinkAck {
+  ok: boolean;
+  error?: string;
+}
+
+/** `building` do GET /api/world/status: o mesmo do snapshot e a resposta do mundo à última remessa. */
+export interface WorldBuildingStatus extends WorldBuildingMeta {
+  lastAck?: WorldUplinkAck;
+}
+
+/** GET /api/world/last-uplink: a última remessa (o objeto exato que foi para o fio), o tamanho em bytes e a resposta. */
+export interface WorldLastUplink {
+  at: number;
+  bytes: number;
+  uplink: WorldUplink;
+  ack?: WorldUplinkAck & { at?: number };
+}
+
+/** Tema do prédio (PUT /api/world/theme): a escolha de Aparência; o servidor local resolve o automático pela data. */
+export type WorldThemeChoice = 'auto' | WorldTheme;
+export const WORLD_THEME_CHOICES: readonly WorldThemeChoice[] = ['auto', 'none', 'halloween', 'christmas'];
+
+/** OfficeSnapshot.meta.world: o que a interface precisa para decidir se o World aparece (e o prédio, na Fase 2). */
+export type WorldMeta = NonNullable<OfficeSnapshot['meta']['world']> & { building?: WorldBuildingMeta };
 
 export interface WorldVisibility {
   mode: 'live' | 'discreet';
@@ -59,6 +105,8 @@ export interface WorldStatus {
   devices?: WorldDevice[];
   /** Último erro da conexão com o mundo (código), se houver. */
   lastError?: string;
+  /** O prédio (conta aprovada): conexão, pausa, contagens e a resposta à última remessa. */
+  building?: WorldBuildingStatus;
 }
 
 export interface WorldCharacterInput {
@@ -91,6 +139,14 @@ export interface WorldClient {
   saveVisibility(body: WorldVisibility): Promise<WorldResult>;
   devices(): Promise<WorldResult<WorldDevice[]>>;
   revokeDevice(id: string): Promise<WorldResult>;
+  /** A última remessa; `null` = nada saiu deste computador ainda. */
+  lastUplink(): Promise<WorldResult<WorldLastUplink | null>>;
+  /** Para o envio na hora (o servidor local fecha a conexão antes de responder): o prédio apaga. */
+  pause(): Promise<WorldResult<{ paused: boolean }>>;
+  /** Volta a enviar: o prédio acende de novo. */
+  resume(): Promise<WorldResult<{ paused: boolean }>>;
+  /** O tema escolhido em Aparência também vale para o prédio. */
+  setTheme(theme: WorldThemeChoice): Promise<WorldResult>;
 }
 
 // ------------------------------------------------------------------ leitura defensiva
@@ -102,11 +158,57 @@ export function readWorldMeta(snap: OfficeSnapshot | null | undefined): WorldMet
   const w = snap?.meta.world as Partial<WorldMeta> | undefined;
   if (!w || typeof w !== 'object' || typeof w.enabled !== 'boolean') return undefined;
   const state = STATES.includes(w.state as WorldServerState) ? (w.state as WorldServerState) : 'off';
-  return { enabled: w.enabled, configured: w.configured === true, state };
+  const out: WorldMeta = { enabled: w.enabled, configured: w.configured === true, state };
+  const building = parseBuilding(w.building);
+  if (building) out.building = building;
+  return out;
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
+function count(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0;
+}
+
+function epochMs(v: unknown): number | undefined {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : undefined;
+}
+
+function parseAck(v: unknown): (WorldUplinkAck & { at?: number }) | undefined {
+  if (!isObject(v) || typeof v.ok !== 'boolean') return undefined;
+  const ack: WorldUplinkAck & { at?: number } = { ok: v.ok };
+  if (!v.ok) ack.error = typeof v.error === 'string' && v.error ? v.error : 'unknown';
+  const at = epochMs(v.at);
+  if (at) ack.at = at;
+  return ack;
+}
+
+/** `building` de meta.world ou do status, conferido (corpo torto: sem prédio). */
+export function parseBuilding(v: unknown): WorldBuildingStatus | undefined {
+  if (!isObject(v)) return undefined;
+  const b: WorldBuildingStatus = { connected: v.connected === true, paused: v.paused === true, floors: count(v.floors), agents: count(v.agents) };
+  const at = epochMs(v.lastUplinkAt);
+  if (at) b.lastUplinkAt = at;
+  const ack = parseAck(v.lastAck);
+  if (ack) b.lastAck = ack.ok ? { ok: true } : { ok: false, error: ack.error };
+  return b;
+}
+
+/**
+ * Corpo do GET /api/world/last-uplink: `{}` (nada saiu ainda) vira null; fora do formato, undefined. O `uplink` passa
+ * como veio: a tela mostra exatamente o que o servidor local guardou.
+ */
+export function parseLastUplink(v: unknown): WorldLastUplink | null | undefined {
+  if (!isObject(v)) return undefined;
+  if (v.at === undefined && v.uplink === undefined) return null;
+  const at = epochMs(v.at);
+  if (!at || typeof v.bytes !== 'number' || !Number.isFinite(v.bytes) || !isObject(v.uplink)) return undefined;
+  const out: WorldLastUplink = { at, bytes: Math.max(0, Math.floor(v.bytes)), uplink: v.uplink as unknown as WorldUplink };
+  const ack = parseAck(v.ack);
+  if (ack) out.ack = ack;
+  return out;
 }
 
 function parseDevices(v: unknown): WorldDevice[] | null {
@@ -133,6 +235,8 @@ export function parseWorldStatus(v: unknown): WorldStatus | null {
   const devices = v.devices === undefined ? null : parseDevices(v.devices);
   if (devices) out.devices = devices;
   if (typeof v.lastError === 'string' && v.lastError) out.lastError = v.lastError;
+  const building = parseBuilding(v.building);
+  if (building) out.building = building;
   return out;
 }
 
@@ -228,6 +332,28 @@ export class HttpWorldApi implements WorldClient {
   revokeDevice(id: string) {
     return this.done(this.call('POST', `/devices/${encodeURIComponent(id)}/revoke`));
   }
+  async lastUplink(): Promise<WorldResult<WorldLastUplink | null>> {
+    const r = await this.call<unknown>('GET', '/last-uplink');
+    if (!r.ok) return r;
+    const last = parseLastUplink(r.data);
+    return last === undefined ? { ok: false, code: 'unknown', status: 200 } : { ok: true, data: last };
+  }
+  pause() {
+    return this.paused('/pause', true);
+  }
+  resume() {
+    return this.paused('/resume', false);
+  }
+  setTheme(theme: WorldThemeChoice) {
+    return this.done(this.call('PUT', '/theme', { theme }));
+  }
+
+  /** POST /pause e /resume → `{paused}` (corpo sem o campo: vale o que foi pedido). */
+  private async paused(path: string, expected: boolean): Promise<WorldResult<{ paused: boolean }>> {
+    const r = await this.call<unknown>('POST', path);
+    if (!r.ok) return r;
+    return { ok: true, data: { paused: isObject(r.data) && typeof r.data.paused === 'boolean' ? r.data.paused : expected } };
+  }
 }
 
 // ------------------------------------------------------------------ servidor falso (demonstração e testes)
@@ -240,6 +366,12 @@ export interface FakeWorldOptions {
   now?: () => number;
 }
 
+interface FakeBuilding {
+  connected: boolean;
+  paused: boolean;
+  last: WorldLastUplink | null;
+}
+
 interface FakeAccount {
   email: string;
   password: string;
@@ -247,6 +379,56 @@ interface FakeAccount {
   access: WorldAccess;
   player?: WorldPlayer;
   devices: WorldDevice[];
+  /** O prédio: nasce com a conta aprovada e com personagem. */
+  building?: FakeBuilding;
+}
+
+/**
+ * O que o prédio do falso "manda": o exemplo da seção 3.3 do plano (docs/world/privacidade.md), com as peças
+ * completas nos três agentes (o plano abrevia duas com "..."). O tema é trocado pelo tema em vigor a cada remessa.
+ */
+export const FAKE_UPLINK: Readonly<WorldUplink> = {
+  v: 1,
+  version: '1.0.0',
+  theme: 'halloween',
+  floors: [
+    {
+      id: 'f_8c1e5f7a2b',
+      agents: [
+        {
+          id: 'a_3f9d2c7e', kind: 'main', provider: 'claude', status: 'working', look: 'f', name: 'Marina',
+          parts: {
+            skin: '#e8b48c', hair: '#2b1d14', hairStyle: 'bob', eyes: '#3b5a7a', top: '#4a6fa5', topStyle: 'hoodie',
+            bottom: '#2f3542', bottomStyle: 'pants', shoes: '#ffffff', accessory: 'glasses', accessoryColor: '#222222', facialHair: 'none',
+          },
+        },
+        {
+          id: 'a_71c0b5a9', kind: 'sub', parentId: 'a_3f9d2c7e', provider: 'claude', status: 'working', look: 'm', name: 'Caio',
+          parts: {
+            skin: '#c68642', hair: '#1c1c1c', hairStyle: 'short', eyes: '#4a3728', top: '#3d8b5f', topStyle: 'tshirt',
+            bottom: '#2c2c35', bottomStyle: 'pants', shoes: '#3a2a20', accessory: 'headphones', accessoryColor: '#1f1f24', facialHair: 'stubble',
+          },
+        },
+      ],
+    },
+    {
+      id: 'f_02aa91c4de',
+      agents: [
+        {
+          id: 'a_b2e74d10', kind: 'main', provider: 'codex', status: 'idle', look: 'm', name: 'Rafael',
+          parts: {
+            skin: '#8d5524', hair: '#0f0f0f', hairStyle: 'buzz', eyes: '#2b1d14', top: '#a5463d', topStyle: 'polo',
+            bottom: '#4b5563', bottomStyle: 'shorts', shoes: '#f2f2f2', accessory: 'none', accessoryColor: '#222222', facialHair: 'beard',
+          },
+        },
+      ],
+    },
+  ],
+};
+
+/** Tamanho de um pacote como vai para o fio (JSON compacto em UTF-8). */
+export function uplinkBytes(uplink: WorldUplink): number {
+  return new TextEncoder().encode(JSON.stringify(uplink)).length;
 }
 
 /** E-mail da conta de exemplo dos estados 'waiting' e 'approved'. */
@@ -278,6 +460,10 @@ export class FakeWorldApi implements WorldClient {
   private readonly listeners = new Set<() => void>();
   private resends: number[] = [];
   private deviceSeq = 0;
+  /** Tema do prédio (world.json no servidor de verdade). */
+  private theme: WorldThemeChoice = 'auto';
+  /** Código com que o "mundo" recusa as remessas (null: aceita). */
+  private rejectCode: string | null = null;
 
   constructor(opts: FakeWorldOptions = {}) {
     this.delayMs = opts.delayMs ?? 450;
@@ -302,6 +488,7 @@ export class FakeWorldApi implements WorldClient {
           visibility: { ...DEFAULT_VISIBILITY },
           updatedAt: now,
         };
+        this.ensureBuilding(acc);
       }
       this.accounts.set(FAKE_EMAIL, acc);
       const current = this.addDevice(acc);
@@ -312,7 +499,34 @@ export class FakeWorldApi implements WorldClient {
 
   /** O que o snapshot diria em `meta.world` (sem servidor, como o de verdade: desligado, nada aparece). */
   meta(): WorldMeta {
-    return { enabled: this.configured, configured: this.configured, state: this.state() };
+    const meta: WorldMeta = { enabled: this.configured, configured: this.configured, state: this.state() };
+    const b = this.buildingOf(this.current());
+    if (b) {
+      const { lastAck: _ack, ...building } = b;
+      meta.building = building;
+    }
+    return meta;
+  }
+
+  /** Tema do prédio em vigor (o escolhido, antes de resolver o automático). */
+  worldTheme(): WorldThemeChoice {
+    return this.theme;
+  }
+
+  /** O "mundo" passa a recusar as remessas com este código (null: volta a aceitar); manda uma remessa na hora. */
+  rejectUplinks(code: string | null): void {
+    this.rejectCode = code;
+    const acc = this.current();
+    if (acc?.building?.connected) this.sendUplink(acc);
+    this.changed();
+  }
+
+  /** A conexão com o mundo cai (o servidor de verdade tenta de novo sozinho; aqui, até pausar e retomar). */
+  dropConnection(): void {
+    const b = this.current()?.building;
+    if (!b || b.paused) return;
+    b.connected = false;
+    this.changed();
   }
 
   /** Avisa quando o estado muda (a interface redesenha, como faria com um snapshot novo). */
@@ -339,7 +553,37 @@ export class FakeWorldApi implements WorldClient {
     const acc = this.current();
     if (!acc) return;
     acc.access = 'approved';
+    this.ensureBuilding(acc);
     this.changed();
+  }
+
+  /** Acende o prédio da conta aprovada e com personagem, com a primeira remessa (o uplink de verdade faz isso). */
+  private ensureBuilding(acc: FakeAccount): void {
+    if (acc.building || acc.access !== 'approved' || !acc.player) return;
+    acc.building = { connected: true, paused: false, last: null };
+    this.sendUplink(acc);
+  }
+
+  /** Uma remessa: o exemplo da 3.3 com o tema resolvido pela data; a resposta do "mundo" vem na hora. */
+  private sendUplink(acc: FakeAccount): void {
+    const b = acc.building;
+    if (!b || b.paused) return;
+    const at = this.now();
+    const uplink: WorldUplink = { ...structuredClone(FAKE_UPLINK as WorldUplink), theme: seasonalThemeFor(this.theme, new Date(at)) };
+    const ack = this.rejectCode ? { ok: false, error: this.rejectCode, at } : { ok: true, at };
+    b.last = { at, bytes: uplinkBytes(uplink), uplink, ack };
+  }
+
+  private buildingOf(acc: FakeAccount | undefined): WorldBuildingStatus | undefined {
+    const b = acc?.building;
+    if (!b) return undefined;
+    const floors = b.last?.uplink.floors ?? [];
+    const out: WorldBuildingStatus = { connected: b.connected, paused: b.paused, floors: floors.length, agents: floors.reduce((n, f) => n + f.agents.length, 0) };
+    if (b.last) {
+      out.lastUplinkAt = b.last.at;
+      if (b.last.ack) out.lastAck = b.last.ack.ok ? { ok: true } : { ok: false, error: b.last.ack.error };
+    }
+    return out;
   }
 
   private state(): WorldServerState {
@@ -398,6 +642,8 @@ export class FakeWorldApi implements WorldClient {
         status.account = { emailMasked: maskEmail(acc.email), access: acc.access };
         if (acc.player) status.player = structuredClone(acc.player);
         status.devices = structuredClone(acc.devices);
+        const building = this.buildingOf(acc);
+        if (building) status.building = building;
       }
       return { ok: true, data: status };
     }, false);
@@ -494,6 +740,7 @@ export class FakeWorldApi implements WorldClient {
         visibility: acc.player?.visibility ?? { ...DEFAULT_VISIBILITY },
         updatedAt: this.now(),
       };
+      this.ensureBuilding(acc);
       return FakeWorldApi.ok();
     });
   }
@@ -524,6 +771,46 @@ export class FakeWorldApi implements WorldClient {
       if (!acc.devices.some((d) => d.id === id)) return FakeWorldApi.fail('invalid', 404);
       acc.devices = acc.devices.filter((d) => d.id !== id);
       if (this.session?.deviceId === id) this.session = null;
+      return FakeWorldApi.ok();
+    });
+  }
+
+  lastUplink(): Promise<WorldResult<WorldLastUplink | null>> {
+    return this.reply(() => {
+      const acc = this.current();
+      if (!acc) return FakeWorldApi.fail('not_logged_in', 401);
+      return { ok: true, data: acc.building?.last ? structuredClone(acc.building.last) : null };
+    }, false);
+  }
+
+  pause(): Promise<WorldResult<{ paused: boolean }>> {
+    return this.setPaused(true);
+  }
+
+  resume(): Promise<WorldResult<{ paused: boolean }>> {
+    return this.setPaused(false);
+  }
+
+  private setPaused(paused: boolean): Promise<WorldResult<{ paused: boolean }>> {
+    return this.reply(() => {
+      const acc = this.current();
+      if (!acc) return FakeWorldApi.fail('not_logged_in', 401);
+      const b = acc.building;
+      if (!b) return FakeWorldApi.fail('no_player', 409);
+      b.paused = paused;
+      // Como o de verdade: pausar fecha a conexão; retomar reconecta e manda o pacote inteiro.
+      b.connected = !paused;
+      this.sendUplink(acc);
+      return { ok: true, data: { paused } };
+    });
+  }
+
+  setTheme(theme: WorldThemeChoice): Promise<WorldResult> {
+    return this.reply(() => {
+      if (!WORLD_THEME_CHOICES.includes(theme)) return FakeWorldApi.fail('invalid', 422);
+      this.theme = theme;
+      const acc = this.current();
+      if (acc?.building?.connected) this.sendUplink(acc);
       return FakeWorldApi.ok();
     });
   }
