@@ -305,6 +305,7 @@ export type WorldAction =
   | 'revoke'
   | 'pause'
   | 'resume'
+  | 'join'
   | 'leave'
   | 'sent'
   | 'theme';
@@ -375,6 +376,12 @@ export function worldErrorText(raw: WorldErrorCode | string, action: WorldAction
       return tr('O servidor do Habblaud World respondeu algo inesperado. Tente de novo em instantes.');
     case 'storage_failed':
       return tr('Não deu para gravar a sessão neste computador: ela vale só até o Habblaud reiniciar.');
+    case 'too_many_streams':
+      return tr('A cidade já está aberta em outras abas do Habblaud. Feche uma delas para abrir aqui.');
+    case 'no_stream':
+      return tr('A cena Mundo perdeu a conexão com o Habblaud. Abra a cidade de novo.');
+    case 'not_connected':
+      return tr('O prédio não está conectado ao Habblaud World agora (pausado, fora do mundo ou reconectando).');
     case 'offline':
       return tr('Sem conexão com o Habblaud.');
     case 'forbidden':
@@ -470,6 +477,8 @@ export function uplinkRejectText(code: string | undefined): string {
       return tr('Remessas demais em pouco tempo (o limite é 12 por minuto). A próxima vai normalmente.');
     case 'internal':
       return tr('Um erro no servidor do mundo. A próxima remessa tenta de novo.');
+    case 'left':
+      return tr('A conta saiu do mundo (por este ou por outro computador): nada mais sai até você voltar ao mundo.');
     default:
       return tr('Um motivo que esta versão do Habblaud não conhece.');
   }
@@ -486,7 +495,7 @@ export interface BuildingView {
   /** Motivo da recusa da última remessa (null: aceita ou sem resposta ainda). */
   rejected: string | null;
   /** Texto do botão de pausa e a explicação dele (null: sem botão). */
-  toggle: { action: 'pause' | 'resume'; text: string; hint: string } | null;
+  toggle: { action: 'pause' | 'resume' | 'join'; text: string; hint: string } | null;
   /** Mostra "Sair do mundo" (há um prédio no mundo para retirar). */
   leave: boolean;
 }
@@ -532,7 +541,7 @@ export function buildingView(b: WorldBuildingStatus | undefined, hasPlayer: bool
         desc: tr('Você saiu do mundo: o prédio foi retirado e o lote, liberado. Nada sai deste computador.'),
         stats,
         rejected: null,
-        toggle: { action: 'resume', text: tr('Voltar ao mundo'), hint: tr('Voltar cria um prédio novo, em outro lote; a conta e o personagem são os mesmos.') },
+        toggle: { action: 'join', text: tr('Voltar ao mundo'), hint: tr('Voltar cria um prédio novo, em outro lote; a conta e o personagem são os mesmos.') },
         leave: false,
       };
     case 'stopped': {

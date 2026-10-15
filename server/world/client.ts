@@ -26,6 +26,7 @@ import {
   WORLD_ACCESS,
   WORLD_LOCALES,
   type AltchaChallenge,
+  type BuildingJoinResponse,
   type BuildingState,
   type BuildingStateResponse,
   type DeviceAuth,
@@ -159,6 +160,8 @@ export function parseMe(raw: unknown): MeResponse | undefined {
   };
   const player = v.player === undefined || v.player === null ? undefined : parsePlayer(v.player);
   if (player) me.player = player;
+  // Saiu do mundo (deste ou de outro computador) e ainda não voltou: só o `true` vale.
+  if (v.left === true) me.left = true;
   return me;
 }
 
@@ -239,6 +242,11 @@ export class WorldClient {
   /** "Sair do mundo": o servidor retira o prédio na hora (204, com ou sem prédio); a conta e o personagem continuam. */
   leaveBuilding(token: string): Promise<WorldResult<Record<string, never>>> {
     return this.call('DELETE', '/v1/me/building', { token, parse: none });
+  }
+
+  /** "Voltar ao mundo" depois de sair: o próximo pacote cria um prédio novo, em outro lote. */
+  joinBuilding(token: string): Promise<WorldResult<BuildingJoinResponse>> {
+    return this.call('POST', '/v1/me/building/join', { token, parse: (raw) => (obj(raw)?.state === 'joined' ? { state: 'joined' } : undefined) });
   }
 
   revokeDevice(token: string, id: string): Promise<WorldResult<Record<string, never>>> {

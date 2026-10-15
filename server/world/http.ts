@@ -232,7 +232,16 @@ export function createWorldRoutes(service: WorldService): (req: IncomingMessage,
       account: true,
       run: async (req, res) => {
         await readBody(req);
-        sendOutcome(res, service.resume());
+        sendOutcome(res, await service.resume());
+      },
+    },
+    // "Voltar ao mundo" depois de sair: responde depois do POST /v1/me/building/join (sem ele, nada muda).
+    '/api/world/join': {
+      method: 'POST',
+      account: true,
+      run: async (req, res) => {
+        await readBody(req);
+        sendOutcome(res, await service.join());
       },
     },
     // "Ver o que foi enviado": o pacote exato da última remessa, os bytes e a resposta do servidor ({} se nada).

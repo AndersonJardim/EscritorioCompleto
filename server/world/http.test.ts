@@ -105,6 +105,7 @@ async function start(opts: { world?: 'off' | 'no-url' | 'on'; terminal?: boolean
           subscribe: (cb) => office.onChange(cb),
           lastFile,
           onGoodbye: (r) => service.goodbye(r),
+          onLeft: () => service.leftElsewhere(),
           onChange: () => office.markDirty(),
           timing: { debounceMs: 20, minGapMs: 60, pingMs: 5_000, backoffMinMs: 20, backoffMaxMs: 60, closeWaitMs: 500 },
         })
@@ -582,7 +583,7 @@ describe('o prédio no mundo (uplink) pelas rotas', () => {
     expect(w.accounts.get(EMAIL)!.buildingPaused).toBe(false);
   });
 
-  it('sair do mundo: fecha o prédio antes de responder, o servidor retira o prédio e nada reconecta; retomar volta', async () => {
+  it('sair do mundo: fecha o prédio antes de responder, o servidor retira o prédio e nada reconecta; voltar ao mundo (join) volta', async () => {
     const s = await start({ uplink: true });
     const w = s.world!;
     s.office.addMain({ id: '.claude:8', account: '.claude', sessionId: 'sess-8', cwd: '/p/b', role: 'Agente principal', startedAt: Date.now(), status: 'working' });
@@ -609,12 +610,78 @@ describe('o prédio no mundo (uplink) pelas rotas', () => {
     const st = (await call(s.base, 'GET', '/api/world/status')).body;
     expect(st).toMatchObject({ state: 'approved', player: { name: 'Ana Pixel' }, building: { left: true } });
 
-    // Voltar ao mundo: um prédio novo (o servidor de mentira só recebe a conexão e o pacote inteiro).
-    const back = await call(s.base, 'POST', '/api/world/resume', {});
+    // Voltar ao mundo: o join responde antes de reconectar, e o pacote seguinte é aceito (um prédio novo).
+    const back = await call(s.base, 'POST', '/api/world/join', {});
+    expect(back.status).toBe(200);
+    expect(w.requests.filter((r) => r.path === '/v1/me/building/join')).toHaveLength(1);
+    expect(w.accounts.get(EMAIL)!.left).toBe(false);
     expect(back.body.building).toMatchObject({ paused: false });
     expect(back.body.building.left).toBeUndefined();
     await waitFor(() => w.ws.uplinks.length === 2, 'de volta ao mundo');
+    await waitFor(() => existsSync(s.lastFile) && JSON.parse(readFileSync(s.lastFile, 'utf8')).ack?.ok === true, 'pacote aceito');
     expect(JSON.parse(readFileSync(s.file, 'utf8')).left).toBeUndefined();
+  });
+
+  it('voltar ao mundo sem resposta boa: o erro volta e nada muda (continua fora do mundo, sem conexão)', async () => {
+    const s = await start({ uplink: true });
+    const w = s.world!;
+    await call(s.base, 'POST', '/api/world/register', { email: EMAIL, password: PASSWORD });
+    await call(s.base, 'POST', '/api/world/verify', { email: EMAIL, code: FAKE_CODE });
+    await call(s.base, 'PUT', '/api/world/character', CHARACTER);
+    w.accounts.get(EMAIL)!.access = 'approved';
+    await call(s.base, 'GET', '/api/world/status?refresh=1');
+    await waitFor(() => w.ws.uplinks.length === 1, 'primeira remessa');
+    expect((await call(s.base, 'POST', '/api/world/leave', {})).status).toBe(200);
+    w.options.buildingFailures = 1;
+    const r = await call(s.base, 'POST', '/api/world/join', {});
+    expect(r.status).toBe(503);
+    expect(r.body.error.code).toBe('unavailable');
+    expect(JSON.parse(readFileSync(s.file, 'utf8'))).toMatchObject({ paused: true, left: true });
+    await new Promise((ok) => setTimeout(ok, 120));
+    expect(w.ws.connections).toHaveLength(1);
+    // A página antiga que chama /resume fora do mundo também passa pelo join.
+    const old = await call(s.base, 'POST', '/api/world/resume', {});
+    expect(old.status).toBe(200);
+    expect(w.requests.filter((q) => q.path === '/v1/me/building/join')).toHaveLength(2);
+    expect(w.requests.filter((q) => q.path === '/v1/me/building/resume')).toHaveLength(0);
+    await waitFor(() => w.ws.uplinks.length === 2, 'de volta ao mundo');
+  });
+
+  it('saiu do mundo em outro computador: o pacote recusado com left grava a saída e a pausa e a conexão não volta', async () => {
+    const s = await start({ uplink: true });
+    const w = s.world!;
+    s.office.addMain({ id: '.claude:9', account: '.claude', sessionId: 'sess-9', cwd: '/p/c', role: 'Agente principal', startedAt: Date.now(), status: 'working' });
+    await call(s.base, 'POST', '/api/world/register', { email: EMAIL, password: PASSWORD });
+    await call(s.base, 'POST', '/api/world/verify', { email: EMAIL, code: FAKE_CODE });
+    await call(s.base, 'PUT', '/api/world/character', CHARACTER);
+    w.accounts.get(EMAIL)!.access = 'approved';
+    await call(s.base, 'GET', '/api/world/status?refresh=1');
+    await waitFor(() => w.ws.uplinks.length === 1, 'primeira remessa');
+    // O outro computador saiu do mundo; a mudança seguinte do escritório vai e volta recusada.
+    w.accounts.get(EMAIL)!.left = true;
+    s.office.addMain({ id: '.claude:10', account: '.claude', sessionId: 'sess-10', cwd: '/p/d', role: 'Agente principal', startedAt: Date.now(), status: 'working' });
+    await waitFor(() => w.ws.uplinks.length === 2, 'segunda remessa');
+    await waitFor(() => w.ws.open.length === 0, 'conexão fechada');
+    expect(JSON.parse(readFileSync(s.file, 'utf8'))).toMatchObject({ paused: true, left: true });
+    const st = (await call(s.base, 'GET', '/api/world/status')).body;
+    expect(st.building).toMatchObject({ connected: false, paused: true, left: true, lastAck: { ok: false, error: 'left' } });
+    expect(s.hub.current().meta.world?.building).toMatchObject({ left: true });
+    await new Promise((ok) => setTimeout(ok, 150));
+    expect(w.ws.connections).toHaveLength(1);
+  });
+
+  it('o /v1/me com left: true (saiu em outro computador) também deixa este fora do mundo', async () => {
+    const s = await start({ uplink: true });
+    const w = s.world!;
+    await call(s.base, 'POST', '/api/world/register', { email: EMAIL, password: PASSWORD });
+    await call(s.base, 'POST', '/api/world/verify', { email: EMAIL, code: FAKE_CODE });
+    await call(s.base, 'PUT', '/api/world/character', CHARACTER);
+    w.accounts.get(EMAIL)!.access = 'approved';
+    w.accounts.get(EMAIL)!.left = true;
+    const st = (await call(s.base, 'GET', '/api/world/status?refresh=1')).body;
+    expect(st.building).toMatchObject({ paused: true, left: true });
+    await waitFor(() => w.ws.open.length === 0, 'sem conexão');
+    expect(JSON.parse(readFileSync(s.file, 'utf8'))).toMatchObject({ paused: true, left: true });
   });
 
   it('sair do mundo sem resposta boa do servidor: o erro volta, o prédio fica só pausado e a pausa é avisada', async () => {
@@ -642,7 +709,7 @@ describe('o prédio no mundo (uplink) pelas rotas', () => {
     const s = await start({ uplink: true });
     expect((await call(s.base, 'PUT', '/api/world/theme', { theme: 'halloween' })).body).toEqual({ theme: 'halloween' });
     expect(JSON.parse(readFileSync(s.file, 'utf8'))).toEqual({ theme: 'halloween' });
-    for (const path of ['/api/world/pause', '/api/world/resume', '/api/world/leave']) {
+    for (const path of ['/api/world/pause', '/api/world/resume', '/api/world/leave', '/api/world/join']) {
       const r = await call(s.base, 'POST', path, {});
       expect(r.status, path).toBe(401);
       expect(r.body.error.code).toBe('not_logged_in');
@@ -665,7 +732,7 @@ describe('o prédio no mundo (uplink) pelas rotas', () => {
 
   it('sem a trava do terminal: tema, pausa e retomada recusam; status e última remessa respondem', async () => {
     const s = await start({ uplink: true, terminal: false });
-    for (const [method, path] of [['PUT', '/api/world/theme'], ['POST', '/api/world/pause'], ['POST', '/api/world/resume'], ['POST', '/api/world/leave']] as const) {
+    for (const [method, path] of [['PUT', '/api/world/theme'], ['POST', '/api/world/pause'], ['POST', '/api/world/resume'], ['POST', '/api/world/leave'], ['POST', '/api/world/join']] as const) {
       const r = await call(s.base, method, path, method === 'PUT' ? { theme: 'none' } : {});
       expect(r.status, path).toBe(403);
       expect(r.body.error.code).toBe('terminal_off');

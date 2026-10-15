@@ -2,6 +2,8 @@
 // Fase 1, em memória, com um ALTCHA de verdade (pequeno) e o registro de cada requisição recebida; e o WebSocket
 // (`/v1/socket`, fase 2) feito à mão sobre o `upgrade` do http (RFC 6455, só texto, sem extensões: o Habblaud não tem
 // o pacote `ws`), que responde ao `hello` como o servidor de verdade, confirma cada `uplink` e responde ao `ping`.
+// Fase 3: depois do DELETE /v1/me/building, os pacotes são recusados com `left` até o POST /v1/me/building/join; a
+// cidade (view, move...) é só registrada em `messages`: os testes mandam a área e os jogadores com `conn.send`.
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo, Socket } from 'node:net';
@@ -39,6 +41,10 @@ interface Account {
   buildingPaused?: boolean;
   /** Quantas vezes o dono saiu do mundo (DELETE /v1/me/building). */
   buildingLeft?: number;
+  /** Fora do mundo agora (DELETE sem o join depois): o pacote é recusado com `left`. */
+  left?: boolean;
+  /** Quantas vezes voltou ao mundo (POST /v1/me/building/join). */
+  buildingJoined?: number;
 }
 
 /** Uma conexão do WebSocket de mentira. */
@@ -148,6 +154,7 @@ export async function startFakeWorld(): Promise<FakeWorld> {
     return {
       account: { emailMasked: `${email[0]}***${email.slice(email.indexOf('@'))}`, access: a.access, locale: a.locale, createdAt: '2026-10-15T00:00:00Z' },
       ...(a.player ? { player: a.player } : {}),
+      left: !!a.left,
       devices: list.map(([t, d], i) => ({ id: d.deviceId, label: `Dispositivo ${i + 1}`, createdAt: '2026-10-15T00:00:00Z', lastSeenAt: '2026-10-15T00:00:00Z', current: t === token })),
     };
   };
@@ -245,7 +252,14 @@ export async function startFakeWorld(): Promise<FakeWorld> {
         const a = accounts.get(device!.email)!;
         a.buildingLeft = (a.buildingLeft ?? 0) + 1;
         a.buildingPaused = false;
+        a.left = true;
         return send(res, 204);
+      }
+      if (method === 'POST' && path === '/v1/me/building/join') {
+        const a = accounts.get(device!.email)!;
+        a.buildingJoined = (a.buildingJoined ?? 0) + 1;
+        a.left = false;
+        return send(res, 200, { state: 'joined' });
       }
       if (method === 'POST' && (path === '/v1/me/building/pause' || path === '/v1/me/building/resume')) {
         const a = accounts.get(device!.email)!;
@@ -329,6 +343,7 @@ function attachFakeSocket(
     let buf = Buffer.alloc(0);
     let fragments: Buffer[] = [];
     let welcomed = false;
+    let account: Account | undefined;
     const conn: FakeConnection = {
       id: fake.connections.length + 1,
       url: req.url ?? '',
@@ -369,6 +384,8 @@ function attachFakeSocket(
       }
       if (answer !== 'welcome') return conn.goodbye(answer);
       welcomed = true;
+      const device = world.devices.get(String(hello.token));
+      account = device ? world.accounts.get(device.email) : undefined;
       conn.send({
         t: 'welcome',
         me: { id: 'acc_1', name: 'Ana Pixel', look: 'f', parts: {}, traits: ['games', 'cafeina'], intro: 'coffee', visibility: { ...VISIBILITY_DEFAULTS }, updatedAt: '2026-10-15T12:00:00Z' },
@@ -399,7 +416,8 @@ function attachFakeSocket(
         const bytes = Buffer.byteLength(JSON.stringify(uplink));
         const at = Date.now();
         fake.uplinks.push({ conn: conn.id, uplink, bytes, at });
-        if (fake.options.ack === 'ok') conn.send({ t: 'uplink.ack', at, bytes });
+        if (account?.left) conn.send({ t: 'uplink.ack', error: 'left' });
+        else if (fake.options.ack === 'ok') conn.send({ t: 'uplink.ack', at, bytes });
         else if (fake.options.ack !== 'silent') conn.send({ t: 'uplink.ack', error: fake.options.ack });
       }
     };

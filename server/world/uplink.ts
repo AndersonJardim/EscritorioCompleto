@@ -27,6 +27,10 @@
 //   param (veja WorldBuildingStatus.stopped) e avisam a conta (`onGoodbye`).
 // - Guarda a última remessa ({at, bytes, uplink, ack}) em memória e em <dataDir>/world-last-uplink.json (modo 600)
 //   para "Ver o que foi enviado": é o mesmo objeto que foi para o fio.
+// - `uplink.ack {error: 'left'}`: a conta saiu do mundo (aqui ou em outro computador); a conta grava a saída e a pausa
+//   (`onLeft`) e a conexão fecha: nada mais sai até o "Voltar ao mundo".
+// - A cena Mundo (viewer.ts) usa a mesma conexão: recebe o `welcome`, a queda e as mensagens da cidade (`CityListener`)
+//   e manda os comandos do jogador por `sendCity`, só depois do `welcome`. A lógica da cena fica lá.
 import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { dayKeyOf, systemTimeZone } from '../../shared/daystats';
@@ -41,6 +45,7 @@ import {
   UPLINK_ACK_ERRORS,
   VISIBILITY_DEFAULTS,
   type BuildInfo,
+  type ClientMessage,
   type GoodbyeReason,
   type HelloMessage,
   type UplinkAckError,
@@ -128,12 +133,24 @@ export interface BuildingUplinkOptions {
   lastFile: string | null;
   /** O servidor do mundo mandou `goodbye` (a conta atualiza o estado: lista de espera, sem personagem, token recusado...). */
   onGoodbye?: (reason: GoodbyeReason) => void;
+  /** O servidor recusou o pacote com `left`: a conta saiu do mundo (a conta grava a saída e a pausa e fecha o uplink). */
+  onLeft?: () => void;
   /** O resumo do prédio mudou (meta.world.building): o snapshot é republicado. */
   onChange?: () => void;
   socket?: SocketFactory;
   now?: () => number;
   random?: () => number;
   timing?: Partial<UplinkTiming>;
+}
+
+/** Quem escuta a cidade pela conexão do prédio (server/world/viewer.ts). */
+export interface CityListener {
+  /** `welcome` recebido (a cada conexão nova). */
+  opened(welcome: Record<string, unknown>): void;
+  /** A conexão aceita fechou (caiu, pausa, saída, `goodbye`). */
+  closed(): void;
+  /** Uma mensagem que não é do prédio (área, jogadores, avisos...), como veio. */
+  message(msg: Record<string, unknown>): void;
 }
 
 interface LastRecord extends WorldLastUplink {
@@ -184,6 +201,7 @@ export class BuildingUplink {
   private last?: LastRecord;
   /** Andares e agentes do prédio que vieram no `welcome` (antes da primeira remessa). */
   private fromWelcome?: { floors: number; agents: number };
+  private city?: CityListener;
 
   constructor(private readonly o: BuildingUplinkOptions) {
     this.t = { ...UPLINK_TIMING, ...o.timing };
@@ -257,6 +275,17 @@ export class BuildingUplink {
   /** O tema mudou: confere o pacote logo. */
   themeChanged(): void {
     this.schedule();
+  }
+
+  /** Liga a cena Mundo (viewer.ts) à conexão. */
+  attachCity(city: CityListener): void {
+    this.city = city;
+  }
+
+  /** Manda um comando da cena (só com a conexão aceita); false se não foi. */
+  sendCity(msg: ClientMessage): boolean {
+    if (!this.welcomed) return false;
+    return this.send(msg);
   }
 
   get connected(): boolean {
@@ -367,8 +396,11 @@ export class BuildingUplink {
       case 'ping':
         this.send({ t: 'pong' });
         return;
+      case 'pong':
+        return;
       default:
-        // pong, notice e o que vier nas próximas fases: nada a fazer aqui.
+        // A cidade (área, jogadores, avisos e o que vier nas próximas fases): para a cena, se houver.
+        if (this.welcomed) this.city?.message(msg);
         return;
     }
   }
@@ -393,19 +425,27 @@ export class BuildingUplink {
     this.clearSendTimer();
     this.armSend(Math.max(0, this.lastSentAt + this.t.minGapMs - this.now()));
     this.o.onChange?.();
+    this.city?.opened(msg);
   }
 
   private onAck(msg: Record<string, unknown>): void {
-    if (!this.last) return;
     let ack: WorldUplinkAck | undefined;
     if (typeof msg.error === 'string') ack = { ok: false, error: ackError(msg.error), at: this.now() };
     else if (typeof msg.at === 'number' && Number.isFinite(msg.at) && typeof msg.bytes === 'number' && Number.isFinite(msg.bytes)) {
       ack = { ok: true, at: msg.at, bytes: msg.bytes };
     }
     if (!ack) return;
-    this.last.ack = ack;
-    this.saveLast();
-    if (!ack.ok) log.warnOnce(`world-uplink-ack:${ack.error}`, tr('Habblaud World: o servidor recusou o pacote do prédio ({0}).', [ack.error ?? 'internal']));
+    if (this.last) {
+      this.last.ack = ack;
+      this.saveLast();
+    }
+    if (ack.error === 'left') {
+      // Saiu do mundo (aqui ou em outro computador): a conta grava a saída e a pausa e fecha a conexão.
+      this.clearSendTimer();
+      this.o.onLeft?.();
+    } else if (!ack.ok) {
+      log.warnOnce(`world-uplink-ack:${ack.error}`, tr('Habblaud World: o servidor recusou o pacote do prédio ({0}).', [ack.error ?? 'internal']));
+    }
     this.o.onChange?.();
   }
 
@@ -476,6 +516,7 @@ export class BuildingUplink {
 
   /** Esquece a conexão atual: dali em diante os eventos dela são ignorados. */
   private teardown(): void {
+    const was = this.welcomed;
     this.ws = undefined;
     this.welcomed = false;
     this.clearSendTimer();
@@ -483,6 +524,7 @@ export class BuildingUplink {
     if (this.pingTimer) clearInterval(this.pingTimer);
     this.welcomeTimer = undefined;
     this.pingTimer = undefined;
+    if (was) this.city?.closed();
   }
 
   private ping(): void {

@@ -197,7 +197,7 @@ describe('WorldService: retomada sem resposta do servidor do mundo', () => {
   it('tenta de novo com a espera crescente da reconexão (2 s, 4 s...) até o servidor confirmar', async () => {
     const { service, resumeBuilding } = start([down, down, { ok: false, status: 503, code: 'unavailable' }]);
     await service.pause();
-    expect(service.resume().ok).toBe(true);
+    expect((await service.resume()).ok).toBe(true);
     await vi.advanceTimersByTimeAsync(0);
     expect(resumeBuilding).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1_999);

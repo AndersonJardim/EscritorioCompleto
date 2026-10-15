@@ -326,7 +326,7 @@ describe('cartão "Seu prédio"', () => {
       state: 'left',
       label: 'Fora do mundo',
       stats: [],
-      toggle: { action: 'resume', text: 'Voltar ao mundo' },
+      toggle: { action: 'join', text: 'Voltar ao mundo' },
       leave: false,
     });
     expect(buildingView(live, true, NOW).leave).toBe(true);
@@ -345,7 +345,7 @@ describe('motivos de recusa de uma remessa', () => {
     expect(uplinkRejectText('unknown')).toBe(generic);
     const texts = UPLINK_REJECT_CODES.map((c) => uplinkRejectText(c));
     expect(new Set([...texts, generic]).size).toBe(UPLINK_REJECT_CODES.length + 1);
-    expect(UPLINK_REJECT_CODES).toEqual(['schema', 'limits', 'name_pool', 'parts', 'ids', 'rate', 'internal']);
+    expect(UPLINK_REJECT_CODES).toEqual(['schema', 'limits', 'name_pool', 'parts', 'ids', 'rate', 'internal', 'left']);
   });
 
   it('janela "Ver o que foi enviado": aceita, recusada com motivo ou sem resposta', () => {

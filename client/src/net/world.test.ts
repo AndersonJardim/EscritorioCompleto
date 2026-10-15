@@ -130,6 +130,14 @@ describe('meta.world e status', () => {
     expect(readWorldMeta(snap({ enabled: true, state: 'zzz' }))).toEqual({ enabled: true, configured: false, state: 'off' });
   });
 
+  it('readWorldMeta: a cena Mundo (Fase 3) só com `available` booleano', () => {
+    const base = { enabled: true, configured: true, state: 'approved' };
+    expect(readWorldMeta(snap({ ...base, scene: { available: true } }))?.scene).toEqual({ available: true });
+    expect(readWorldMeta(snap({ ...base, scene: { available: false, extra: 1 } }))?.scene).toEqual({ available: false });
+    expect(readWorldMeta(snap({ ...base, scene: { available: 'sim' } }))).not.toHaveProperty('scene');
+    expect(readWorldMeta(snap({ ...base, scene: [] }))).not.toHaveProperty('scene');
+  });
+
   it('parseWorldStatus completa a visibilidade do personagem com os padrões', () => {
     const s = parseWorldStatus({ state: 'approved', configured: true, player: { name: 'Pixel', look: 'm', parts: {}, traits: ['games', 'cafeina'], intro: 'coffee', visibility: { mode: 'discreet' } } });
     expect(s?.player?.visibility).toEqual({ mode: 'discreet', closed: false, hideCountry: false, tokensVisible: true, leaderboard: false, compactions: false });
@@ -294,6 +302,7 @@ describe('de onde vêm os dados', () => {
       configured: true,
       state: 'approved',
       building: { connected: true, paused: false, floors: 2, agents: 3, lastUplinkAt: expect.any(Number) },
+      scene: { available: true },
     });
     expect(worldSource({ mock: true, liveSnapshot: null }, '?mock=1&world=waiting').meta()).toEqual({ enabled: true, configured: true, state: 'waiting' });
   });
@@ -315,12 +324,14 @@ describe('prédio: rotas locais da Fase 2', () => {
     await api.pause();
     await api.resume();
     await api.leave();
+    await api.join();
     await api.setTheme('christmas');
     expect(calls.map((c) => `${c.init?.method} ${c.url} ${c.init?.body ?? ''}`.trim())).toEqual([
       'GET /api/world/last-uplink',
       'POST /api/world/pause {}',
       'POST /api/world/resume {}',
       'POST /api/world/leave {}',
+      'POST /api/world/join {}',
       'PUT /api/world/theme {"theme":"christmas"}',
     ]);
   });
@@ -472,8 +483,12 @@ describe('FakeWorldApi: prédio', () => {
     const st = await api.status();
     expect(st.ok && st.data.building).toMatchObject({ left: true });
     c.tick(60_000);
-    expect(await api.resume()).toEqual({ ok: true, data: { paused: false } });
+    expect(await api.join()).toEqual({ ok: true, data: null });
     expect(api.meta().building).toEqual({ connected: true, paused: false, floors: 2, agents: 3, lastUplinkAt: OCT + 60_000 });
+    // Sem ter saído, voltar não muda nada (nem manda outra remessa).
+    c.tick(60_000);
+    expect((await api.join()).ok).toBe(true);
+    expect(api.meta().building?.lastUplinkAt).toBe(OCT + 60_000);
   });
 
   it('parada pelo "mundo": o status traz o motivo, o meta só "parou"; retomar volta', async () => {

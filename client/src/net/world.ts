@@ -5,7 +5,8 @@
 //
 // Fase 2 (prédio no mundo): `building` em meta.world e no status, GET /api/world/last-uplink (a última remessa, para
 // "Ver o que foi enviado"), POST /api/world/pause, /resume e /leave e PUT /api/world/theme. Os tipos do prédio vêm
-// de shared/world/api.ts (os mesmos do servidor local).
+// de shared/world/api.ts (os mesmos do servidor local). Fase 3: POST /api/world/join ("Voltar ao mundo") e
+// `meta.world.scene` (o botão Mundo); a cena fala com o servidor local por net/world-stream.ts.
 import type { AppearanceParts } from '../../../shared/appearance';
 import type { Locale } from '../../../shared/i18n';
 import type { OfficeSnapshot } from '../../../shared/types';
@@ -120,8 +121,10 @@ export interface WorldClient {
   lastUplink(): Promise<WorldResult<WorldLastUplink | null>>;
   /** Para o envio na hora (o servidor local fecha a conexão antes de responder): o prédio apaga. */
   pause(): Promise<WorldResult<{ paused: boolean }>>;
-  /** Volta a enviar: o prédio acende de novo (depois de sair do mundo, um prédio novo, em outro lote). */
+  /** Volta a enviar: o prédio acende de novo. */
   resume(): Promise<WorldResult<{ paused: boolean }>>;
+  /** "Voltar ao mundo" depois de sair: o servidor do mundo aceita a volta e o prédio novo nasce em outro lote. */
+  join(): Promise<WorldResult>;
   /** "Sair do mundo": o servidor local fecha a conexão e o servidor do mundo retira o prédio antes da resposta. */
   leave(): Promise<WorldResult>;
   /** O tema escolhido em Aparência também vale para o prédio. */
@@ -140,6 +143,7 @@ export function readWorldMeta(snap: OfficeSnapshot | null | undefined): WorldMet
   const out: WorldMeta = { enabled: w.enabled, configured: w.configured === true, state };
   const building = parseBuildingMeta(w.building);
   if (building) out.building = building;
+  if (isObject(w.scene) && typeof w.scene.available === 'boolean') out.scene = { available: w.scene.available };
   return out;
 }
 
@@ -361,6 +365,9 @@ export class HttpWorldApi implements WorldClient {
   leave() {
     return this.done(this.call('POST', '/leave'));
   }
+  join() {
+    return this.done(this.call('POST', '/join'));
+  }
   setTheme(theme: WorldThemeChoice) {
     return this.done(this.call('PUT', '/theme', { theme }));
   }
@@ -527,6 +534,8 @@ export class FakeWorldApi implements WorldClient {
       const { lastAck: _ack, stopped, ...building } = b;
       meta.building = stopped ? { ...building, stopped: true } : building;
     }
+    // A cena Mundo do modo demonstração (FakeWorldStream) existe com a conta liberada e o personagem criado.
+    if (b) meta.scene = { available: true };
     return meta;
   }
 
@@ -842,6 +851,24 @@ export class FakeWorldApi implements WorldClient {
       }
       this.sendUplink(acc);
       return { ok: true, data: { paused } };
+    });
+  }
+
+  /** "Voltar ao mundo": como retomar, mas só faz sentido depois de sair (sem ter saído, nada muda). */
+  join(): Promise<WorldResult> {
+    return this.reply(() => {
+      const acc = this.current();
+      if (!acc) return FakeWorldApi.fail('not_logged_in', 401);
+      const b = acc.building;
+      if (!b) return FakeWorldApi.fail('no_player', 409);
+      if (b.left) {
+        delete b.left;
+        delete b.stopped;
+        b.paused = false;
+        b.connected = true;
+        this.sendUplink(acc);
+      }
+      return FakeWorldApi.ok();
     });
   }
 

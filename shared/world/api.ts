@@ -21,20 +21,64 @@
 //                                                sem resposta do servidor do mundo, tenta de novo com espera crescente)
 //   POST /api/world/leave                    {} → 200 WorldStatus ("Sair do mundo": fecha o uplink, chama
 //                                                DELETE /v1/me/building e só então responde; a conta e o personagem
-//                                                continuam, e o resume cria um prédio novo, em outro lote)
+//                                                continuam)
+//   POST /api/world/join                     {} → 200 WorldStatus ("Voltar ao mundo": POST /v1/me/building/join e,
+//                                                com a resposta, tira a saída e a pausa e reabre o uplink; o próximo
+//                                                pacote cria um prédio novo, em outro lote)
 //   GET  /api/world/last-uplink              → WorldLastUplink | {} (o que foi enviado por último, exato)
+//
+// A cena Mundo (Fase 3; server/world/viewer.ts), com as mesmas travas e sem a porta do celular:
+//   GET  /api/world/stream                   → text/event-stream: `world.snapshot` (WorldSceneSnapshot) ao conectar e
+//                                                a cada recomeço (conexão com o mundo aberta ou caída, `view` de
+//                                                novo), `world` (WorldSceneMessage) com cada mensagem da cidade como
+//                                                veio, já na ordem e sem salto de `rev`, e `: ping` a cada 15 s. No
+//                                                máximo 4 abertos (429 too_many_streams). Abrir o primeiro manda
+//                                                `view` ao servidor do mundo; fechar o último, `view.off`
+//   POST /api/world/cmd                      {stream, cmds: WorldSceneCommand[]} → 202 {sent} (até 5 lotes/s por
+//                                                stream, 20 comandos por lote; de cada lote, só o último `move` vai)
 //
 // Erros: {error: {code, message?, retryAfter?}} com o status do servidor do mundo quando vêm de lá (códigos em
 // WORLD_ERROR_CODES do protocolo; um código novo passa como veio) ou com os códigos locais abaixo. A interface traduz
 // pelo `code`; `message` é só para quem lê o log ou usa o curl.
 import {
   WORLD_ERROR_CODES,
+  type AfkMessage,
+  type AppearanceParts,
+  type AreaMessage,
+  type AreaPatchMessage,
+  type BlockMessage,
+  type BuildingMessage,
+  type BuildingPatchMessage,
   type DeviceInfo,
+  type EnterMessage,
   type GoodbyeReason,
+  type GreetingMessage,
+  type GreetMessage,
+  type IntroId,
+  type LeaveMessage,
+  type LikeMessage,
+  type LikeUpdateMessage,
+  type MinimapMessage,
+  type MoveMessage,
+  type NoticeMessage,
   type Player,
+  type PlayerJoinMessage,
+  type PlayerLeaveMessage,
+  type PlayersMessage,
+  type PosMessage,
+  type ProfileMessage,
+  type ProfileRequestMessage,
+  type ReportMessage,
+  type ResyncMessage,
+  type TraitId,
+  type ViewMessage,
+  type ViewOffMessage,
   type WorldAccess,
+  type WorldBuildingPublic,
   type WorldErrorCode,
   type UplinkAckError,
+  type WorldPlayerPublic,
+  type WorldPosition,
   type WorldTheme,
   type WorldUplink,
 } from './protocol';
@@ -131,6 +175,105 @@ export interface WorldMeta {
   state: WorldState;
   /** O prédio no mundo (só com a conta aprovada e o personagem criado). */
   building?: WorldBuildingMeta;
+  /**
+   * A cena Mundo (Fase 3): `available` com o World configurado, a trava do terminal, a conta aprovada e o personagem
+   * criado (a barra mostra o botão Mundo). Ausente sem HABBLAUD_WORLD_URL.
+   */
+  scene?: WorldSceneMeta;
+}
+
+export interface WorldSceneMeta {
+  available: boolean;
+}
+
+// ------------------------------------------------------------------------------------------- a cena Mundo (Fase 3)
+
+/** Os comandos que o navegador pode mandar em POST /api/world/cmd (nada do prédio: hello, uplink e ping nunca). */
+export const WORLD_SCENE_COMMANDS = [
+  'move', 'profile', 'resync', 'view', 'view.off', 'enter', 'leave', 'like', 'unlike', 'greet', 'block', 'unblock', 'report',
+] as const;
+export type WorldSceneCommand =
+  | MoveMessage
+  | ProfileRequestMessage
+  | ResyncMessage
+  | ViewMessage
+  | ViewOffMessage
+  | EnterMessage
+  | LeaveMessage
+  | LikeMessage
+  | GreetMessage
+  | BlockMessage
+  | ReportMessage;
+
+/** Comandos por lote (POST /api/world/cmd) e lotes por segundo por stream. */
+export const WORLD_SCENE_LIMITS = { cmdsPerBatch: 20, batchesPerSec: 5, streams: 4 } as const;
+
+/**
+ * As mensagens da cidade que o stream repassa (evento `world`), como vieram do servidor do mundo. O servidor local já
+ * conferiu o `rev` dos patches (um salto vira `resync` e o patch não passa) e descartou o que não é da cena.
+ */
+export type WorldSceneMessage =
+  | AreaMessage
+  | AreaPatchMessage
+  | PlayersMessage
+  | PlayerJoinMessage
+  | PlayerLeaveMessage
+  | PosMessage
+  | MinimapMessage
+  | AfkMessage
+  | ProfileMessage
+  | NoticeMessage
+  | LikeUpdateMessage
+  | GreetingMessage
+  | BuildingMessage
+  | BuildingPatchMessage;
+
+export const WORLD_SCENE_MESSAGES = [
+  'area', 'area.patch', 'players', 'player.join', 'player.leave', 'pos', 'minimap', 'afk', 'profile', 'notice', 'like.update',
+  'greeting', 'building', 'building.patch',
+] as const satisfies readonly WorldSceneMessage['t'][];
+
+/** Eu na cena: o jogador desta conta (do `welcome`), sem as opções de visibilidade. */
+export interface WorldSceneMe {
+  id: string;
+  name: string;
+  look: 'f' | 'm';
+  parts: AppearanceParts;
+  traits: TraitId[];
+  intro?: IntroId;
+  country?: string;
+  /** O prédio desta conta (o id do prédio é o id do dono), se ela tem um no mundo. */
+  buildingId?: string;
+}
+
+/** Os prédios de um chunk, com o `rev` em que estão. */
+export interface WorldSceneChunk {
+  chunk: string;
+  rev: number;
+  buildings: WorldBuildingPublic[];
+}
+
+/** O estado da cidade que o servidor local tem (evento `world.snapshot`): o navegador troca o dele inteiro por este. */
+export interface WorldSceneSnapshot {
+  /** Id deste stream: vai em POST /api/world/cmd. */
+  stream: string;
+  /** A conexão com o servidor do mundo está aberta (`welcome`). Sem ela (pausado, fora do mundo, caiu), nada desce. */
+  connected: boolean;
+  /** `view` mandado: o servidor do mundo está mandando a área e os jogadores. */
+  viewing: boolean;
+  /** Distrito dos ids de chunk (`<distrito>:<cx>,<cy>`), do `welcome`. */
+  district?: string;
+  me?: WorldSceneMe;
+  /** Minha posição: a do último `pos` do servidor (ou do meu id num `players`) ou a do último `move` mandado. */
+  pos?: WorldPosition;
+  /** O servidor mandou `afk` e ainda não houve comando de verdade (andar, virar, `view`, `profile`). */
+  afk: boolean;
+  /** Os chunks assinados (só os 3×3 em volta da minha posição). */
+  chunks: WorldSceneChunk[];
+  /** Os outros jogadores visíveis (nunca eu), com a posição mais recente. */
+  players: WorldPlayerPublic[];
+  /** O minimapa (prédios acesos por quarteirão), ou null antes do primeiro. */
+  minimap: MinimapMessage['blocks'] | null;
 }
 
 /** GET /api/world/status (e a resposta de verify, login e logout). */
@@ -172,6 +315,9 @@ export const WORLD_LOCAL_ERROR_CODES = [
   'world_bad_response', // 502: resposta fora do formato
   'world_error', // erro do servidor do mundo sem código legível (mesmo status)
   'storage_failed', // em lastError: não deu para gravar world.json (a sessão vale só até reiniciar)
+  'too_many_streams', // 429: a cena Mundo já está aberta em 4 abas
+  'no_stream', // 409: comando de um stream que não está aberto (a cena fechou ou o servidor reiniciou)
+  'not_connected', // 409: comando sem a conexão com o servidor do mundo aberta
   'network', // em lastError: sem conexão com o servidor do mundo ou sem resposta no prazo
   'unknown', // em lastError: outro problema (resposta fora do formato, código que esta versão não conhece)
 ] as const;

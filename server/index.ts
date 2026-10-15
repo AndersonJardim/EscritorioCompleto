@@ -165,6 +165,7 @@ const worldUplink =
         tokens: () => worldTokens.read(),
         lastFile: join(config.dataDir, 'world-last-uplink.json'),
         onGoodbye: (reason) => world.goodbye(reason),
+        onLeft: () => world.leftElsewhere(),
         onChange: () => office.markDirty(),
       })
     : undefined;

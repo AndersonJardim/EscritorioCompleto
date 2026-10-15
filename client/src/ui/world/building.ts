@@ -42,7 +42,7 @@ export class BuildingCard {
   private readonly leaveBtn: HTMLButtonElement;
   private statsKey = '';
   private busy = false;
-  private action: 'pause' | 'resume' | null = null;
+  private action: 'pause' | 'resume' | 'join' | null = null;
   /** Primeiro clique em "Sair do mundo" dado: o segundo confirma. */
   private confirmingLeave = false;
 
@@ -148,7 +148,7 @@ export class BuildingCard {
     this.toggleBtn.disabled = true;
     setAttr(this.toggleBtn, 'aria-busy', 'true');
     setHidden(this.error, true);
-    const r = action === 'pause' ? await client.pause() : await client.resume();
+    const r = action === 'pause' ? await client.pause() : action === 'join' ? await client.join() : await client.resume();
     this.busy = false;
     this.toggleBtn.disabled = false;
     setAttr(this.toggleBtn, 'aria-busy', null);
