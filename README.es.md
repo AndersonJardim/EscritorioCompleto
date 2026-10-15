@@ -787,7 +787,9 @@ variables de abajo (en el `.env` o en el entorno) sirven para probar con un serv
 
 La cuenta queda solo en esta computadora, en `~/.habblaud/world.json` (en Docker, en el volumen `/data`), y la sección
 solo funciona desde la propia computadora. Lo que sale y lo que nunca sale de la computadora (en portugués):
-[docs/world/privacidade.md](docs/world/privacidade.md).
+[docs/world/privacidade.md](docs/world/privacidade.md). Cómo se ve la sección, en el modo demostración
+(`?mock=1&world=logged_out`, `waiting` o `approved`; en portugués): [sin cuenta](docs/screenshots/world-sem-conta.png),
+[lista de espera](docs/screenshots/world-lista-de-espera.png) y [personaje](docs/screenshots/world-personagem.png).
 
 ## Cómo funciona
 

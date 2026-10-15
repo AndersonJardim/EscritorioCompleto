@@ -751,6 +751,9 @@ ou no ambiente) servem para testar com um servidor do mundo:
 
 A conta fica só neste computador, em `~/.habblaud/world.json` (no Docker, no volume `/data`), e a seção só funciona pelo
 próprio computador. O que sai e o que nunca sai do computador: [docs/world/privacidade.md](docs/world/privacidade.md).
+Como a seção fica, no modo demonstração (`?mock=1&world=logged_out`, `waiting` ou `approved`):
+[sem conta](docs/screenshots/world-sem-conta.png), [lista de espera](docs/screenshots/world-lista-de-espera.png) e
+[personagem](docs/screenshots/world-personagem.png).
 
 ## Como funciona
 

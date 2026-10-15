@@ -790,7 +790,9 @@ Les variables ci-dessous (dans le `.env` ou dans l'environnement) servent à tes
 
 Le compte reste uniquement sur cet ordinateur, dans `~/.habblaud/world.json` (dans Docker, dans le volume `/data`), et la
 section ne fonctionne que depuis l'ordinateur lui-même. Ce qui sort de l'ordinateur et ce qui n'en sort jamais (en
-portugais) : [docs/world/privacidade.md](docs/world/privacidade.md).
+portugais) : [docs/world/privacidade.md](docs/world/privacidade.md). L'aspect de la section, en mode démonstration
+(`?mock=1&world=logged_out`, `waiting` ou `approved` ; en portugais) : [sans compte](docs/screenshots/world-sem-conta.png),
+[liste d'attente](docs/screenshots/world-lista-de-espera.png) et [personnage](docs/screenshots/world-personagem.png).
 
 ## Comment ça marche
 

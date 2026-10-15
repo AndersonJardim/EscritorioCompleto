@@ -753,7 +753,9 @@ variables below (in `.env` or in the environment) are for testing against a worl
 
 The account stays only on this computer, in `~/.habblaud/world.json` (in Docker, in the `/data` volume), and the section
 only works from this computer. What leaves your computer and what never does (in Portuguese):
-[docs/world/privacidade.md](docs/world/privacidade.md).
+[docs/world/privacidade.md](docs/world/privacidade.md). How the section looks, in demo mode (`?mock=1&world=logged_out`,
+`waiting` or `approved`; in Portuguese): [no account](docs/screenshots/world-sem-conta.png),
+[waitlist](docs/screenshots/world-lista-de-espera.png) and [character](docs/screenshots/world-personagem.png).
 
 ## How it works
 
