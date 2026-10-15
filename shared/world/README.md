@@ -30,6 +30,7 @@ navegador ──/api/world/*──▶ servidor local do Habblaud ──HTTPS /v1
 | Arquivo | O que tem |
 | --- | --- |
 | `protocol.ts` | **Fonte da verdade** do protocolo: rotas REST da conta, mensagens do WebSocket, o pacote do prédio (`WorldUplink`) e as listas fixas (traços, frases, cumprimentos, idiomas). Sem imports: o servidor do mundo guarda uma cópia exata. |
+| `city.ts` | **Fonte da verdade** da geometria da cidade (Fase 3): lotes, quarteirões, a espiral, portas, chunks e o que é caminhável, em tiles. Puro e sem imports: o servidor do mundo guarda uma cópia exata (`protocol/city.ts`) e usa as mesmas contas para validar quem anda. |
 | `schema.json` | O JSON Schema do `WorldUplink`, estrito (`additionalProperties: false`). O servidor valida cada pacote com ele. |
 | `api.ts` | Tipos e códigos de erro das rotas locais `/api/world/*` (o que a interface usa). |
 | `traits.ts`, `intro.ts` | Rótulos traduzidos (`tr()`) dos traços de personalidade e das frases de apresentação. |
@@ -49,7 +50,8 @@ navegador ──/api/world/*──▶ servidor local do Habblaud ──HTTPS /v1
 3. **Campo novo no pacote** = `protocol.ts` + `schema.json` + `projection.ts` + `docs/world/privacidade.md` + os testes
    de chaves, tudo no mesmo PR, explicando no PR o que muda no que sai do computador (um teste confere que todo campo
    do `schema.json` está citado em `privacidade.md`). O servidor do mundo guarda cópias exatas de `protocol.ts`,
-   `schema.json`, `floor-names.ts` e `shared/names.ts`, com o SHA-256 conferido em teste: mudou um deles, avise.
+   `schema.json`, `city.ts`, `floor-names.ts` e `shared/names.ts`, com o SHA-256 conferido em teste: mudou um deles,
+   avise (`server/world/sources.test.ts` confere que `protocol.ts` e `city.ts` não importam nada).
 4. **Nunca mande ao World** caminho, nome de pasta ou de sala, título de sessão, branch, modelo, custo, e-mail da
    conta do Claude, nome editado do personagem nem nada que não esteja na lista de `docs/world/privacidade.md`.
 5. **O token fica no servidor local.** Não o coloque em resposta de rota, no snapshot, em log, em URL nem no navegador.
