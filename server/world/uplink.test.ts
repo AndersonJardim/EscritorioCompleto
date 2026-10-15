@@ -353,6 +353,12 @@ describe('BuildingUplink: visitantes (Fase 4)', () => {
     const s = h.store.get()!;
     h.store.save({ ...s, player: { ...s.player!, visibility: { ...s.player!.visibility, closed: true } } });
     expect(h.uplink.meta()).not.toHaveProperty('visitors');
+    // reaberto: a contagem velha não volta (quem estava foi posto para fora; o servidor só manda quando alguém entra)
+    h.store.save({ ...s, player: { ...s.player!, visibility: { ...s.player!.visibility, closed: false } } });
+    expect(h.uplink.meta()).not.toHaveProperty('visitors');
+    expect(h.uplink.status()).not.toHaveProperty('visitors');
+    h.world.ws.connections[0]!.send({ t: 'visitors', count: 1 });
+    await waitFor(() => h.uplink.meta().visitors === 1, 'nova contagem');
   });
 });
 

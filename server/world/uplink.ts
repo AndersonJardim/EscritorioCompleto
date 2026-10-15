@@ -340,8 +340,10 @@ export class BuildingUplink {
     if (this.last) m.lastUplinkAt = this.last.at;
     if (s?.left) m.left = true;
     if (this.stop_) m.stopped = true;
-    // Fechado a visitas, o servidor não manda mais a contagem (nem o 0): quem estava dentro foi posto para fora.
-    if (this.welcomed && this.visitors !== undefined && !s?.player?.visibility.closed) m.visitors = this.visitors;
+    // Fechado a visitas, o servidor não manda mais a contagem (nem o 0) e põe para fora quem estava dentro: a contagem
+    // guardada morre aí (reaberto, fica sem contagem até o próximo `visitors`, que só vem quando alguém entra).
+    if (s?.player?.visibility.closed) this.visitors = undefined;
+    else if (this.welcomed && this.visitors !== undefined) m.visitors = this.visitors;
     return m;
   }
 
