@@ -361,10 +361,11 @@ Em desenvolvimento e desligado por padrão (o que sai do computador: `docs/world
 `shared/world/README.md`). O protocolo com o servidor do mundo é `shared/world/protocol.ts` (fonte da verdade, com
 `schema.json`). Do lado daqui, `world/`:
 
-- `settings.ts`: `<dataDir>/world.json` `{deviceId, token, email, access, player?, paused?, updatedAt, theme?}`, modo 600
+- `settings.ts`: `<dataDir>/world.json` `{deviceId, token, email, access, player?, paused?, left?, updatedAt, theme?}`, modo 600
   e gravação atômica. O token do dispositivo só sai daqui no cabeçalho `Authorization: Bearer` das chamadas ao servidor
   do mundo e no `hello` do WebSocket: nunca no navegador, no snapshot, no log ou na URL. `theme` (a escolha de
-  Aparência, `auto` por padrão) fica mesmo sem sessão (o arquivo vira só `{theme}`); `paused` é da sessão.
+  Aparência, `auto` por padrão) fica mesmo sem sessão (o arquivo vira só `{theme}`); `paused` e `left` (saiu do mundo,
+  sempre com `paused`) são da sessão.
 - `client.ts`: as rotas `/v1/*` com o `fetch` nativo (prazo de 15 s, sem seguir redirecionamento, resposta de até
   256 KB copiada campo a campo). Erro do servidor do mundo volta como `{status, code}`; rede, prazo e resposta fora do
   formato ganham `world_unreachable`, `world_timeout` e `world_bad_response`.
@@ -375,7 +376,9 @@ Em desenvolvimento e desligado por padrão (o que sai do computador: `docs/world
   snapshot sem ninguém clicar; um 401 do servidor do mundo numa rota com token apaga a sessão daqui (`lastError:
   session_expired`); entrar de novo revoga o dispositivo anterior; sair apaga o `world.json` mesmo sem resposta do
   servidor. O `lastError` leva só códigos conhecidos (`worldLastError` em `shared/world/api.ts`): rede e prazo viram
-  `network`, o resto que a interface não conhece vira `unknown`.
+  `network`, o resto que a interface não conhece vira `unknown`. Pausa, retomada e saída do mundo vão ao servidor do
+  mundo numa fila (na ordem pedida); a retomada sem resposta (rede, prazo, 429, 5xx) tenta de novo com a espera da
+  reconexão do uplink (2 s a 60 s), até dar certo ou o prédio ser pausado de novo.
 - `uplink.ts`: o prédio no mundo, por WebSocket (o `WebSocket` global do Node) em `<HABBLAUD_WORLD_URL>/v1/socket`
   (`wss://`; `ws://127.0.0.1` só no modo dev). Conecta só com a conta aprovada, o personagem criado, a trava do
   terminal e sem pausa. Manda o `hello` (`{v, version, build: {commit, dirty}, locale, token}`) e, a cada `welcome`, o
@@ -385,7 +388,9 @@ Em desenvolvimento e desligado por padrão (o que sai do computador: `docs/world
   `deploy` reconecta; `banned`, `suspended`, `update` e `other-device` param até retomar (ou reabrir); `waiting`,
   `no_player` e `unauthorized` param até a sessão mudar e avisam a conta (`service.goodbye`). A última remessa
   `{at, bytes, uplink, ack}` fica em memória e em `<dataDir>/world-last-uplink.json` (modo 600; só da mesma sessão,
-  apagado ao sair). Avisa o snapshot (`markDirty`) ao conectar, cair, pausar, retomar e a cada ack.
+  apagado ao sair). Avisa o snapshot (`markDirty`) ao conectar, cair, pausar, retomar e a cada ack. Tarefas e
+  compactações (`signals.ts`) são observadas pelo mesmo `Office.onChange`, no máximo uma vez por segundo, com ou sem
+  conexão; durante o boot do escritório (`Office.isBooting`) nada é observado nem enviado.
 - `ids.ts`: os ids do mundo, só em memória (`f_` + 10 hex por sala, `a_` + 8 hex por agente, `crypto.randomBytes`),
   cada um com vida de 24 h ± 6 h sorteada por id; quem some e volta (ou o Habblaud reiniciado) ganha id novo.
 - `tokens.ts`: tokens do prédio (entrada + saída) de hoje e dos 7 dias corridos, do "Meu dia" com a fonte `real` (o
@@ -398,13 +403,16 @@ Em desenvolvimento e desligado por padrão (o que sai do computador: `docs/world
   a trava do terminal (403 `terminal_off`); sem `HABBLAUD_WORLD_URL`, 409 `not_configured`; `HABBLAUD_WORLD=0`, 404.
   Erros: `{error: {code, message?, retryAfter?}}`, com o status e o código do servidor do mundo quando vêm de lá.
   Do prédio: `PUT /api/world/theme` `{theme}` (com ou sem conta), `POST /api/world/pause` (fecha o uplink antes de
-  responder e avisa `POST /v1/me/building/pause`), `POST /api/world/resume` (avisa `/resume` e reconecta) e
+  responder e avisa `POST /v1/me/building/pause`), `POST /api/world/resume` (avisa `/resume` e reconecta),
+  `POST /api/world/leave` ("Sair do mundo": grava `left` e `paused`, fecha o uplink e responde depois do
+  `DELETE /v1/me/building`; sem resposta boa, fica só pausado e devolve o erro) e
   `GET /api/world/last-uplink` (`{at, bytes, uplink, ack?}` ou `{}`, sem a trava do terminal, como o status). O
   `GET /api/world/status` ganha `building` (conta aprovada com personagem) e `theme`; sem `?refresh=1` responde da
   memória e relê `/v1/me` em segundo plano quando venceu.
 
 O estado vai no snapshot em `meta.world` (`{enabled, configured, state, building?}`, nada da conta; `building` =
-`{connected, paused, floors, agents, lastUplinkAt?}`) e em `GET /api/access` (`world`). O build grava
+`{connected, paused, floors, agents, lastUplinkAt?, left?, stopped?}`, com `stopped: true` sem o motivo, que só vai no
+status) e em `GET /api/access` (`world`). O build grava
 `dist/build.json` (`{commit, dirty, builtAt}`, `scripts/build-info.mjs`; sem git, `unknown`;
 `HABBLAUD_BUILD_COMMIT`/`HABBLAUD_BUILD_DIRTY` substituem o git), lido por `readBuildInfo()` (`build.ts`) a cada conexão
 do uplink: o `hello` leva só `{commit, dirty}`.

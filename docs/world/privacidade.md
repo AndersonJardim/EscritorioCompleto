@@ -25,6 +25,7 @@ Ao usar o World, sai do computador, por HTTPS, para o servidor do mundo:
 | Token do dispositivo | Em cada chamada da conta | Provar que é você, sem mandar a senha de novo |
 | Qual dispositivo desconectar | Ao desconectar um | Só o id que o próprio servidor deu ao dispositivo |
 | Pausar e retomar o prédio | Ao clicar em Pausar ou Retomar (`POST /v1/me/building/pause` e `/resume`, só com o token) | Para o prédio apagar na hora para todos e voltar quando você quiser |
+| Sair do mundo | Ao confirmar "Sair do mundo" (`DELETE /v1/me/building`, só com o token) | Para o prédio sair do mundo na hora e o lote ficar livre; a conta e o personagem continuam |
 | Versão do Habblaud | Em toda chamada, no cabeçalho `User-Agent` (`Habblaud/0.11.0`) | Compatibilidade e diagnóstico |
 
 Enquanto a conta está na lista de espera, o Habblaud aberto pergunta ao servidor do mundo, a cada 30 minutos, se o
@@ -147,7 +148,7 @@ exemplo). Quem não quiser nem isso usa o modo discreto ou pausa.
 - A conta do World fica em `~/.habblaud/world.json` (no Docker, no volume `/data`), com permissão só para o seu
   usuário. O token do dispositivo sai dali só para o servidor do mundo, por HTTPS e na primeira mensagem da conexão
   do prédio, e nunca vai para o navegador, para os logs ou para a URL. O mesmo arquivo guarda o tema escolhido para o
-  prédio (que fica mesmo depois de sair da conta) e se o prédio está pausado.
+  prédio (que fica mesmo depois de sair da conta) e se o prédio está pausado ou fora do mundo.
 - A última remessa do prédio (o pacote exato, a hora, o tamanho e a resposta do servidor) fica em
   `~/.habblaud/world-last-uplink.json`, também só para o seu usuário, e some ao sair da conta.
 - Os ids aleatórios do mundo vivem só na memória do Habblaud: reiniciar o Habblaud gera ids novos.
@@ -155,7 +156,12 @@ exemplo). Quem não quiser nem isso usa o modo discreto ou pausa.
   acessível apenas pelo próprio computador. Como acontece com as mensagens pelo escritório, qualquer programa deste
   computador que alcance o `localhost` consegue agir pela conta.
 - **Pausar** fecha a conexão do prédio antes de responder e avisa o servidor do mundo: o prédio apaga na hora para
-  todos. **Retomar** reabre.
+  todos e o lote fica guardado. **Retomar** reabre (sem resposta do servidor, o Habblaud tenta avisar de novo).
+- **Sair do mundo** fecha a conexão do prédio e só responde depois que o servidor do mundo retira o prédio e libera
+  o lote. A conta e o personagem continuam; nada sai até você clicar em **Voltar ao mundo**, que cria um prédio novo,
+  em outro lote.
+- Tarefas concluídas e compactações são contadas na memória do Habblaud também com o prédio pausado ou sem conexão;
+  só a faixa do dia (e o "compactou desde o pacote anterior") sai, na remessa seguinte.
 - **Sair** apaga o token deste computador e o desconecta no servidor. A lista de dispositivos mostra onde a conta está
   conectada (até 3) e desconecta um por um.
 

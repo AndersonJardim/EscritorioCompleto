@@ -790,7 +790,8 @@ Les variables ci-dessous (dans le `.env` ou dans l'environnement) servent à tes
 
 Avec le compte validé et le personnage créé, votre immeuble monte tout seul dans le monde (par WebSocket, uniquement la
 liste anonyme de la page de confidentialité : étages, agents, statuts, avatars et tokens arrondis) ; **Mettre en pause**
-l'éteint aussitôt.
+l'éteint aussitôt et garde la parcelle ; **Quitter le monde** retire l'immeuble et libère la parcelle (le compte et le
+personnage restent, et revenir crée un nouvel immeuble).
 
 Le compte reste uniquement sur cet ordinateur, dans `~/.habblaud/world.json` (dans Docker, dans le volume `/data`), et la
 section ne fonctionne que depuis l'ordinateur lui-même. Ce qui sort de l'ordinateur et ce qui n'en sort jamais (en

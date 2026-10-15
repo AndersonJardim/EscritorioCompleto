@@ -786,7 +786,9 @@ variables de abajo (en el `.env` o en el entorno) sirven para probar con un serv
 | `HABBLAUD_WORLD_DEV` | desactivado | `1` acepta un servidor del mundo local en `http://127.0.0.1:<puerto>` (`npm run dev` ya lo acepta). |
 
 Con la cuenta habilitada y el personaje creado, tu edificio sube al mundo solo (por WebSocket, solo la lista anónima de
-la página de privacidad: pisos, agentes, estados, avatares y tokens redondeados); **Pausar** lo apaga al instante.
+la página de privacidad: pisos, agentes, estados, avatares y tokens redondeados); **Pausar** lo apaga al instante y
+guarda el lote; **Salir del mundo** retira el edificio y libera el lote (la cuenta y el personaje se mantienen, y volver
+crea un edificio nuevo).
 
 La cuenta queda solo en esta computadora, en `~/.habblaud/world.json` (en Docker, en el volumen `/data`), y la sección
 solo funciona desde la propia computadora. Lo que sale y lo que nunca sale de la computadora (en portugués):

@@ -753,7 +753,8 @@ variables below (in `.env` or in the environment) are for testing against a worl
 
 With the account approved and the character created, your building goes up to the world on its own (over a WebSocket,
 only the anonymous list on the privacy page: floors, agents, statuses, avatars and rounded tokens); **Pause** turns it
-off right away.
+off right away and keeps the lot; **Leave the world** removes the building and frees the lot (the account and the
+character stay, and coming back creates a new building).
 
 The account stays only on this computer, in `~/.habblaud/world.json` (in Docker, in the `/data` volume), and the section
 only works from this computer. What leaves your computer and what never does (in Portuguese):
