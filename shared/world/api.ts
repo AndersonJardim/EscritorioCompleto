@@ -71,6 +71,7 @@ export const WORLD_LOCAL_ERROR_CODES = [
   'world_timeout', // 504
   'world_bad_response', // 502: resposta fora do formato
   'world_error', // erro do servidor do mundo sem código legível (mesmo status)
-  'storage_failed', // 500: não deu para gravar world.json
+  'storage_failed', // em lastError: não deu para gravar world.json (a sessão vale só até reiniciar)
+  'internal', // 500
 ] as const;
 export type WorldLocalErrorCode = (typeof WORLD_LOCAL_ERROR_CODES)[number];

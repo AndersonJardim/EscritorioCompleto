@@ -49,6 +49,10 @@ import { DictationService } from './dictation/dictation';
 import { createWhisperTranscriber, findWhisper } from './dictation/whisper';
 import { DeliveryIndex } from './deliveries/deliveries';
 import { FileFetcher } from './deliveries/fetcher';
+import { WorldClient } from './world/client';
+import { createWorldRoutes } from './world/http';
+import { WorldService } from './world/service';
+import { WorldSettingsStore } from './world/settings';
 
 const config = loadConfig();
 const startedAt = Date.now();
@@ -80,6 +84,19 @@ const updates = new UpdateChecker({
   onChange: () => late.office?.markDirty(),
 });
 updates.load();
+// Habblaud World (server/world/): a conta e o personagem neste computador. Sem HABBLAUD_WORLD_URL fica desligado (nada
+// sai do computador); HABBLAUD_WORLD=0 esconde tudo (rotas 404 e nada na interface).
+const worldStore = new WorldSettingsStore(join(config.dataDir, 'world.json'));
+if (config.world.enabled && config.world.url) worldStore.load();
+const world = config.world.enabled
+  ? new WorldService({
+      config: config.world,
+      terminal: config.terminal,
+      store: worldStore,
+      client: config.world.url ? new WorldClient({ baseUrl: config.world.url, version: config.version }) : undefined,
+      onChange: () => late.office?.markDirty(),
+    })
+  : undefined;
 const accounts = new AccountsService({
   dirs: config.claudeDirs,
   home: config.home,
@@ -102,6 +119,7 @@ const office = new Office({
   messages: config.messages ? () => late.messages?.reachable() ?? new Set() : undefined,
   ptys: () => (late.ptys ? { status: late.ptys.status(), list: late.ptys.list() } : { status: { enabled: false, reason: late.ptyOff ?? tr('desligado') }, list: [] }),
   updates: () => updates.status(),
+  world: () => world?.meta() ?? { enabled: false, configured: false, state: 'off' },
 });
 // Fontes de agentes, uma por ferramenta (sources/source.ts): a do Claude Code e, depois dela, a do Codex (quando há
 // pastas do Codex; HABBLAUD_CODEX=0 desliga), com o histórico dela no HistorySet abaixo e as contas registradas por
@@ -311,6 +329,7 @@ const api = createApiHandler({
   stats,
   updates,
   remote: config.remote ? { is: isRemoteRequest, allows: (f) => config.remote!.allow.has(f) } : undefined,
+  world: world ? createWorldRoutes(world) : undefined,
 });
 
 const server = http.createServer();
@@ -455,6 +474,18 @@ server.listen(config.port, config.host, () => {
           : tr('   Mensagens ao Codex: sem o binário do Codex (codex no PATH ou HABBLAUD_CODEX_BIN); o auxiliar npm run codex:bridge também serve.'),
     );
   }
+  if (config.world.warning) log.warn(`   ${config.world.warning}.`);
+  log.info(
+    !world
+      ? tr('   Habblaud World: escondido (HABBLAUD_WORLD=0).')
+      : !config.world.url
+        ? tr('   Habblaud World: desligado (sem HABBLAUD_WORLD_URL).')
+        : tr('   Habblaud World: {0}, conta neste computador: {1}{2}.', [
+            config.world.url,
+            world.state(),
+            config.terminal ? '' : tr(' (só leitura: a trava do terminal está desligada)'),
+          ]),
+  );
   log.info(
     updates.enabled
       ? tr('   Versão nova: verificando as releases de github.com/{0} a cada 6 h.', [config.repo])
