@@ -10,6 +10,26 @@ do meio (0.**3**.0).
 
 ## [Não lançado]
 
+### Habblaud World (em desenvolvimento, desligado por padrão)
+
+A base do Habblaud World, a cidade online onde cada Habblaud vira um prédio. Ainda não há nada na interface, e sem
+`HABBLAUD_WORLD_URL` nada sai do computador (`HABBLAUD_WORLD=0` esconde até as rotas). O que pode sair e o que nunca sai
+está em [`docs/world/privacidade.md`](docs/world/privacidade.md).
+
+- **Conta e personagem pelo servidor local:** rotas `/api/world/*` para criar a conta (o desafio anti-robô é resolvido
+  pelo próprio Habblaud), confirmar o e-mail, entrar, sair, reenviar o código, trocar a senha, salvar o personagem
+  (nome, aparência, 2 ou 3 traços e a frase de apresentação) e a visibilidade, e ver ou desconectar dispositivos. Só
+  pelo próprio computador: nunca pela porta do celular, e o que age pela conta só com o acesso local (a trava do
+  terminal).
+- **O token do dispositivo fica neste computador**, em `~/.habblaud/world.json` (permissão 600; no Docker, no volume
+  `/data`): nunca vai ao navegador, ao snapshot, aos logs nem à URL.
+- **Protocolo aberto:** `shared/world/protocol.ts` e `schema.json` definem tudo o que o Habblaud troca com o World; as
+  regras do nome de jogador, os 14 traços, as 20 frases de apresentação e os 10 cumprimentos ficam em `shared/world/`.
+- **Aviso sobre dados verdadeiros** para pessoas e agentes de IA (`CLAUDE.md`, `AGENTS.md`, `shared/world/README.md` e
+  nos arquivos do World), e a regra de revisão de PRs que mexem nele no `CONTRIBUTING.md`.
+- O build grava `dist/build.json` com o commit e se a cópia estava modificada (vai junto na conexão com o World, nas
+  próximas fases). O `docker-compose.yml` repassa `HABBLAUD_WORLD`, `HABBLAUD_WORLD_URL` e `HABBLAUD_WORLD_DEV`.
+
 ## [0.11.0] - 2026-10-13
 
 Para atualizar: `git pull` e `npm run docker:up` (ele também atualiza o mod do Habblaud nas contas). O acesso pelo

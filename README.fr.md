@@ -46,6 +46,7 @@ aucun identifiant et ne fait aucun appel externe.
 - [Mode d'emploi](#mode-demploi)
 - [Comptes et utilisation (5 heures et semaine)](#comptes-et-utilisation-5-heures-et-semaine)
 - [Configuration](#configuration)
+- [Habblaud World](#habblaud-world)
 - [Comment ça marche](#comment-ça-marche)
 - [Confidentialité et sécurité](#confidentialité-et-sécurité)
 - [Développement](#développement)
@@ -770,10 +771,26 @@ Tout fonctionne sans rien configurer. Si vous avez besoin d'ajuster quelque chos
 | `HABBLAUD_ACCOUNTS` | — | JSON pour personnaliser le nom, la lettre ou la couleur, associé par le nom du dossier du compte. Ex. : `[{"id":".claude-conta2","name":"Trabalho","short":"T","color":"#5cc97b"}]`. |
 
 **Dans Docker**, sont prises en compte `HABBLAUD_PORT`, `HABBLAUD_BIND`, `HABBLAUD_ALLOWED_HOSTS`, `HABBLAUD_DEMO`, `HABBLAUD_TERMINAL`,
-`HABBLAUD_MENSAGENS`, `HABBLAUD_CODEX`, `HABBLAUD_UPDATE_CHECK`, `HABBLAUD_LANG`, `HABBLAUD_PTY` et les
+`HABBLAUD_MENSAGENS`, `HABBLAUD_CODEX`, `HABBLAUD_UPDATE_CHECK`, `HABBLAUD_LANG`, `HABBLAUD_PTY`, les `HABBLAUD_WORLD*` et les
 `HABBLAUD_REMOTE_*` (dans le `.env` ou dans l'environnement) ainsi que `HABBLAUD_CLAUDE_DIRS`, `HABBLAUD_CODEX_DIRS`, `HABBLAUD_USAGE_DIR` et
 `HABBLAUD_ACCOUNTS` (lues par `docker:up` sur l'hôte) ; les autres sont fixées à l'intérieur du conteneur. Options : `npm run docker:up -- --no-build` (démarre sans reconstruire),
 `npm run docker:down` (arrête) et `npm run docker:logs` (suit les journaux).
+
+## Habblaud World
+
+Habblaud World sera une ville en ligne où chaque Habblaud devient un immeuble, en direct. **C'est en développement et
+désactivé par défaut :** sans `HABBLAUD_WORLD_URL`, rien n'apparaît dans l'interface et rien ne sort de l'ordinateur.
+Les variables ci-dessous (dans le `.env` ou dans l'environnement) servent à tester avec un serveur du monde :
+
+| Variable | Par défaut | À quoi ça sert |
+| --- | --- | --- |
+| `HABBLAUD_WORLD_URL` | — (désactivé) | Adresse du serveur du monde, uniquement `https://` ou `wss://` (sans chemin). |
+| `HABBLAUD_WORLD` | activé | `0` masque tout le World (routes et interface), même avec l'URL. |
+| `HABBLAUD_WORLD_DEV` | désactivé | `1` accepte un serveur du monde local sur `http://127.0.0.1:<port>` (`npm run dev` l'accepte déjà). |
+
+Le compte reste uniquement sur cet ordinateur, dans `~/.habblaud/world.json` (dans Docker, dans le volume `/data`), et la
+section ne fonctionne que depuis l'ordinateur lui-même. Ce qui sort de l'ordinateur et ce qui n'en sort jamais (en
+portugais) : [docs/world/privacidade.md](docs/world/privacidade.md).
 
 ## Comment ça marche
 
@@ -880,6 +897,8 @@ avec `no-new-privileges`. Les métadonnées des comptes (lettre, e-mail, organis
   (`api.github.com/repos/marmottajr/habblaud/releases/latest`). Elle n'envoie rien sur vos sessions ; GitHub ne voit que
   votre IP et la version utilisée, qui figure dans le `User-Agent`.
   `HABBLAUD_UPDATE_CHECK=0` désactive la requête.
+  [Habblaud World](#habblaud-world) (en développement, désactivé par défaut) ne parle au serveur du monde que si
+  `HABBLAUD_WORLD_URL` est définie : voir [ce qui sort](docs/world/privacidade.md) (en portugais).
   Le [téléphone avec connexion](#téléphone-avec-connexion-et-https-valider-les-demandes) aussi : il n'existe qu'après `npm run remote:setup`.
 - **Sans identifiants :** Habblaud ne lit ni mots de passe ni tokens d'accès. Du `.claude.json` de chaque compte, il
   n'utilise que l'e-mail, l'organisation et le cache de `/usage` ; l'utilisation en direct vient du mod (ou de la

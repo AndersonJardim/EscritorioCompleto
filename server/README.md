@@ -82,6 +82,7 @@ festa) ou 10 min. Push só avisa. O mesmo CI visto de novo em 2 min não repete 
 | `GET /api/mod/summary?account=&session=` | `ModSummary` para o mod do Claude Code: `{version, agents, working, waiting:[{id, name, room, account, waitingFor, since, answerable}]}`, sem o demo e sem a sessão de quem pergunta (ver abaixo) |
 | `GET /api/updates` | `{version, ...UpdateStatus}`: versão em uso e o resultado da verificação de versão nova (ver abaixo) |
 | `POST /api/updates/check` | "Verificar agora": consulta o GitHub (no máximo uma vez a cada 30 s) e devolve `{version, ...UpdateStatus}` |
+| `/api/world/*` | Habblaud World (conta e personagem; em desenvolvimento, desligado sem `HABBLAUD_WORLD_URL`): só pela porta local com `Host` local; ver abaixo |
 | `POST /api/permissions` | (hook) registra um pedido de permissão: `201 {id, expiresAt}` ou `200 {skip}`; só com bind local (ver abaixo) |
 | `GET /api/permissions/:id/wait` | (hook) long-poll de até 25 s (`?timeout=` em segundos): `{status: 'pending' \| 'decided' \| 'released', ...}` |
 | `GET /api/permissions/:id` | (página) detalhe do pedido com os argumentos (`PermissionRequestInfo` com `input`) |
@@ -354,6 +355,33 @@ do Codex levam `provider: 'codex'` (ausente = Claude Code). Ids: `<conta>:<threa
   `/ack` (mesma trava das mensagens). `canMessage` = há entregador (binário achado, ou auxiliar visto há até 10 s).
   Retorno 0 = entrou na fila da sessão (`delivered`); o Codex consome a fila a cada ~10 s, quando a sessão fica ociosa.
 
+## Habblaud World
+
+Em desenvolvimento e desligado por padrão (o que sai do computador: `docs/world/privacidade.md`; como mexer:
+`shared/world/README.md`). O protocolo com o servidor do mundo é `shared/world/protocol.ts` (fonte da verdade, com
+`schema.json`). Do lado daqui, `world/`:
+
+- `settings.ts`: `<dataDir>/world.json` `{deviceId, token, email, access, player?, updatedAt}`, modo 600 e gravação
+  atômica. O token do dispositivo só sai daqui no cabeçalho `Authorization: Bearer` das chamadas ao servidor do mundo:
+  nunca no navegador, no snapshot, no log ou na URL.
+- `client.ts`: as rotas `/v1/*` com o `fetch` nativo (prazo de 15 s, sem seguir redirecionamento, resposta de até
+  256 KB copiada campo a campo). Erro do servidor do mundo volta como `{status, code}`; rede, prazo e resposta fora do
+  formato ganham `world_unreachable`, `world_timeout` e `world_bad_response`.
+- `altcha.ts`: o desafio anti-robô do cadastro e dos pedidos de e-mail, resolvido aqui por força bruta (SHA-256), em
+  lotes de 5.000 tentativas que devolvem a vez ao event loop.
+- `service.ts`: a conta (uma operação por vez). `/v1/me` é relido no máximo a cada 30 s (ou com `?refresh=1`); um 401
+  do servidor do mundo numa rota com token apaga a sessão daqui (`lastError: session_expired`); entrar de novo revoga
+  o dispositivo anterior; sair apaga o `world.json` mesmo sem resposta do servidor.
+- `http.ts`: as rotas `/api/world/*` (lista e formatos em `shared/world/api.ts`). `http/app.ts` só as entrega pela
+  porta local com `Host` local (a porta do celular recebe 403 `local_only`, nem com login); tudo, menos o `status`, exige
+  a trava do terminal (403 `terminal_off`); sem `HABBLAUD_WORLD_URL`, 409 `not_configured`; `HABBLAUD_WORLD=0`, 404.
+  Erros: `{error: {code, message?, retryAfter?}}`, com o status e o código do servidor do mundo quando vêm de lá.
+
+O estado vai no snapshot em `meta.world` (`{enabled, configured, state}`, nada da conta) e em `GET /api/access`
+(`world`). O build grava `dist/build.json` (`{commit, dirty, builtAt}`, `scripts/build-info.mjs`; sem git, `unknown`;
+`HABBLAUD_BUILD_COMMIT`/`HABBLAUD_BUILD_DIRTY` substituem o git), lido por `readBuildInfo()` (`build.ts`) para o `hello`
+das próximas fases.
+
 ## Variáveis de ambiente
 
 | Variável | Padrão | Uso |
@@ -376,6 +404,9 @@ do Codex levam `provider: 'codex'` (ausente = Claude Code). Ids: `<conta>:<threa
 | `HABBLAUD_ACCOUNTS` | — | JSON com metadados das contas vindos do host (Docker): `[{id, configDir, mountDir, short, name, email, organization, plan, color, cachedUsage}]`, casados por `id`, `mountDir` ou `configDir` |
 | `HABBLAUD_USAGE_DIR` | `~/.habblaud/usage` (Docker: `/usage`) | pasta do uso capturado pelo tap de statusline ou pelo mod do Claude Code, relida a cada 5 s |
 | `HABBLAUD_ALLOWED_HOSTS` | — | nomes extras aceitos no `Host`/`Origin` (vírgula); `localhost`, `*.localhost` e IPs sempre valem |
+| `HABBLAUD_WORLD_URL` | — (desligado) | servidor do Habblaud World: só `https://` ou `wss://`, sem caminho; `http://127.0.0.1:*` só no modo dev |
+| `HABBLAUD_WORLD` | ligado | `0` (`false`, `off`, `no`) esconde o Habblaud World: rotas 404 e nada na interface |
+| `HABBLAUD_WORLD_DEV` | desligado (`--dev` liga) | `1` aceita o servidor do mundo em `http://127.0.0.1` ou `ws://127.0.0.1` |
 
 No hook de permissão (ambiente do Claude Code; os argumentos `--port`/`--timeout` gravados pelo instalador têm
 preferência): `HABBLAUD_PORT` (porta do Habblaud, padrão `4747`), `HABBLAUD_PERMISSION_TIMEOUT` (segundos de espera
@@ -426,6 +457,7 @@ O repositório é também um marketplace de plugins do Claude Code (`.claude-plu
 - `permissions/` — responder pelo escritório (permissões e perguntas): registro dos pedidos (`registry.ts`), rotas (`http.ts`) e a busca da chamada no transcript (`transcript.ts`).
 - `messages/` — mensagens pelo escritório: fila, presença das sessões e prazos (`registry.ts`) e rotas (`http.ts`).
 - `updates/` — verificação de versão nova nas releases do GitHub (`checker.ts`).
+- `world/` — Habblaud World: sessão em `world.json` (`settings.ts`), cliente do servidor do mundo (`client.ts`), ALTCHA (`altcha.ts`), a conta (`service.ts`) e as rotas `/api/world/*` (`http.ts`).
 
 Testes: `npx vitest run server shared` (fixtures sintéticas em `server/test/fixtures.ts`; os scripts do host —
 tap de statusline, hook de permissão (rodado como processo contra um servidor de teste), instaladores e

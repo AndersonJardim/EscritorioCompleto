@@ -45,6 +45,7 @@ external calls.
 - [How to use](#how-to-use)
 - [Accounts and usage (5-hour and weekly)](#accounts-and-usage-5-hour-and-weekly)
 - [Configuration](#configuration)
+- [Habblaud World](#habblaud-world)
 - [How it works](#how-it-works)
 - [Privacy and security](#privacy-and-security)
 - [Development](#development)
@@ -733,10 +734,26 @@ Everything works without configuring anything. If you need to adjust something, 
 | `HABBLAUD_ACCOUNTS` | — | JSON to customize name, letter or color, matched by the account folder name. E.g. `[{"id":".claude-conta2","name":"Trabalho","short":"T","color":"#5cc97b"}]`. |
 
 **In Docker**, `HABBLAUD_PORT`, `HABBLAUD_BIND`, `HABBLAUD_ALLOWED_HOSTS`, `HABBLAUD_DEMO`, `HABBLAUD_TERMINAL`,
-`HABBLAUD_MENSAGENS`, `HABBLAUD_CODEX`, `HABBLAUD_UPDATE_CHECK`, `HABBLAUD_LANG`, `HABBLAUD_PTY` and the
+`HABBLAUD_MENSAGENS`, `HABBLAUD_CODEX`, `HABBLAUD_UPDATE_CHECK`, `HABBLAUD_LANG`, `HABBLAUD_PTY`, the `HABBLAUD_WORLD*` and the
 `HABBLAUD_REMOTE_*` apply (in `.env` or in the environment), as do `HABBLAUD_CLAUDE_DIRS`, `HABBLAUD_CODEX_DIRS`, `HABBLAUD_USAGE_DIR` and
 `HABBLAUD_ACCOUNTS` (read by `docker:up` on the host); the rest are fixed inside the container. Options: `npm run docker:up -- --no-build` (starts without rebuilding),
 `npm run docker:down` (stops) and `npm run docker:logs` (follows the logs).
+
+## Habblaud World
+
+Habblaud World will be an online city where every Habblaud becomes a building, live. **It's in development and off by
+default:** without `HABBLAUD_WORLD_URL`, nothing shows up in the interface and nothing leaves your computer. The
+variables below (in `.env` or in the environment) are for testing against a world server:
+
+| Variable | Default | What for |
+| --- | --- | --- |
+| `HABBLAUD_WORLD_URL` | — (off) | World server address, `https://` or `wss://` only (no path). |
+| `HABBLAUD_WORLD` | on | `0` hides everything about the World (routes and interface), even with the URL. |
+| `HABBLAUD_WORLD_DEV` | off | `1` accepts a local world server at `http://127.0.0.1:<port>` (`npm run dev` already does). |
+
+The account stays only on this computer, in `~/.habblaud/world.json` (in Docker, in the `/data` volume), and the section
+only works from this computer. What leaves your computer and what never does (in Portuguese):
+[docs/world/privacidade.md](docs/world/privacidade.md).
 
 ## How it works
 
@@ -838,6 +855,8 @@ metadata (letter, email, organization) is read on the host by `docker:up` and pa
   with no token, to the public GitHub API (`api.github.com/repos/marmottajr/habblaud/releases/latest`). It doesn't send anything
   about your sessions; GitHub only sees your IP and the version in use, which goes in the `User-Agent`.
   `HABBLAUD_UPDATE_CHECK=0` turns off the request.
+  [Habblaud World](#habblaud-world) (in development, off by default) only talks to the world server when
+  `HABBLAUD_WORLD_URL` is set: see [what leaves your computer](docs/world/privacidade.md) (in Portuguese).
   So is the [phone with login](#phone-with-login-and-https-approving-requests), which only exists after `npm run remote:setup`.
 - **No credentials:** Habblaud doesn't read passwords or access tokens. From each account's `.claude.json` it only uses the
   email, the organization and the `/usage` cache; live usage comes from the mod (or the statusline tap).
