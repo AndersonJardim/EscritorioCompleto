@@ -658,6 +658,26 @@ describe('o prédio no mundo (uplink) pelas rotas', () => {
     await waitFor(() => w.ws.uplinks.length === 2, 'de volta ao mundo');
   });
 
+  it('voltar ao mundo sem ter saído (só pausado) é retomar: avisa o /resume, não o /join, e reconecta', async () => {
+    const s = await start({ uplink: true });
+    const w = s.world!;
+    await call(s.base, 'POST', '/api/world/register', { email: EMAIL, password: PASSWORD });
+    await call(s.base, 'POST', '/api/world/verify', { email: EMAIL, code: FAKE_CODE });
+    await call(s.base, 'PUT', '/api/world/character', CHARACTER);
+    w.accounts.get(EMAIL)!.access = 'approved';
+    await call(s.base, 'GET', '/api/world/status?refresh=1');
+    await waitFor(() => w.ws.uplinks.length === 1, 'primeira remessa');
+    await call(s.base, 'POST', '/api/world/pause', {});
+    expect(w.ws.open).toHaveLength(0);
+    const r = await call(s.base, 'POST', '/api/world/join', {});
+    expect(r.status).toBe(200);
+    expect(r.body.building).toMatchObject({ paused: false });
+    await waitFor(() => w.ws.uplinks.length === 2, 'de volta');
+    await waitFor(() => w.accounts.get(EMAIL)!.buildingPaused === false, 'retomado no servidor');
+    expect(w.requests.filter((q) => q.path === '/v1/me/building/join')).toHaveLength(0);
+    expect(w.requests.filter((q) => q.path === '/v1/me/building/resume')).toHaveLength(1);
+  });
+
   it('saiu do mundo em outro computador: o pacote recusado com left grava a saída e a pausa e a conexão não volta', async () => {
     const s = await start({ uplink: true });
     const w = s.world!;

@@ -409,7 +409,7 @@ Em desenvolvimento e desligado por padrão (o que sai do computador: `docs/world
   `POST /api/world/leave` ("Sair do mundo": grava `left` e `paused`, fecha o uplink e responde depois do
   `DELETE /v1/me/building`; sem resposta boa, fica só pausado e devolve o erro), `POST /api/world/join` ("Voltar ao
   mundo": `POST /v1/me/building/join` e, só com a resposta boa, tira `left` e `paused` e reabre o uplink; o 404 aqui
-  não conta como feito; o `/resume` fora do mundo passa por ele) e
+  não conta como feito; o `/resume` fora do mundo passa por ele e, sem ter saído, ele é o `/resume`) e
   `GET /api/world/last-uplink` (`{at, bytes, uplink, ack?}` ou `{}`, sem a trava do terminal, como o status). O
   `GET /api/world/status` ganha `building` (conta aprovada com personagem) e `theme`; sem `?refresh=1` responde da
   memória e relê `/v1/me` em segundo plano quando venceu.

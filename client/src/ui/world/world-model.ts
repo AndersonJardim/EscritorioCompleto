@@ -499,7 +499,7 @@ export function worldNoticeText(id: string): string {
     case 'view_required':
       return tr('A cidade ainda não está aberta. Espere um instante.');
     case 'not_found':
-      return tr('Essa pessoa não está mais por perto.');
+      return tr('O que foi pedido não está mais por perto.');
     case 'street_left':
       return tr('Muito tempo parado: você saiu da rua. Ande para voltar.');
     case 'chunk_full':

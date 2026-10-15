@@ -24,7 +24,8 @@
 //                                                continuam)
 //   POST /api/world/join                     {} → 200 WorldStatus ("Voltar ao mundo": POST /v1/me/building/join e,
 //                                                com a resposta, tira a saída e a pausa e reabre o uplink; o próximo
-//                                                pacote cria um prédio novo, em outro lote)
+//                                                pacote cria um prédio novo, em outro lote; sem ter saído, é o
+//                                                resume)
 //   GET  /api/world/last-uplink              → WorldLastUplink | {} (o que foi enviado por último, exato)
 //
 // A cena Mundo (Fase 3; server/world/viewer.ts), com as mesmas travas e sem a porta do celular:

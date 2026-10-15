@@ -126,6 +126,8 @@ export class WorldService {
   private resumeTimer?: ReturnType<typeof setTimeout>;
   private resumeAttempt = 0;
   private readonly random: () => number;
+  /** Sobe a cada volta ao mundo: um /v1/me que saiu antes dela não marca a saída de novo. */
+  private joinSeq = 0;
 
   constructor(private readonly o: WorldServiceOptions) {
     this.now = o.now ?? Date.now;
@@ -252,6 +254,8 @@ export class WorldService {
   async join(): Promise<Outcome<WorldStatus>> {
     const s = this.o.store.get();
     if (!s) return { ok: false, status: 401, code: 'not_logged_in' };
+    // Sem ter saído, voltar é retomar (pausado: avisa o /resume; o servidor não acende um prédio pausado sozinho).
+    if (!s.left) return this.resume();
     this.clearResumeRetry();
     const r = await this.queueBuilding('join', s.token);
     if (this.o.store.get()?.token !== s.token) return r.ok ? { ok: true, status: 200, data: this.compose() } : r;
@@ -259,6 +263,7 @@ export class WorldService {
       if (r.status === 401) this.drop('session_expired');
       return r;
     }
+    this.joinSeq++;
     const now = this.o.store.get();
     if (now?.left || now?.paused) this.o.store.update({ left: undefined, paused: undefined });
     this.o.onChange?.();
@@ -457,9 +462,10 @@ export class WorldService {
     return this.exclusive(() =>
       this.withToken(async (s) => {
         this.lastFetchAt = this.now();
+        const seq = this.joinSeq;
         const r = await this.o.client!.me(s.token);
         if (!r.ok) return r;
-        this.applyMe(s, r.data);
+        this.applyMe(s, r.data, seq);
         return { ok: true, status: 200, data: { devices: r.data.devices } };
       }),
     );
@@ -554,6 +560,7 @@ export class WorldService {
     const s = this.o.store.get();
     if (!s || !this.o.client) return;
     this.lastFetchAt = this.now();
+    const seq = this.joinSeq;
     const r = await this.o.client.me(s.token);
     if (this.o.store.get()?.token !== s.token) return; // a sessão mudou no meio
     if (!r.ok) {
@@ -561,16 +568,17 @@ export class WorldService {
       else this.lastError = worldLastError(r.code);
       return;
     }
-    this.applyMe(s, r.data);
+    this.applyMe(s, r.data, seq);
   }
 
   /** Guarda o /v1/me do token `s` e grava o que mudou (acesso e personagem) em world.json. */
-  private applyMe(s: WorldSession, me: MeResponse): void {
+  /** `seq`: o `joinSeq` de quando a leitura saiu (uma leitura de antes da volta ao mundo não marca a saída de novo). */
+  private applyMe(s: WorldSession, me: MeResponse, seq: number): void {
     if (this.o.store.get()?.token !== s.token) return;
     this.me = me;
     this.meToken = s.token;
     this.lastError = undefined;
-    if (me.left === true && !s.left) this.leftElsewhere();
+    if (me.left === true && !s.left && seq === this.joinSeq) this.leftElsewhere();
     const access = me.account.access;
     if (s.access !== access || !sameJson(s.player, me.player)) {
       this.o.store.update({ access, player: me.player });

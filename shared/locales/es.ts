@@ -2977,7 +2977,7 @@ export const ES: Readonly<Record<string, string>> = {
   "O mundo recusou um comando fora do formato. Atualize o Habblaud.": "El mundo rechazó un comando con formato incorrecto. Actualiza Habblaud.",
   "Comandos demais em pouco tempo: vá com calma.": "Demasiados comandos en poco tiempo: con calma.",
   "A cidade ainda não está aberta. Espere um instante.": "La ciudad todavía no está abierta. Espera un momento.",
-  "Essa pessoa não está mais por perto.": "Esa persona ya no está cerca.",
+  "O que foi pedido não está mais por perto.": "Lo que se pidió ya no está cerca.",
   "Muito tempo parado: você saiu da rua. Ande para voltar.": "Demasiado tiempo quieto: saliste de la calle. Camina para volver.",
   "A área está cheia: só quem está mais perto aparece.": "La zona está llena: solo aparece quien está más cerca.",
   "Você está ausente: o seu personagem parou.": "Estás ausente: tu personaje se detuvo.",
