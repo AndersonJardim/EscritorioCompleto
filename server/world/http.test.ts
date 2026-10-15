@@ -220,6 +220,14 @@ describe('HABBLAUD_WORLD e HABBLAUD_WORLD_URL', () => {
     expect(p('ws://127.0.0.1:4848', { HABBLAUD_WORLD_DEV: '1' }).url).toBe('http://127.0.0.1:4848');
     expect(p('http://localhost:4848', {}, ['--dev']).url).toBeUndefined();
     expect(p('http://10.0.0.5:4848', {}, ['--dev']).url).toBeUndefined();
+    // O servidor do mundo no host, visto de dentro do container do Habblaud (docker-compose.yml: extra_hosts).
+    expect(p('http://host.docker.internal:4848', { HABBLAUD_WORLD_DEV: '1' }).url).toBe('http://host.docker.internal:4848');
+    expect(p('ws://host.docker.internal:4848', {}, ['--dev']).url).toBe('http://host.docker.internal:4848');
+    expect(p('http://host.docker.internal:4848').url).toBeUndefined();
+    expect(p('http://host.docker.internal:4848').warning).toMatch(/host\.docker\.internal.*desenvolvimento/);
+    expect(p('http://x.host.docker.internal:4848', {}, ['--dev']).url).toBeUndefined();
+    expect(p('http://host.docker.internal.evil.com:4848', {}, ['--dev']).url).toBeUndefined();
+    expect(p('https://host.docker.internal:4848').url).toBe('https://host.docker.internal:4848');
     for (const bad of ['https://user:pw@server.habblaud.com', 'https://server.habblaud.com/v1', 'https://server.habblaud.com/?x=1', 'https://x/#a', 'nada']) {
       expect(p(bad).url, bad).toBeUndefined();
       expect(p(bad).warning, bad).toBeTruthy();
@@ -230,6 +238,7 @@ describe('HABBLAUD_WORLD e HABBLAUD_WORLD_URL', () => {
     expect(p(undefined, { HABBLAUD_WORLD: 'off' }).enabled).toBe(false);
     expect(worldSocketUrl('https://server.habblaud.com')).toBe('wss://server.habblaud.com/v1/socket');
     expect(worldSocketUrl('http://127.0.0.1:4848')).toBe('ws://127.0.0.1:4848/v1/socket');
+    expect(worldSocketUrl('http://host.docker.internal:4848')).toBe('ws://host.docker.internal:4848/v1/socket');
   });
 });
 
@@ -240,6 +249,11 @@ describe('docker-compose.yml', () => {
     const read = [...new Set([...config.matchAll(/env\.(HABBLAUD_WORLD[A-Z_]*)/g)].map((m) => m[1]))].sort();
     expect(read).toEqual(['HABBLAUD_WORLD', 'HABBLAUD_WORLD_DEV', 'HABBLAUD_WORLD_URL']);
     for (const key of read) expect(compose, key).toMatch(new RegExp(`^\\s+${key}: \\$\\{${key}:-\\}$`, 'm'));
+  });
+
+  it('o container acha o host em host.docker.internal (servidor do mundo local, também no Linux)', () => {
+    const compose = readFileSync(join(import.meta.dirname, '..', '..', 'docker-compose.yml'), 'utf8');
+    expect(compose).toMatch(/^ {4}extra_hosts:\n {6}- "host\.docker\.internal:host-gateway"$/m);
   });
 });
 

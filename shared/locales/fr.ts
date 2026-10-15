@@ -2629,7 +2629,7 @@ export const FR: Readonly<Record<string, string>> = {
 
   // server/config.ts, server/index.ts, server/http/app.ts e server/world/ (Habblaud World)
   "HABBLAUD_WORLD_URL não é um endereço válido": "HABBLAUD_WORLD_URL n'est pas une adresse valide",
-  "HABBLAUD_WORLD_URL com http://127.0.0.1 só vale no modo de desenvolvimento (--dev ou HABBLAUD_WORLD_DEV=1)": "HABBLAUD_WORLD_URL avec http://127.0.0.1 ne vaut qu'en mode développement (--dev ou HABBLAUD_WORLD_DEV=1)",
+  "HABBLAUD_WORLD_URL com http:// (127.0.0.1 ou host.docker.internal) só vale no modo de desenvolvimento (--dev ou HABBLAUD_WORLD_DEV=1)": "HABBLAUD_WORLD_URL avec http:// (127.0.0.1 ou host.docker.internal) ne vaut qu'en mode développement (--dev ou HABBLAUD_WORLD_DEV=1)",
   "HABBLAUD_WORLD_URL precisa começar com https:// ou wss://": "HABBLAUD_WORLD_URL doit commencer par https:// ou wss://",
   "HABBLAUD_WORLD_URL deve ter só o endereço do servidor (sem caminho, usuário, senha ou parâmetros)": "HABBLAUD_WORLD_URL ne doit contenir que l'adresse du serveur (sans chemin, utilisateur, mot de passe ni paramètres)",
   "o Habblaud World só é usado pelo próprio computador (http://localhost)": "Habblaud World ne s'utilise que depuis cet ordinateur (http://localhost)",
@@ -3038,4 +3038,8 @@ export const FR: Readonly<Record<string, string>> = {
   "O mundo está em manutenção; tentamos de novo em instantes.": "Le monde est en maintenance ; nous réessayons dans un instant.",
   "Conta excluída": "Compte supprimé",
   "A conta do Habblaud World foi excluída: o prédio e o perfil saíram do mundo e nada mais sai deste computador.": "Le compte Habblaud World a été supprimé : l'immeuble et le profil ont quitté le monde, et plus rien ne sort de cet ordinateur.",
+  "Habblaud World: desligado (HABBLAUD_WORLD={0}).": "Habblaud World : désactivé (HABBLAUD_WORLD={0}).",
+  "Habblaud World: ligado: {0}": "Habblaud World : activé : {0}",
+  "Habblaud World: desligado ({0}).": "Habblaud World : désactivé ({0}).",
+  "Habblaud World: desligado (defina HABBLAUD_WORLD_URL).": "Habblaud World : désactivé (définissez HABBLAUD_WORLD_URL).",
 };

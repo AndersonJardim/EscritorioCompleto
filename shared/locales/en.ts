@@ -2613,7 +2613,7 @@ export const EN: Readonly<Record<string, string>> = {
 
   // server/config.ts, server/index.ts, server/http/app.ts e server/world/ (Habblaud World)
   "HABBLAUD_WORLD_URL não é um endereço válido": "HABBLAUD_WORLD_URL is not a valid address",
-  "HABBLAUD_WORLD_URL com http://127.0.0.1 só vale no modo de desenvolvimento (--dev ou HABBLAUD_WORLD_DEV=1)": "HABBLAUD_WORLD_URL with http://127.0.0.1 only works in development mode (--dev or HABBLAUD_WORLD_DEV=1)",
+  "HABBLAUD_WORLD_URL com http:// (127.0.0.1 ou host.docker.internal) só vale no modo de desenvolvimento (--dev ou HABBLAUD_WORLD_DEV=1)": "HABBLAUD_WORLD_URL with http:// (127.0.0.1 or host.docker.internal) only works in development mode (--dev or HABBLAUD_WORLD_DEV=1)",
   "HABBLAUD_WORLD_URL precisa começar com https:// ou wss://": "HABBLAUD_WORLD_URL must start with https:// or wss://",
   "HABBLAUD_WORLD_URL deve ter só o endereço do servidor (sem caminho, usuário, senha ou parâmetros)": "HABBLAUD_WORLD_URL must contain only the server address (no path, user, password or parameters)",
   "o Habblaud World só é usado pelo próprio computador (http://localhost)": "Habblaud World can only be used from this computer (http://localhost)",
@@ -3021,4 +3021,8 @@ export const EN: Readonly<Record<string, string>> = {
   "O mundo está em manutenção; tentamos de novo em instantes.": "The world is under maintenance; we'll try again in a moment.",
   "Conta excluída": "Account deleted",
   "A conta do Habblaud World foi excluída: o prédio e o perfil saíram do mundo e nada mais sai deste computador.": "The Habblaud World account was deleted: the building and the profile left the world, and nothing else leaves this computer.",
+  "Habblaud World: desligado (HABBLAUD_WORLD={0}).": "Habblaud World: off (HABBLAUD_WORLD={0}).",
+  "Habblaud World: ligado: {0}": "Habblaud World: on: {0}",
+  "Habblaud World: desligado ({0}).": "Habblaud World: off ({0}).",
+  "Habblaud World: desligado (defina HABBLAUD_WORLD_URL).": "Habblaud World: off (set HABBLAUD_WORLD_URL).",
 };
