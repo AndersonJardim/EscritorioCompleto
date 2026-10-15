@@ -7,7 +7,8 @@ import type { Locale } from '../../../shared/i18n';
 import type { OfficeSnapshot } from '../../../shared/types';
 import type { TraitId } from '../../../shared/world/traits';
 import type { IntroId } from '../../../shared/world/intro';
-import { emailLooksValid, parsePlayerName, passwordProblem, playerNameKey, traitsValid, DEFAULT_VISIBILITY } from '../ui/world/world-model';
+import { parsePlayerName, playerNameKey } from '../../../shared/world/names-rules';
+import { emailLooksValid, passwordProblem, traitsValid, DEFAULT_VISIBILITY } from '../ui/world/world-model';
 
 export type WorldServerState = 'off' | 'logged_out' | 'waiting' | 'approved';
 export type WorldAccess = 'waiting' | 'approved';
@@ -482,8 +483,8 @@ export class FakeWorldApi implements WorldClient {
       const acc = this.current();
       if (!acc) return FakeWorldApi.fail('unknown', 401);
       const name = parsePlayerName(body.name);
-      if (!name.ok) return FakeWorldApi.fail(name.problem === 'reserved' ? 'name_blocked' : 'name_invalid', 422);
-      const key = playerNameKey(name.name);
+      if (!name.ok) return FakeWorldApi.fail(name.code, 422);
+      const key = name.key;
       if (FAKE_TAKEN.includes(key) && playerNameKey(acc.player?.name ?? '') !== key) return FakeWorldApi.fail('name_taken', 409);
       if (!traitsValid(body.traits)) return FakeWorldApi.fail('invalid', 422);
       acc.player = {

@@ -2783,6 +2783,8 @@ export const EN: Readonly<Record<string, string>> = {
   "O nome precisa ter de 3 a 20 caracteres.": "The name needs 3 to 20 characters.",
   "Use só letras, números, espaço, _ - e . no nome.": "Use only letters, numbers, space, _ - and . in the name.",
   "Use letras de um só alfabeto no nome.": "Use letters from a single alphabet in the name.",
+  "Tire do nome os caracteres invisíveis e os espaços especiais.": "Remove invisible characters and special spaces from the name.",
+  "O nome precisa ter pelo menos uma letra.": "The name needs at least one letter.",
   "Este nome é reservado. Escolha outro.": "This name is reserved. Pick another one.",
   "Código errado ou vencido. Confira o e-mail ou peça outro código.": "Wrong or expired code. Check the email or ask for another code.",
   "E-mail ou senha não conferem.": "Email or password don't match.",

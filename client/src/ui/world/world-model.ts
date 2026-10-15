@@ -9,6 +9,7 @@ import { PLAYER_TRAITS } from '../../../../shared/world/protocol';
 import { parsePlayerTraits, traitsClash, type TraitId } from '../../../../shared/world/traits';
 import type { WorldErrorCode, WorldMeta, WorldServerState, WorldVisibility } from '../../net/world';
 import { isIntroId } from '../../../../shared/world/intro';
+import { parsePlayerName, type PlayerNameProblem } from '../../../../shared/world/names-rules';
 import { tr } from '../../../../shared/i18n';
 
 // ------------------------------------------------------------------ quando aparece
@@ -184,86 +185,22 @@ export function passwordProblemText(p: PasswordProblem): string {
 
 // ------------------------------------------------------------------ nome de jogador
 
-export const PLAYER_NAME_MIN = 3;
-export const PLAYER_NAME_MAX = 20;
+// Regras e chave de unicidade: shared/world/names-rules.ts (as mesmas do servidor do mundo, menos a lista de palavras
+// bloqueadas, que só ele tem). Aqui fica só o texto de cada motivo.
 
-/** Nomes que ninguém pode usar (o servidor ainda confere a lista de palavras bloqueadas). */
-export const RESERVED_NAMES: readonly string[] = [
-  'habblaud', 'admin', 'staff', 'claude', 'anthropic', 'codex', 'openai', 'moderador', 'moderator', 'suporte', 'support',
-  'system', 'world',
-];
-
-export type NameProblem = 'length' | 'chars' | 'scripts' | 'reserved';
-
-// Controle, formatação (larguras zero, marcas de direção), separadores de linha e parágrafo.
-const INVISIBLE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
-const NAME_CHARS = /^[\p{L}\p{M}\p{Nd} _.-]+$/u;
-const SCRIPTS: readonly [string, RegExp][] = [
-  ['Latin', /\p{Script=Latin}/u],
-  ['Greek', /\p{Script=Greek}/u],
-  ['Cyrillic', /\p{Script=Cyrillic}/u],
-  ['Armenian', /\p{Script=Armenian}/u],
-  ['Georgian', /\p{Script=Georgian}/u],
-  ['Hebrew', /\p{Script=Hebrew}/u],
-  ['Arabic', /\p{Script=Arabic}/u],
-  ['Devanagari', /\p{Script=Devanagari}/u],
-  ['Bengali', /\p{Script=Bengali}/u],
-  ['Tamil', /\p{Script=Tamil}/u],
-  ['Thai', /\p{Script=Thai}/u],
-  ['Hangul', /\p{Script=Hangul}/u],
-  ['Hiragana', /\p{Script=Hiragana}/u],
-  ['Katakana', /\p{Script=Katakana}/u],
-  ['Han', /\p{Script=Han}/u],
-];
-/** Misturas que são uma escrita só: japonês (kanji + kana) e coreano (hangul + hanja). */
-const MIXES: readonly (readonly string[])[] = [
-  ['Han', 'Hiragana', 'Katakana'],
-  ['Han', 'Hangul'],
-];
-
-function scriptOf(ch: string): string {
-  return SCRIPTS.find(([, re]) => re.test(ch))?.[0] ?? `?${ch}`;
-}
-
-/** Letras de um só sistema de escrita ("Mаria" com "а" cirílico, não). */
-export function singleScript(name: string): boolean {
-  const found = new Set<string>();
-  for (const ch of name) if (/\p{L}/u.test(ch)) found.add(scriptOf(ch));
-  if (found.size <= 1) return true;
-  return MIXES.some((mix) => [...found].every((s) => mix.includes(s)));
-}
-
-/** Chave de unicidade: NFKC, minúsculas, sem diacríticos e com os espaços colapsados ("Júlia  B" = "julia b"). */
-export function playerNameKey(name: string): string {
-  return name
-    .normalize('NFKC')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/\p{M}/gu, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-/** Nome de jogador: NFC e sem espaços nas pontas; de 3 a 20 caracteres; letras de uma escrita, dígitos, espaço, _ - . */
-export function parsePlayerName(raw: string): { ok: true; name: string } | { ok: false; problem: NameProblem } {
-  const name = raw.normalize('NFC').trim();
-  if (INVISIBLE.test(name)) return { ok: false, problem: 'chars' };
-  const n = [...name].length;
-  if (n < PLAYER_NAME_MIN || n > PLAYER_NAME_MAX) return { ok: false, problem: 'length' };
-  if (!NAME_CHARS.test(name)) return { ok: false, problem: 'chars' };
-  if (!singleScript(name)) return { ok: false, problem: 'scripts' };
-  if (RESERVED_NAMES.includes(playerNameKey(name))) return { ok: false, problem: 'reserved' };
-  return { ok: true, name };
-}
-
-export function nameProblemText(p: NameProblem): string {
+export function nameProblemText(p: PlayerNameProblem): string {
   switch (p) {
+    case 'type':
     case 'length':
       return tr('O nome precisa ter de 3 a 20 caracteres.');
+    case 'invisible':
+      return tr('Tire do nome os caracteres invisíveis e os espaços especiais.');
     case 'chars':
       return tr('Use só letras, números, espaço, _ - e . no nome.');
     case 'scripts':
       return tr('Use letras de um só alfabeto no nome.');
+    case 'no_letter':
+      return tr('O nome precisa ter pelo menos uma letra.');
     case 'reserved':
       return tr('Este nome é reservado. Escolha outro.');
   }
@@ -319,7 +256,7 @@ export function draftAppearance(look: 'f' | 'm', parts?: AppearanceParts, seed =
   return appearanceFromSeed(seed, { look, parts });
 }
 
-export type CharacterProblem = { field: 'name'; problem: NameProblem } | { field: 'traits' } | { field: 'intro' };
+export type CharacterProblem = { field: 'name'; problem: PlayerNameProblem } | { field: 'traits' } | { field: 'intro' };
 
 /** O que falta para salvar o personagem (o primeiro problema), ou null. */
 export function characterProblem(d: { name: string; traits: readonly TraitId[]; intro: string | null }): CharacterProblem | null {

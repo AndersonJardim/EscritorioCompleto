@@ -27,6 +27,8 @@ import { h, setAttr, setHidden, setText, setVariant } from '../dom';
 import { formatDateTime, relativeTime } from '../format';
 import { segmented, switchRow } from '../settings';
 import { INTRO_IDS, introLabel, isIntroId, type IntroId } from '../../../../shared/world/intro';
+import { parsePlayerName } from '../../../../shared/world/names-rules';
+import { PLAYER_NAME_LIMITS } from '../../../../shared/world/protocol';
 import {
   characterProblem,
   codeLooksValid,
@@ -38,8 +40,6 @@ import {
   nameProblemText,
   normalizeCode,
   normalizeEmail,
-  parsePlayerName,
-  PLAYER_NAME_MAX,
   passwordProblem,
   passwordProblemText,
   traitBlock,
@@ -825,7 +825,7 @@ export class WorldSettingsGroup {
     const fields = new AppearanceFields();
     fields.set(player ? draftAppearance(look, player.parts) : draftAppearance(look, undefined, randomSeed()));
 
-    const name = h('input', { class: 'ui-char__name', type: 'text', attrs: { maxlength: PLAYER_NAME_MAX * 2, autocomplete: 'nickname', spellcheck: 'false', 'aria-describedby': 'ui-world-name-hint' } });
+    const name = h('input', { class: 'ui-char__name', type: 'text', attrs: { maxlength: PLAYER_NAME_LIMITS.max * 2, autocomplete: 'nickname', spellcheck: 'false', 'aria-describedby': 'ui-world-name-hint' } });
     name.value = player?.name ?? '';
     const roll = h('button', {
       class: 'ui-btn ui-btn--sm',

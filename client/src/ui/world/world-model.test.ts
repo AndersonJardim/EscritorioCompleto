@@ -9,13 +9,11 @@ import {
   emailLooksValid,
   fullParts,
   initialWorldUi,
+  nameProblemText,
   normalizeCode,
-  parsePlayerName,
   passwordProblem,
-  playerNameKey,
   screensFor,
   shouldShowInvite,
-  singleScript,
   toggleTrait,
   traitBlock,
   traitsValid,
@@ -155,37 +153,11 @@ describe('e-mail, código e senha', () => {
 });
 
 describe('nome de jogador', () => {
-  it('de 3 a 20 caracteres depois de NFC e das pontas aparadas', () => {
-    expect(parsePlayerName('  Ana  ')).toEqual({ ok: true, name: 'Ana' });
-    expect(parsePlayerName('Al')).toEqual({ ok: false, problem: 'length' });
-    expect(parsePlayerName('a'.repeat(21))).toEqual({ ok: false, problem: 'length' });
-    // "Júlia" em NFD tem 6 unidades; em NFC, 5 caracteres.
-    expect(parsePlayerName('Júlia')).toEqual({ ok: true, name: 'Júlia' });
-  });
-
-  it('letras, dígitos, espaço, _ - . e nada invisível', () => {
-    expect(parsePlayerName('dev_42.x-y z').ok).toBe(true);
-    for (const bad of ['ana!', 'ana@b', 'ana\tb', 'a​na', 'ana‮b', 'emoji🙂']) expect(parsePlayerName(bad).ok, JSON.stringify(bad)).toBe(false);
-  });
-
-  it('um só sistema de escrita (japonês e coreano misturam o que é deles)', () => {
-    expect(parsePlayerName('Mаria').ok).toBe(false); // "а" cirílico
-    expect(parsePlayerName('Мария').ok).toBe(true);
-    expect(singleScript('山田たろう')).toBe(true);
-    expect(singleScript('김민준金')).toBe(true);
-    expect(singleScript('Anaたろう')).toBe(false);
-  });
-
-  it('reservados não passam (comparados pela chave sem acento nem maiúscula)', () => {
-    expect(parsePlayerName('Habblaud')).toEqual({ ok: false, problem: 'reserved' });
-    expect(parsePlayerName('ADMIN')).toEqual({ ok: false, problem: 'reserved' });
-    expect(parsePlayerName('Suporte')).toEqual({ ok: false, problem: 'reserved' });
-  });
-
-  it('chave de unicidade: NFKC, minúsculas, sem diacríticos, espaços colapsados', () => {
-    expect(playerNameKey('Júlia  B')).toBe('julia b');
-    expect(playerNameKey('ＡＢＣ')).toBe('abc');
-    expect(playerNameKey('Júlia')).toBe(playerNameKey('JULIA'));
+  // As regras ficam em shared/world/names-rules.ts (e no teste de lá); aqui, só o texto de cada motivo.
+  it('cada motivo de recusa tem um texto', () => {
+    const problems = ['type', 'length', 'invisible', 'chars', 'scripts', 'no_letter', 'reserved'] as const;
+    for (const p of problems) expect(nameProblemText(p), p).toBeTruthy();
+    expect(new Set(problems.map(nameProblemText)).size).toBe(problems.length - 1); // type e length dizem o mesmo
   });
 });
 
