@@ -754,6 +754,11 @@ página de privacidade: andares, agentes, status, avatares e tokens arredondados
 guarda o lote; **Sair do mundo** retira o prédio e libera o lote (a conta e o personagem continuam, e voltar cria um
 prédio novo).
 
+O botão **Mundo**, na barra do topo, troca o escritório pela cidade: anda-se com setas/WASD ou clicando, o cartão de
+cada prédio mostra andares, agentes e estado, e o minimapa fica no canto; pausado ou fora do mundo, o seu prédio fica
+apagado, mas dá para andar pela cidade. No modo demonstração (`?mock=1&world=approved&scene=city`, só prédios e
+pessoas fictícios): [a cidade](docs/screenshots/world-cidade.png) e [o cartão de um prédio](docs/screenshots/world-cartao.png).
+
 A conta fica só neste computador, em `~/.habblaud/world.json` (no Docker, no volume `/data`), e a seção só funciona pelo
 próprio computador. O que sai e o que nunca sai do computador: [docs/world/privacidade.md](docs/world/privacidade.md).
 Como a seção fica, no modo demonstração (`?mock=1&world=logged_out`, `waiting` ou `approved`):

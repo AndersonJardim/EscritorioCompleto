@@ -793,6 +793,12 @@ liste anonyme de la page de confidentialité : étages, agents, statuts, avatars
 l'éteint aussitôt et garde la parcelle ; **Quitter le monde** retire l'immeuble et libère la parcelle (le compte et le
 personnage restent, et revenir crée un nouvel immeuble).
 
+Le bouton **Monde**, dans la barre du haut, remplace le bureau par la ville : on marche avec les flèches/WASD ou en
+cliquant, la carte de chaque immeuble montre étages, agents et état, et la minicarte reste dans le coin ; en pause ou
+hors du monde, votre immeuble reste éteint, mais vous pouvez vous promener dans la ville. En mode démonstration
+(`?mock=1&world=approved&scene=city`, uniquement des immeubles et des personnes fictifs) : [la ville](docs/screenshots/world-cidade.png)
+et [la carte d'un immeuble](docs/screenshots/world-cartao.png).
+
 Le compte reste uniquement sur cet ordinateur, dans `~/.habblaud/world.json` (dans Docker, dans le volume `/data`), et la
 section ne fonctionne que depuis l'ordinateur lui-même. Ce qui sort de l'ordinateur et ce qui n'en sort jamais (en
 portugais) : [docs/world/privacidade.md](docs/world/privacidade.md). L'aspect de la section, en mode démonstration

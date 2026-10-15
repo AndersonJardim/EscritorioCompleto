@@ -62,9 +62,9 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
   conta e nomes editados nunca saem. Manda ao mudar (no máximo uma vez a cada 5 s), reconecta sozinho e para quando o
   servidor pede (conta suspensa, versão antiga, conectada em outro lugar). Agentes do modo demonstração nunca sobem.
   As tarefas e as compactações são contadas também com o prédio pausado ou sem conexão, e vão na remessa seguinte.
-- **Pausar e retomar o prédio** (`POST /api/world/pause` e `/resume`): pausar fecha a conexão antes de responder e
-  apaga o prédio na hora para todos; uma retomada que o servidor do mundo não confirmou tenta de novo com a espera da
-  reconexão (2 s a 60 s). **Sair do mundo** (`POST /api/world/leave`): fecha a conexão e só responde depois que o
+- **Pausar e retomar o prédio** (`POST /api/world/pause` e `/resume`): pausar para o envio antes de responder (a
+  conexão fecha, ou fica só para a cena Mundo aberta, sem o pacote) e apaga o prédio na hora para todos; uma retomada que o servidor do mundo não confirmou tenta de novo com a espera da
+  reconexão (2 s a 60 s). **Sair do mundo** (`POST /api/world/leave`): para o envio e só responde depois que o
   servidor do mundo retira o prédio (`DELETE /v1/me/building`). **Ver o que foi enviado**
   (`GET /api/world/last-uplink`): o pacote exato da última remessa, a hora, o tamanho e a resposta do servidor,
   guardado em `~/.habblaud/world-last-uplink.json` (permissão 600). O tema de Aparência vai para o prédio
@@ -86,12 +86,17 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
   a câmera segue, com o zoom de sempre e afastando até ver uns 200 prédios; **E** perto de uma porta avisa que visitar
   vem em breve. Passar o mouse num prédio abre o cartão (dono, país, estado, andares até "24+", agentes trabalhando,
   esperando e à toa ou "modo discreto", likes, "no mundo desde"); clicar num jogador abre o perfil (personagem, país,
-  traços, frase, prédio e likes recebidos). Os outros jogadores andam suaves (150 ms atrás), com o nome em cima, e
-  sentam no banco quando ficam ausentes. O minimapa no canto mostra os quarteirões em volta, mais acesos quanto mais
-  prédios ligados, e leva a câmera até onde você clicar. Esc ou **Escritório** voltam; Configurações continua aberta
-  na cidade, e o escritório para de desenhar enquanto isso. A cena é carregada só quando abre. No modo demonstração,
-  `?mock=1&world=approved&scene=city` abre uma cidade de mentira (20 prédios e jogadores fictícios);
-  `npm run shots:world` também fotografa `docs/screenshots/world-cidade.png` e `world-cartao.png`.
+  traços, frase, prédio e likes recebidos). Os outros jogadores andam suaves, um pouco atrás, no ritmo em que as
+  posições chegam (5 por segundo para os 20 mais perto, 2,5 para os outros), com o nome em cima; quem para em cima de
+  um banco aparece sentado (você também), e ausente o seu personagem fica parado onde está. O minimapa no canto
+  mostra os quarteirões em volta, mais acesos quanto mais prédios ligados, e leva a câmera até onde você clicar. Esc
+  ou **Escritório** voltam; Configurações continua aberta na cidade, e o escritório para de desenhar enquanto isso. A cena é carregada só quando abre. **Pausado ou fora do
+  mundo, seu prédio fica apagado, mas você pode andar pela cidade**: com a cena aberta, a conexão leva só a primeira
+  mensagem, o sinal de vida e os comandos da cena, nunca o pacote do prédio, e fecha junto com a cena. Conta banida ou
+  suspensa (ou o prédio parado por versão antiga ou por outro computador): o botão Mundo some. No modo demonstração,
+  `?mock=1&world=approved&scene=city` abre uma cidade de mentira (20 prédios, o seu no lote (3,1), 5 pessoas andando e
+  uma sentada num banco da praça; `&perf=N` enche N lotes); `npm run shots:world` também fotografa
+  `docs/screenshots/world-cidade.png` e `world-cartao.png`.
   **Pelo servidor local:** com a cena aberta, o Habblaud pede ao servidor do mundo o pedaço da cidade em volta do seu
   personagem (`view`) pela mesma conexão do prédio e repassa ao navegador por `GET /api/world/stream` (SSE: o estado
   inteiro ao abrir, depois cada mudança na ordem); fechada a cena, avisa (`view.off`) e nada mais desce. Prédios por
@@ -100,7 +105,8 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
   bloqueio e denúncia) são conferidos campo a campo, no máximo 5 lotes por segundo e só o último passo de cada lote;
   no máximo 4 abas com a cidade. Só pelo próprio computador e só pela própria página (nunca por outro site). A
   geometria da cidade (lotes, quarteirões, portas, chunks e o que é caminhável) fica em `shared/world/city.ts`, a
-  mesma do servidor do mundo.
+  mesma do servidor do mundo. O seu personagem entra na rua na posição que o servidor do mundo validou (na calçada da
+  sua porta ou na praça).
 - **Voltar ao mundo** (`POST /api/world/join`): depois de sair, o cartão pede a volta ao servidor do mundo
   (`POST /v1/me/building/join`) antes de reconectar; o prédio volta novo, em outro lote. Sair do mundo em outro
   computador também vale aqui: o pacote recusado (`left`) ou a conta marcada como fora do mundo deixam este Habblaud

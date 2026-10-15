@@ -756,6 +756,11 @@ only the anonymous list on the privacy page: floors, agents, statuses, avatars a
 off right away and keeps the lot; **Leave the world** removes the building and frees the lot (the account and the
 character stay, and coming back creates a new building).
 
+The **World** button in the top bar swaps the office for the city: walk with the arrows/WASD or by clicking, each
+building's card shows floors, agents and status, and the minimap sits in the corner; paused or out of the world, your
+building stays dark, but you can still walk around the city. In demo mode (`?mock=1&world=approved&scene=city`, only
+fictional buildings and people): [the city](docs/screenshots/world-cidade.png) and [a building's card](docs/screenshots/world-cartao.png).
+
 The account stays only on this computer, in `~/.habblaud/world.json` (in Docker, in the `/data` volume), and the section
 only works from this computer. What leaves your computer and what never does (in Portuguese):
 [docs/world/privacidade.md](docs/world/privacidade.md). How the section looks, in demo mode (`?mock=1&world=logged_out`,
