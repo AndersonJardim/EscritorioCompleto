@@ -12,13 +12,15 @@ export interface InputHandlers {
   interact(): void;
   overview(): void;
   zoomStep(steps: number, sx?: number, sy?: number): void;
+  /** (Opcional) O escritório está na tela? Com a cena da cidade aberta, o teclado não mexe na câmera escondida. */
+  active?(): boolean;
 }
 
 const DRAG_THRESHOLD = 5;
 const PAN_KEY_STEP = 90;
 
 /** Há um diálogo modal/popover aberto, ou o foco do teclado está dentro de um? */
-function modalOpen(target: HTMLElement | null): boolean {
+export function modalOpen(target: HTMLElement | null): boolean {
   if (target?.closest?.('dialog, [popover], [role="dialog"], [aria-modal="true"]')) return true;
   if (typeof document === 'undefined') return false;
   if (document.querySelector('dialog[open], [aria-modal="true"]')) return true;
@@ -161,6 +163,7 @@ export function attachInput(canvas: HTMLCanvasElement, camera: Camera, h: InputH
 
   const onKey = (e: KeyboardEvent) => {
     if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (h.active && !h.active()) return;
     const t = e.target as HTMLElement | null;
     // Campo ou rádio em foco (velocidade do replay): as setas são do controle, não da câmera.
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.getAttribute?.('role') === 'radio')) return;
