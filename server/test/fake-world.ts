@@ -1,9 +1,21 @@
 // Servidor do Habblaud World de mentira, para os testes do lado local (server/world/): as rotas REST do contrato da
-// Fase 1, em memória, com um ALTCHA de verdade (pequeno) e o registro de cada requisição recebida.
+// Fase 1, em memória, com um ALTCHA de verdade (pequeno) e o registro de cada requisição recebida; e o WebSocket
+// (`/v1/socket`, fase 2) feito à mão sobre o `upgrade` do http (RFC 6455, só texto, sem extensões: o Habblaud não tem
+// o pacote `ws`), que responde ao `hello` como o servidor de verdade, confirma cada `uplink` e responde ao `ping`.
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 import http from 'node:http';
-import type { AddressInfo } from 'node:net';
-import { VISIBILITY_DEFAULTS, type Player, type PlayerInput, type Visibility, type WorldAccess } from '../../shared/world/protocol';
+import type { AddressInfo, Socket } from 'node:net';
+import {
+  GREETING_IDS,
+  VISIBILITY_DEFAULTS,
+  type GoodbyeReason,
+  type HelloMessage,
+  type Player,
+  type PlayerInput,
+  type Visibility,
+  type WorldAccess,
+  type WorldUplink,
+} from '../../shared/world/protocol';
 
 export interface FakeRequest {
   method: string;
@@ -25,8 +37,54 @@ interface Account {
   invite?: string;
 }
 
+/** Uma conexão do WebSocket de mentira. */
+export interface FakeConnection {
+  id: number;
+  /** Caminho e query do pedido de upgrade (o token nunca pode estar aqui). */
+  url: string;
+  headers: http.IncomingHttpHeaders;
+  open: boolean;
+  /** Fechou com frame de close (true) ou caiu (false); undefined enquanto aberta. */
+  closedCleanly?: boolean;
+  /** Mensagens recebidas, em ordem. */
+  messages: Array<Record<string, unknown>>;
+  send(msg: unknown): void;
+  /** Manda `goodbye` e fecha (como o servidor de verdade). */
+  goodbye(reason: GoodbyeReason): void;
+  /** Derruba o TCP sem fechamento (queda de rede). */
+  drop(): void;
+}
+
+export interface FakeSocketOptions {
+  /**
+   * Resposta ao `hello`: `auto` confere o token, a lista de espera e o personagem como o servidor de verdade; um motivo
+   * força o `goodbye`; `silent` não responde.
+   */
+  hello: 'auto' | 'welcome' | 'silent' | GoodbyeReason;
+  /** Resposta a cada `uplink`: `ok` ({at, bytes}), `silent`, ou o código de erro do ack. */
+  ack: 'ok' | 'silent' | string;
+  /** Responde `pong` ao `ping`. */
+  pong: boolean;
+  /** Responde ao close do cliente (false = servidor mudo: a conexão fica pendurada). */
+  answerClose: boolean;
+  /** O prédio que vai no `welcome` (WorldBuildingPublic), se houver. */
+  building?: Record<string, unknown>;
+}
+
+export interface FakeSocket {
+  connections: FakeConnection[];
+  hellos: HelloMessage[];
+  /** Cada uplink recebido, com os bytes do JSON do pacote. */
+  uplinks: Array<{ conn: number; uplink: WorldUplink; bytes: number; at: number }>;
+  pings: number;
+  options: FakeSocketOptions;
+  /** Conexões abertas agora. */
+  readonly open: FakeConnection[];
+}
+
 export interface FakeWorld {
   base: string;
+  ws: FakeSocket;
   requests: FakeRequest[];
   accounts: Map<string, Account>;
   /** token -> {email, deviceId} (só os válidos). */
@@ -182,17 +240,196 @@ export async function startFakeWorld(): Promise<FakeWorld> {
       return error(res, 404, 'not_found');
     });
   });
+  const ws = attachFakeSocket(server, { accounts, devices });
   await new Promise<void>((ok) => server.listen(0, '127.0.0.1', ok));
   return {
     base: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    ws,
     requests,
     accounts,
     devices,
     options,
     close: () =>
       new Promise<void>((ok) => {
+        for (const c of ws.connections) c.drop();
         server.closeAllConnections();
         server.close(() => ok());
       }),
   };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// WebSocket (RFC 6455) mínimo
+// ---------------------------------------------------------------------------------------------------------------
+
+const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+
+function frame(opcode: number, payload: Buffer): Buffer {
+  const len = payload.length;
+  const head = len < 126 ? Buffer.alloc(2) : len < 65536 ? Buffer.alloc(4) : Buffer.alloc(10);
+  head[0] = 0x80 | opcode;
+  if (len < 126) head[1] = len;
+  else if (len < 65536) {
+    head[1] = 126;
+    head.writeUInt16BE(len, 2);
+  } else {
+    head[1] = 127;
+    head.writeBigUInt64BE(BigInt(len), 2);
+  }
+  return Buffer.concat([head, payload]);
+}
+
+function attachFakeSocket(
+  server: http.Server,
+  world: { accounts: Map<string, Account>; devices: Map<string, { email: string; deviceId: string }> },
+): FakeSocket {
+  const fake: FakeSocket = {
+    connections: [],
+    hellos: [],
+    uplinks: [],
+    pings: 0,
+    options: { hello: 'auto', ack: 'ok', pong: true, answerClose: true },
+    get open() {
+      return this.connections.filter((c) => c.open);
+    },
+  };
+  server.on('upgrade', (req: http.IncomingMessage, socket: Socket) => {
+    const key = req.headers['sec-websocket-key'];
+    if ((req.url ?? '').split('?')[0] !== '/v1/socket' || typeof key !== 'string') {
+      socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
+      return;
+    }
+    const accept = createHash('sha1').update(key + WS_GUID).digest('base64');
+    // Sem Sec-WebSocket-Extensions: o cliente oferece permessage-deflate, e aqui fica tudo sem compressão.
+    socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
+    socket.setNoDelay(true);
+    let buf = Buffer.alloc(0);
+    let fragments: Buffer[] = [];
+    let welcomed = false;
+    const conn: FakeConnection = {
+      id: fake.connections.length + 1,
+      url: req.url ?? '',
+      headers: req.headers,
+      open: true,
+      messages: [],
+      send: (msg) => {
+        if (conn.open) socket.write(frame(0x1, Buffer.from(JSON.stringify(msg))));
+      },
+      goodbye: (reason) => {
+        conn.send({ t: 'goodbye', reason });
+        close(1000);
+      },
+      drop: () => {
+        conn.open = false;
+        conn.closedCleanly ??= false;
+        socket.destroy();
+      },
+    };
+    fake.connections.push(conn);
+    const close = (code: number) => {
+      if (!conn.open) return;
+      const payload = Buffer.alloc(2);
+      payload.writeUInt16BE(code, 0);
+      socket.write(frame(0x8, payload));
+      conn.open = false;
+      conn.closedCleanly = true;
+      socket.end();
+    };
+    const onHello = (hello: HelloMessage) => {
+      fake.hellos.push(hello);
+      let answer = fake.options.hello;
+      if (answer === 'silent') return;
+      if (answer === 'auto') {
+        const device = world.devices.get(String(hello.token));
+        const account = device ? world.accounts.get(device.email) : undefined;
+        answer = !account ? 'unauthorized' : account.access === 'waiting' ? 'waiting' : !account.player ? 'no_player' : 'welcome';
+      }
+      if (answer !== 'welcome') return conn.goodbye(answer);
+      welcomed = true;
+      conn.send({
+        t: 'welcome',
+        me: { id: 'acc_1', name: 'Ana Pixel', look: 'f', parts: {}, traits: ['games', 'cafeina'], intro: 'coffee', visibility: { ...VISIBILITY_DEFAULTS }, updatedAt: '2026-10-15T12:00:00Z' },
+        access: 'approved',
+        ...(fake.options.building ? { building: fake.options.building } : {}),
+        city: { districts: ['centro'], lotSize: { w: 14, h: 12 }, blockSize: { w: 3, h: 2 } },
+        greetings: [...GREETING_IDS],
+        minVersion: '0.0.0',
+        rev: 0,
+      });
+    };
+    const onText = (text: string) => {
+      let msg: Record<string, unknown>;
+      try {
+        msg = JSON.parse(text) as Record<string, unknown>;
+      } catch {
+        return close(1008);
+      }
+      conn.messages.push(msg);
+      if (msg.t === 'hello') return onHello(msg as unknown as HelloMessage);
+      if (msg.t === 'ping') {
+        fake.pings++;
+        if (fake.options.pong) conn.send({ t: 'pong' });
+        return;
+      }
+      if (msg.t === 'uplink' && welcomed) {
+        const uplink = msg.uplink as WorldUplink;
+        const bytes = Buffer.byteLength(JSON.stringify(uplink));
+        const at = Date.now();
+        fake.uplinks.push({ conn: conn.id, uplink, bytes, at });
+        if (fake.options.ack === 'ok') conn.send({ t: 'uplink.ack', at, bytes });
+        else if (fake.options.ack !== 'silent') conn.send({ t: 'uplink.ack', error: fake.options.ack });
+      }
+    };
+    socket.on('data', (chunk: Buffer) => {
+      buf = Buffer.concat([buf, chunk]);
+      for (;;) {
+        if (buf.length < 2) return;
+        const fin = (buf[0] & 0x80) !== 0;
+        const opcode = buf[0] & 0x0f;
+        const masked = (buf[1] & 0x80) !== 0;
+        let len = buf[1] & 0x7f;
+        let off = 2;
+        if (len === 126) {
+          if (buf.length < 4) return;
+          len = buf.readUInt16BE(2);
+          off = 4;
+        } else if (len === 127) {
+          if (buf.length < 10) return;
+          len = Number(buf.readBigUInt64BE(2));
+          off = 10;
+        }
+        const maskOff = off;
+        if (masked) off += 4;
+        if (buf.length < off + len) return;
+        const payload = Buffer.from(buf.subarray(off, off + len));
+        if (masked) for (let i = 0; i < payload.length; i++) payload[i] ^= buf[maskOff + (i % 4)];
+        buf = buf.subarray(off + len);
+        if (opcode === 0x8) {
+          if (fake.options.answerClose) return close(1000);
+          continue;
+        }
+        if (opcode === 0x9) {
+          socket.write(frame(0xa, payload));
+          continue;
+        }
+        if (opcode === 0xa) continue;
+        if (opcode === 0x1 || opcode === 0x0) {
+          fragments.push(payload);
+          if (!fin) continue;
+          const text = Buffer.concat(fragments).toString('utf8');
+          fragments = [];
+          onText(text);
+        }
+      }
+    });
+    const gone = () => {
+      if (conn.open) {
+        conn.open = false;
+        conn.closedCleanly ??= false;
+      }
+    };
+    socket.on('close', gone);
+    socket.on('error', gone);
+  });
+  return fake;
 }

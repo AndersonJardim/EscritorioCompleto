@@ -14,11 +14,25 @@
 //   PUT  /api/world/visibility               Visibility → 200 Visibility
 //   GET  /api/world/devices                  → {devices: DeviceInfo[]}
 //   POST /api/world/devices/:id/revoke       {} → 204 (o próprio dispositivo: sai daqui também)
+//   PUT  /api/world/theme                    {theme: WorldThemeChoice} → 200 {theme} (com ou sem conta: fica em world.json)
+//   POST /api/world/pause                    {} → 200 WorldStatus (fecha o uplink antes de responder)
+//   POST /api/world/resume                   {} → 200 WorldStatus (reabre o uplink)
+//   GET  /api/world/last-uplink              → WorldLastUplink | {} (o que foi enviado por último, exato)
 //
 // Erros: {error: {code, message?, retryAfter?}} com o status do servidor do mundo quando vêm de lá (códigos em
 // WORLD_ERROR_CODES do protocolo; um código novo passa como veio) ou com os códigos locais abaixo. A interface traduz
 // pelo `code`; `message` é só para quem lê o log ou usa o curl.
-import { WORLD_ERROR_CODES, type DeviceInfo, type Player, type WorldAccess, type WorldErrorCode, type WorldTheme } from './protocol';
+import {
+  WORLD_ERROR_CODES,
+  type DeviceInfo,
+  type GoodbyeReason,
+  type Player,
+  type WorldAccess,
+  type WorldErrorCode,
+  type UplinkAckError,
+  type WorldTheme,
+  type WorldUplink,
+} from './protocol';
 
 /**
  * Tema escolhido em Configurações › Aparência, guardado em world.json (PUT /api/world/theme). O pacote leva o tema já
@@ -34,6 +48,63 @@ export function isWorldThemeChoice(v: unknown): v is WorldThemeChoice {
 /** Estado da conta neste computador. */
 export type WorldState = 'off' | 'logged_out' | 'waiting' | 'approved';
 
+/** Por que o prédio parou de subir: o motivo do `goodbye` do servidor do mundo (o `deploy` só reconecta). */
+export type WorldBuildingStop = Exclude<GoodbyeReason, 'deploy'>;
+
+/**
+ * Resposta do servidor do mundo à remessa (`uplink.ack`): aceita (`at` e `bytes` contados por ele) ou recusada com o
+ * motivo (`error`, só os códigos de UPLINK_ACK_ERRORS; um código que esta versão não conhece vira `internal`; `at` é a
+ * hora em que a recusa chegou aqui).
+ */
+export interface WorldUplinkAck {
+  ok: boolean;
+  error?: UplinkAckError;
+  /** Horário (ms). */
+  at: number;
+  bytes?: number;
+}
+
+/**
+ * O prédio deste computador no mundo: GET /api/world/status → `building`, só com a conta aprovada e o personagem
+ * criado. `floors` e `agents` são os da última remessa (antes dela, os que o servidor mandou no `welcome`; 0 sem nada).
+ */
+export interface WorldBuildingStatus {
+  /** WebSocket aberto e aceito (`welcome`). */
+  connected: boolean;
+  /** Pausado pelo dono (POST /api/world/pause). */
+  paused: boolean;
+  floors: number;
+  agents: number;
+  /** Última remessa (ms). */
+  lastUplinkAt?: number;
+  /** Resposta à última remessa (ausente enquanto não chega). */
+  lastAck?: { ok: boolean; error?: UplinkAckError };
+  /**
+   * O servidor do mundo fechou a conexão e o prédio parou: `banned`/`suspended` (conta), `update` (versão antiga: atualize),
+   * `other-device` (a conta conectou em outro lugar; volta com "Retomar" ou ao reabrir o Habblaud), `waiting`,
+   * `no_player`, `unauthorized` (a conta mudou do outro lado; o estado daqui é atualizado).
+   */
+  stopped?: WorldBuildingStop;
+}
+
+/** OfficeSnapshot.meta.world.building: o resumo do prédio (sem a conta), para a interface mostrar sem pedir o status. */
+export interface WorldBuildingMeta {
+  connected: boolean;
+  paused: boolean;
+  floors: number;
+  agents: number;
+  lastUplinkAt?: number;
+}
+
+/** GET /api/world/last-uplink ("Ver o que foi enviado"): o pacote exato da última remessa, os bytes e a resposta. */
+export interface WorldLastUplink {
+  at: number;
+  /** Bytes do JSON do pacote (UTF-8), como o servidor do mundo mede. */
+  bytes: number;
+  uplink: WorldUplink;
+  ack?: WorldUplinkAck;
+}
+
 /**
  * OfficeSnapshot.meta.world: só o necessário para a interface decidir se mostra a seção (o snapshot também vai ao
  * celular e à linha do tempo: nada da conta aqui).
@@ -47,6 +118,8 @@ export interface WorldMeta {
   /** HABBLAUD_WORLD_URL válida. */
   configured: boolean;
   state: WorldState;
+  /** O prédio no mundo (só com a conta aprovada e o personagem criado). */
+  building?: WorldBuildingMeta;
 }
 
 /** GET /api/world/status (e a resposta de verify, login e logout). */
@@ -60,6 +133,10 @@ export interface WorldStatus {
   devices?: DeviceInfo[];
   /** Código do último problema (worldLastError: só códigos conhecidos), quando os dados podem estar velhos. */
   lastError?: WorldKnownErrorCode;
+  /** O prédio no mundo (só com a conta aprovada e o personagem criado). */
+  building?: WorldBuildingStatus;
+  /** Tema guardado para o prédio (PUT /api/world/theme); ausente = 'auto'. */
+  theme?: WorldThemeChoice;
 }
 
 export interface WorldErrorResponse {

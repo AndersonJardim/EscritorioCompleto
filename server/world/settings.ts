@@ -14,11 +14,14 @@
 // Changing Habblaud for other purposes (themes, fixes, features) remains free: it is MIT.
 //
 // Sessão do Habblaud World neste computador: <dataDir>/world.json (modo 600, gravação atômica), com o token do
-// dispositivo. O token só sai daqui para o servidor do mundo (cabeçalho Authorization, por HTTPS); nunca vai ao
-// navegador, ao snapshot nem ao log. No Docker o arquivo fica no volume habblaud-data (/data/world.json).
+// dispositivo. O token só sai daqui para o servidor do mundo (cabeçalho Authorization por HTTPS e a primeira mensagem
+// do WebSocket, `hello`, por TLS); nunca vai ao navegador, ao snapshot nem ao log. No Docker o arquivo fica no volume
+// habblaud-data (/data/world.json). O mesmo arquivo guarda o tema escolhido para o prédio (`theme`, que sobrevive a
+// sair da conta) e a pausa do prédio (`paused`, da sessão).
 import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { tr } from '../../shared/i18n';
+import { isWorldThemeChoice, type WorldThemeChoice } from '../../shared/world/api';
 import { WORLD_ACCESS, type Player, type WorldAccess } from '../../shared/world/protocol';
 import { log } from '../log';
 
@@ -30,6 +33,8 @@ export interface WorldSession {
   access: WorldAccess;
   /** Último personagem conhecido (cópia do servidor, para a tela abrir sem rede). */
   player?: Player;
+  /** Prédio pausado pelo dono (POST /api/world/pause): o uplink fica fechado até retomar. */
+  paused?: true;
   /** Última gravação (ms). */
   updatedAt: number;
 }
@@ -60,15 +65,17 @@ export function parseWorldSession(raw: unknown): WorldSession | undefined {
   if (v.player && typeof v.player === 'object' && !Array.isArray(v.player) && typeof (v.player as Player).name === 'string') {
     s.player = v.player as Player;
   }
+  if (v.paused === true) s.paused = true;
   return s;
 }
 
 /**
- * O arquivo world.json. Lido uma vez (load) e regravado a cada mudança (save/clear); os erros vão ao log sem o
- * conteúdo do arquivo.
+ * O arquivo world.json. Lido uma vez (load) e regravado a cada mudança (save/update/clear/setTheme); os erros vão ao
+ * log sem o conteúdo do arquivo.
  */
 export class WorldSettingsStore {
   private session: WorldSession | undefined;
+  private theme: WorldThemeChoice = 'auto';
 
   /** `file` null = só em memória (testes). */
   constructor(
@@ -78,14 +85,20 @@ export class WorldSettingsStore {
 
   load(): WorldSession | undefined {
     this.session = undefined;
+    this.theme = 'auto';
     if (!this.file) return undefined;
     try {
       const st = statSync(this.file);
       if (st.size > MAX_FILE) throw new Error('too large');
       // Permissão mais aberta que 600 (cópia manual, restauração de backup): fecha antes de ler.
       if ((st.mode & 0o077) !== 0) chmodSync(this.file, 0o600);
-      this.session = parseWorldSession(JSON.parse(readFileSync(this.file, 'utf8')));
-      if (!this.session) log.warn(tr('world.json fora do formato: ignorado (entre de novo no Habblaud World).'));
+      const raw = JSON.parse(readFileSync(this.file, 'utf8')) as unknown;
+      const obj = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+      if (isWorldThemeChoice(obj.theme)) this.theme = obj.theme;
+      this.session = parseWorldSession(raw);
+      // Só o tema (saiu da conta): não é erro.
+      const onlyTheme = !this.session && Object.keys(obj).every((k) => k === 'theme') && 'theme' in obj;
+      if (!this.session && !onlyTheme) log.warn(tr('world.json fora do formato: ignorado (entre de novo no Habblaud World).'));
     } catch (err) {
       // O motivo vem só do código do erro: nunca o conteúdo do arquivo (que tem o token).
       const code = (err as NodeJS.ErrnoException).code;
@@ -98,15 +111,56 @@ export class WorldSettingsStore {
     return this.copy();
   }
 
+  /** Tema escolhido para o prédio ('auto' se nunca escolhido). */
+  getTheme(): WorldThemeChoice {
+    return this.theme;
+  }
+
+  /** Grava o tema (com ou sem sessão). False se o disco recusou (vale na memória). */
+  setTheme(theme: WorldThemeChoice): boolean {
+    this.theme = theme;
+    return this.write();
+  }
+
   /** Grava a sessão inteira (atômico: arquivo temporário com modo 600 e rename). False se o disco recusou. */
   save(session: Omit<WorldSession, 'updatedAt'>): boolean {
-    const next: WorldSession = { ...session, updatedAt: this.now() };
-    this.session = next;
+    this.session = { ...session, updatedAt: this.now() };
+    return this.write();
+  }
+
+  /** Atualiza campos da sessão atual (access, player, paused); sem sessão, não faz nada. */
+  update(patch: Partial<Pick<WorldSession, 'access' | 'player' | 'paused'>>): boolean {
+    const cur = this.session;
+    if (!cur) return false;
+    const next = { ...cur, ...patch };
+    // `undefined` apaga o campo (o JSON não leva).
+    for (const k of Object.keys(patch) as Array<keyof typeof patch>) if (patch[k] === undefined) delete next[k];
+    return this.save(next);
+  }
+
+  /** Apaga a sessão (sair, token revogado). O tema escolhido fica. */
+  clear(): void {
+    this.session = undefined;
+    this.write();
+  }
+
+  /** Grava o estado atual: sessão e tema; só o tema se não há sessão; nada (apaga o arquivo) se nem isso. */
+  private write(): boolean {
     if (!this.file) return true;
+    const data = this.session ? { ...this.session, ...(this.theme !== 'auto' ? { theme: this.theme } : {}) } : this.theme !== 'auto' ? { theme: this.theme } : undefined;
+    if (!data) {
+      try {
+        rmSync(this.file, { force: true });
+        return true;
+      } catch (err) {
+        log.warn(tr('Não foi possível apagar {0} ({1}).', [this.file, (err as NodeJS.ErrnoException).code ?? '?']));
+        return false;
+      }
+    }
     const tmp = `${this.file}.${process.pid}.tmp`;
     try {
       mkdirSync(dirname(this.file), { recursive: true });
-      writeFileSync(tmp, JSON.stringify(next), { mode: 0o600 });
+      writeFileSync(tmp, JSON.stringify(data), { mode: 0o600 });
       // O `mode` do writeFileSync só vale para arquivo novo: garante o 600 também num temporário que sobrou.
       chmodSync(tmp, 0o600);
       renameSync(tmp, this.file);
@@ -120,24 +174,6 @@ export class WorldSettingsStore {
       }
       log.warnOnce('world-write', tr('Não foi possível gravar {0} ({1}); a sessão do Habblaud World vale só nesta execução.', [this.file, (err as NodeJS.ErrnoException).code ?? '?']));
       return false;
-    }
-  }
-
-  /** Atualiza campos da sessão atual (access, player); sem sessão, não faz nada. */
-  update(patch: Partial<Pick<WorldSession, 'access' | 'player'>>): boolean {
-    const cur = this.session;
-    if (!cur) return false;
-    return this.save({ ...cur, ...patch });
-  }
-
-  /** Apaga a sessão (sair, token revogado). */
-  clear(): void {
-    this.session = undefined;
-    if (!this.file) return;
-    try {
-      rmSync(this.file, { force: true });
-    } catch (err) {
-      log.warn(tr('Não foi possível apagar {0} ({1}).', [this.file, (err as NodeJS.ErrnoException).code ?? '?']));
     }
   }
 

@@ -1,0 +1,436 @@
+// O uplink do prédio (server/world/uplink.ts) contra o servidor do mundo de mentira (server/test/fake-world.ts, com o
+// WebSocket feito à mão): quando conecta, o `hello`, o pacote inteiro a cada `welcome`, a espera entre remessas, o
+// `ping`, a reconexão, cada `goodbye`, a pausa que fecha antes de responder e a última remessa em disco (600).
+import { randomBytes } from 'node:crypto';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import { hash32 } from '../../shared/hash';
+import type { AgentInfo } from '../../shared/types';
+import { VISIBILITY_DEFAULTS, type GoodbyeReason, type Player, type WorldUplink } from '../../shared/world/protocol';
+import schemaJson from '../../shared/world/schema.json';
+import { compileValidator } from '../../shared/world/schema-validator';
+import { worldSocketUrl } from '../config';
+import { setQuiet } from '../log';
+import { startFakeWorld, type FakeWorld } from '../test/fake-world';
+import { tempDir } from '../test/fixtures';
+import { WorldSettingsStore } from './settings';
+import { backoffDelay, BuildingUplink, type UplinkTiming } from './uplink';
+
+setQuiet(true);
+
+const validate = compileValidator(schemaJson as unknown as { [k: string]: unknown });
+const EMAIL = 'ana@exemplo.com';
+const FAST: Partial<UplinkTiming> = {
+  debounceMs: 40,
+  minGapMs: 150,
+  pingMs: 120,
+  refreshMs: 60_000,
+  backoffMinMs: 20,
+  backoffMaxMs: 80,
+  welcomeTimeoutMs: 400,
+  closeWaitMs: 500,
+};
+const PLAYER: Player = {
+  name: 'Ana Pixel',
+  look: 'f',
+  parts: {},
+  traits: ['games', 'cafeina'],
+  intro: 'coffee',
+  visibility: { ...VISIBILITY_DEFAULTS },
+  updatedAt: '2026-10-15T12:00:00Z',
+};
+
+const closers: Array<() => Promise<void> | void> = [];
+afterEach(async () => {
+  while (closers.length) await closers.pop()!();
+});
+
+function agent(id: string, roomId: string, extra: Partial<AgentInfo> = {}): AgentInfo {
+  return {
+    id, kind: 'main', roomId, name: 'Marina', look: 'f', role: 'Agente principal', sessionId: `s-${id}`, account: '.claude',
+    status: 'working', recent: [], tasks: [], startedAt: 1, lastEventAt: 1, statusSince: 1,
+    stats: { toolCalls: 0, tokensIn: 0, tokensOut: 0, subagents: 0 }, seed: hash32(id), ...extra,
+  };
+}
+
+async function waitFor(cond: () => boolean, what: string, ms = 3_000): Promise<void> {
+  const until = Date.now() + ms;
+  while (!cond()) {
+    if (Date.now() > until) throw new Error(`esperando: ${what}`);
+    await new Promise((ok) => setTimeout(ok, 5));
+  }
+}
+const sleep = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
+
+interface Harness {
+  world: FakeWorld;
+  store: WorldSettingsStore;
+  uplink: BuildingUplink;
+  token: string;
+  file: string;
+  lastFile: string;
+  agents: AgentInfo[];
+  change(): void;
+  goodbyes: GoodbyeReason[];
+  changes: { n: number };
+  /** meta() a cada aviso de mudança. */
+  metas: unknown[];
+  canAct: { v: boolean };
+  make(): BuildingUplink;
+}
+
+async function start(opts: { session?: 'approved' | 'waiting' | 'no-player' | 'none'; start?: boolean; tokensVisible?: boolean } = {}): Promise<Harness> {
+  const world = await startFakeWorld();
+  closers.push(world.close);
+  const tmp = tempDir();
+  closers.push(tmp.cleanup);
+  const token = randomBytes(32).toString('base64url');
+  world.accounts.set(EMAIL, { email: EMAIL, password: 'x', verified: true, access: 'approved', code: '123456', player: PLAYER, locale: 'pt-BR' });
+  world.devices.set(token, { email: EMAIL, deviceId: 'dev_1' });
+  const file = join(tmp.dir, 'world.json');
+  const lastFile = join(tmp.dir, 'world-last-uplink.json');
+  const store = new WorldSettingsStore(file);
+  const mode = opts.session ?? 'approved';
+  const player = { ...PLAYER, visibility: { ...PLAYER.visibility, tokensVisible: opts.tokensVisible ?? true } };
+  if (mode !== 'none') {
+    store.save({ deviceId: 'dev_1', token, email: EMAIL, access: mode === 'waiting' ? 'waiting' : 'approved', ...(mode === 'no-player' ? {} : { player }) });
+  }
+  const listeners = new Set<() => void>();
+  const h = {
+    world,
+    store,
+    token,
+    file,
+    lastFile,
+    agents: [
+      agent('.claude:101', '/Users/ana/projeto-secreto'),
+      agent('s-101:agent-1', '/Users/ana/projeto-secreto', { kind: 'sub', parentId: '.claude:101', look: 'm' }),
+      agent('.codex:thr-9', '/Users/ana/outro', { provider: 'codex', status: 'idle' }),
+      agent('demo:agente-1', 'demo:/sala', { status: 'working' }),
+    ],
+    goodbyes: [] as GoodbyeReason[],
+    changes: { n: 0 },
+    metas: [] as unknown[],
+    canAct: { v: true },
+    change: () => listeners.forEach((cb) => cb()),
+  } as Omit<Harness, 'uplink' | 'make'> as Harness;
+  h.make = () => {
+    const u = new BuildingUplink({
+      url: worldSocketUrl(world.base),
+      version: '0.11.0',
+      build: () => ({ commit: 'a'.repeat(40), dirty: true, builtAt: '2026-10-15T00:00:00Z' }) as never,
+      locale: () => 'es',
+      store,
+      canAct: () => h.canAct.v,
+      agents: () => h.agents,
+      subscribe: (cb) => {
+        listeners.add(cb);
+        return () => void listeners.delete(cb);
+      },
+      tokens: () => ({ day: 12_345, week: 678_901 }),
+      lastFile,
+      onGoodbye: (r) => h.goodbyes.push(r),
+      onChange: () => {
+        h.changes.n++;
+        h.metas.push(h.uplink?.meta());
+      },
+      timing: FAST,
+      random: () => 0.5,
+    });
+    closers.push(() => u.stop());
+    return u;
+  };
+  h.uplink = h.make();
+  if (opts.start !== false) h.uplink.start();
+  return h;
+}
+
+const agentsOf = (u: WorldUplink) => u.floors.flatMap((f) => f.agents);
+
+describe('BuildingUplink: conexão e remessas', () => {
+  it('hello só com token, versão, build e idioma; com o welcome, o pacote inteiro (válido, sem demo)', async () => {
+    const h = await start();
+    await waitFor(() => h.world.ws.uplinks.length === 1, 'primeira remessa');
+    const conn = h.world.ws.connections[0];
+    expect(conn.url).toBe('/v1/socket');
+    expect(JSON.stringify(conn.headers)).not.toContain(h.token);
+    expect(h.world.ws.hellos[0]).toEqual({ t: 'hello', v: 1, version: '0.11.0', build: { commit: 'a'.repeat(40), dirty: true }, locale: 'es', token: h.token });
+    expect(conn.messages[0].t).toBe('hello');
+    const { uplink, bytes } = h.world.ws.uplinks[0];
+    expect(validate(uplink)).toEqual([]);
+    expect(uplink.floors).toHaveLength(2);
+    expect(agentsOf(uplink)).toHaveLength(3);
+    expect(uplink.tokens).toEqual({ day: 12_000, week: 680_000 });
+    for (const leak of ['demo', '/Users', 'projeto-secreto', 'outro', '.claude', '.codex', 'thr-9', 's-101']) {
+      expect(JSON.stringify(uplink), leak).not.toContain(leak);
+    }
+    const sub = agentsOf(uplink).find((a) => a.kind === 'sub')!;
+    expect(agentsOf(uplink).map((a) => a.id)).toContain(sub.parentId);
+    // Status e última remessa: o mesmo objeto que foi para o fio.
+    await waitFor(() => !!h.uplink.status().lastAck, 'ack');
+    expect(h.uplink.status()).toMatchObject({ connected: true, paused: false, floors: 2, agents: 3, lastAck: { ok: true } });
+    const last = h.uplink.lastUplink()!;
+    expect(last.uplink).toEqual(uplink);
+    expect(last.bytes).toBe(bytes);
+    expect(last.ack).toMatchObject({ ok: true, bytes });
+    expect(last.ack!.at).toEqual(expect.any(Number));
+    expect(h.uplink.meta()).toEqual({ connected: true, paused: false, floors: 2, agents: 3, lastUplinkAt: last.at });
+    expect(h.changes.n).toBeGreaterThan(0);
+  });
+
+  it('última remessa em disco: modo 600, sem token, relida só na mesma sessão', async () => {
+    const h = await start();
+    await waitFor(() => !!h.uplink.lastUplink()?.ack, 'ack');
+    expect(statSync(h.lastFile).mode & 0o777).toBe(0o600);
+    const text = readFileSync(h.lastFile, 'utf8');
+    expect(text).not.toContain(h.token);
+    expect(JSON.parse(text).uplink).toEqual(h.uplink.lastUplink()!.uplink);
+    h.uplink.stop();
+    // Outro processo, mesma sessão: mostra a última remessa antes de conectar.
+    h.canAct.v = false;
+    const again = h.make();
+    again.start();
+    expect(again.lastUplink()).toEqual(h.uplink.lastUplink());
+    // Saiu da conta: some da memória e do disco.
+    h.store.clear();
+    again.sync();
+    expect(again.lastUplink()).toBeUndefined();
+    expect(existsSync(h.lastFile)).toBe(false);
+  });
+
+  it('só conecta com a conta aprovada, o personagem, a trava do terminal e sem pausa', async () => {
+    const h = await start({ session: 'waiting' });
+    await sleep(80);
+    expect(h.world.ws.connections).toHaveLength(0);
+    h.store.update({ access: 'approved', player: undefined });
+    h.uplink.sync();
+    await sleep(80);
+    expect(h.world.ws.connections).toHaveLength(0); // sem personagem
+    h.store.update({ player: PLAYER });
+    h.canAct.v = false;
+    h.uplink.sync();
+    h.store.update({ paused: true });
+    h.canAct.v = true;
+    h.uplink.sync();
+    await sleep(80);
+    expect(h.world.ws.connections).toHaveLength(0);
+    h.store.update({ paused: undefined });
+    h.uplink.sync();
+    await waitFor(() => h.world.ws.uplinks.length === 1, 'remessa');
+    // Sem a trava do terminal, desconecta.
+    h.canAct.v = false;
+    h.uplink.sync();
+    await waitFor(() => h.world.ws.open.length === 0, 'fechou');
+  });
+
+  it('manda ao mudar: espera desde a primeira mudança, uma remessa a cada minGap e nada se o pacote não mudou', async () => {
+    const h = await start();
+    await waitFor(() => h.world.ws.uplinks.length === 1, 'primeira');
+    // Mudanças sem efeito no pacote (o escritório muda a toda hora: atividade, balões...).
+    for (let i = 0; i < 10; i++) {
+      h.change();
+      await sleep(15);
+    }
+    await sleep(250);
+    expect(h.world.ws.uplinks).toHaveLength(1);
+    // Agora muda de verdade, sem parar, por 600 ms.
+    const t0 = Date.now();
+    for (let i = 0; i < 40; i++) {
+      h.agents = [...h.agents, agent(`.claude:${200 + i}`, '/Users/ana/projeto-secreto')];
+      h.change();
+      await sleep(15);
+    }
+    await sleep(300);
+    const sent = h.world.ws.uplinks.slice(1);
+    expect(sent.length).toBeGreaterThanOrEqual(2);
+    expect(sent.length).toBeLessThanOrEqual(Math.ceil((Date.now() - t0) / 150) + 1);
+    expect(sent[0].at - t0).toBeGreaterThanOrEqual(35);
+    for (let i = 1; i < sent.length; i++) expect(sent[i].at - sent[i - 1].at).toBeGreaterThanOrEqual(100);
+    expect(agentsOf(sent[sent.length - 1].uplink)).toHaveLength(43);
+  });
+
+  it('ping a cada pingMs', async () => {
+    const h = await start();
+    await waitFor(() => h.world.ws.uplinks.length === 1, 'primeira');
+    await waitFor(() => h.world.ws.pings >= 2, 'dois pings', 1_000);
+  });
+
+  it('sem resposta ao ping, fecha e reconecta', async () => {
+    const h = await start();
+    h.world.ws.options.pong = false;
+    await waitFor(() => h.world.ws.connections.length >= 2, 'reconectou depois do silêncio', 2_000);
+  });
+
+  it('caiu: reconecta com espera e manda o pacote inteiro de novo, mesmo igual', async () => {
+    const h = await start();
+    await waitFor(() => h.world.ws.uplinks.length === 1, 'primeira');
+    h.world.ws.connections[0].drop();
+    await waitFor(() => h.world.ws.uplinks.length === 2, 'reenvio');
+    expect(h.world.ws.connections).toHaveLength(2);
+    expect(h.world.ws.uplinks[1].uplink).toEqual(h.world.ws.uplinks[0].uplink);
+    expect(h.world.ws.uplinks[1].conn).toBe(2);
+  });
+
+  it('sem welcome no prazo: fecha e tenta de novo', async () => {
+    const h = await start({ start: false });
+    h.world.ws.options.hello = 'silent';
+    h.uplink.start();
+    await waitFor(() => h.world.ws.connections.length >= 2, 'segunda tentativa', 2_000);
+    expect(h.world.ws.uplinks).toHaveLength(0);
+  });
+
+  it('ack com erro: lastAck com o código; código desconhecido vira internal', async () => {
+    const h = await start({ start: false });
+    h.world.ws.options.ack = 'name_pool';
+    h.uplink.start();
+    await waitFor(() => !!h.uplink.status().lastAck, 'ack');
+    expect(h.uplink.status().lastAck).toEqual({ ok: false, error: 'name_pool' });
+    expect(h.uplink.lastUplink()!.ack).toEqual({ ok: false, error: 'name_pool', at: expect.any(Number) });
+    h.world.ws.options.ack = 'algo_novo';
+    h.agents = h.agents.slice(1);
+    h.change();
+    await waitFor(() => h.world.ws.uplinks.length === 2 && h.uplink.status().lastAck?.error === 'internal', 'ack novo');
+  });
+
+  it('o tema e as opções do jogador: tema trocado manda de novo; tokens só com tokensVisible', async () => {
+    const h = await start({ tokensVisible: false });
+    await waitFor(() => h.world.ws.uplinks.length === 1, 'primeira');
+    expect(h.world.ws.uplinks[0].uplink.tokens).toBeUndefined();
+    h.store.setTheme('christmas');
+    h.uplink.themeChanged();
+    await waitFor(() => h.world.ws.uplinks.length === 2, 'tema');
+    expect(h.world.ws.uplinks[1].uplink.theme).toBe('christmas');
+  });
+
+  it('welcome.building: andares e agentes do mundo até a primeira remessa daqui', async () => {
+    const h = await start({ start: false });
+    h.world.ws.options.building = { id: 'acc_1', floors: 7, agents: { total: 12, working: 5, waiting: 1, idle: 6 }, state: 'away' };
+    h.uplink.start();
+    await waitFor(() => h.world.ws.uplinks.length === 1, 'primeira');
+    // No aviso do welcome (antes da remessa sair), o resumo é o do mundo; depois, o daqui.
+    expect(h.metas).toContainEqual({ connected: true, paused: false, floors: 7, agents: 12 });
+    await waitFor(() => h.uplink.meta().floors === 2, 'remessa');
+    expect(h.uplink.meta()).toMatchObject({ floors: 2, agents: 3 });
+  });
+});
+
+describe('BuildingUplink: goodbye, pausa e retomada', () => {
+  it('deploy: reconecta sozinho', async () => {
+    const h = await start();
+    await waitFor(() => h.world.ws.uplinks.length === 1, 'primeira');
+    h.world.ws.connections[0].goodbye('deploy');
+    await waitFor(() => h.world.ws.uplinks.length === 2, 'de volta');
+    expect(h.goodbyes).toEqual([]);
+  });
+
+  for (const reason of ['banned', 'suspended', 'update', 'other-device'] as const) {
+    it(`${reason}: para, avisa a conta e mostra no status; só volta com retomar`, async () => {
+      const h = await start();
+      await waitFor(() => h.world.ws.uplinks.length === 1, 'primeira');
+      h.world.ws.connections[0].goodbye(reason);
+      await waitFor(() => h.uplink.status().stopped === reason, 'parou');
+      await sleep(150);
+      expect(h.world.ws.connections).toHaveLength(1);
+      expect(h.goodbyes).toEqual([reason]);
+      expect(h.uplink.status().connected).toBe(false);
+      h.uplink.sync();
+      await sleep(80);
+      expect(h.world.ws.connections).toHaveLength(1);
+      h.uplink.resume();
+      await waitFor(() => h.world.ws.uplinks.length === 2, 'retomou');
+      expect(h.uplink.status().stopped).toBeUndefined();
+    });
+  }
+
+  for (const reason of ['waiting', 'no_player', 'unauthorized'] as const) {
+    it(`${reason} no hello: para sem insistir até a sessão mudar`, async () => {
+      const h = await start({ start: false });
+      h.world.ws.options.hello = reason;
+      h.uplink.start();
+      await waitFor(() => h.goodbyes.length === 1, 'goodbye');
+      expect(h.goodbyes).toEqual([reason]);
+      await sleep(200);
+      expect(h.world.ws.connections).toHaveLength(1);
+      // A sessão mudou (personagem salvo de novo, por exemplo): tenta outra vez.
+      h.world.ws.options.hello = 'auto';
+      h.store.update({ player: { ...PLAYER, updatedAt: '2026-10-16T00:00:00Z' } });
+      h.uplink.sync();
+      await waitFor(() => h.world.ws.uplinks.length === 1, 'voltou');
+    });
+  }
+
+  it('lista de espera de novo e depois aprovada: volta sozinho', async () => {
+    const h = await start({ start: false });
+    h.world.ws.options.hello = 'waiting';
+    h.uplink.start();
+    await waitFor(() => h.goodbyes.length === 1, 'goodbye');
+    h.store.update({ access: 'waiting' });
+    h.uplink.sync();
+    h.world.ws.options.hello = 'auto';
+    h.store.update({ access: 'approved' });
+    h.uplink.sync();
+    await waitFor(() => h.world.ws.uplinks.length === 1, 'voltou');
+  });
+
+  it('pausa fecha a conexão antes de responder; retomar reabre e manda o pacote inteiro', async () => {
+    const h = await start();
+    await waitFor(() => h.world.ws.uplinks.length === 1, 'primeira');
+    h.store.update({ paused: true });
+    await h.uplink.pause();
+    // Assim que a pausa responde, o servidor já viu a conexão fechar.
+    expect(h.world.ws.open).toHaveLength(0);
+    expect(h.world.ws.connections[0].closedCleanly).toBe(true);
+    expect(h.uplink.status()).toMatchObject({ connected: false, paused: true });
+    h.change();
+    await sleep(150);
+    expect(h.world.ws.connections).toHaveLength(1);
+    h.store.update({ paused: undefined });
+    h.uplink.resume();
+    await waitFor(() => h.world.ws.uplinks.length === 2, 'retomou');
+    expect(h.uplink.status()).toMatchObject({ connected: true, paused: false });
+  });
+
+  it('pausa com o servidor mudo: responde no prazo (closeWaitMs) mesmo sem o close de volta', async () => {
+    const h = await start();
+    await waitFor(() => h.world.ws.uplinks.length === 1, 'primeira');
+    h.world.ws.options.answerClose = false;
+    const t0 = Date.now();
+    h.store.update({ paused: true });
+    await h.uplink.pause();
+    const took = Date.now() - t0;
+    expect(took).toBeGreaterThanOrEqual(450);
+    expect(took).toBeLessThan(900);
+    expect(h.uplink.status().connected).toBe(false);
+    // Nada mais sai pela conexão pendurada.
+    const before = h.world.ws.connections[0].messages.length;
+    h.change();
+    await sleep(200);
+    expect(h.world.ws.connections[0].messages.length).toBe(before);
+  });
+
+  it('sair da conta fecha na hora e esquece os ids', async () => {
+    const h = await start();
+    await waitFor(() => h.world.ws.uplinks.length === 1, 'primeira');
+    const first = h.world.ws.uplinks[0].uplink;
+    h.store.clear();
+    h.uplink.sync();
+    await waitFor(() => h.world.ws.open.length === 0, 'fechou');
+    h.store.save({ deviceId: 'dev_1', token: h.token, email: EMAIL, access: 'approved', player: PLAYER });
+    h.uplink.sync();
+    await waitFor(() => h.world.ws.uplinks.length === 2, 'de volta');
+    // Outra sessão: ids novos.
+    expect(h.world.ws.uplinks[1].uplink.floors.map((f) => f.id)).not.toEqual(first.floors.map((f) => f.id));
+  });
+});
+
+describe('backoffDelay', () => {
+  it('dobra de 2 s até 60 s, com ±25 %, nunca acima do teto', () => {
+    const mid = [0, 1, 2, 3, 4, 5, 6, 10].map((n) => backoffDelay(n, () => 0.5));
+    expect(mid).toEqual([2_000, 4_000, 8_000, 16_000, 32_000, 60_000, 60_000, 60_000]);
+    expect(backoffDelay(0, () => 0)).toBe(1_500);
+    expect(backoffDelay(0, () => 1)).toBe(2_500);
+    expect(backoffDelay(9, () => 1)).toBe(60_000);
+    expect(backoffDelay(9, () => 0)).toBe(45_000);
+  });
+});

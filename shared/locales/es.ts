@@ -2882,4 +2882,11 @@ export const ES: Readonly<Record<string, string>> = {
   "Projeto Cocheiro": "Proyecto Auriga",
   "Projeto Lobo": "Proyecto Lupus",
   "Projeto Tucano": "Proyecto Tucán",
+  "Habblaud World: prédio conectado.": "Habblaud World: edificio conectado.",
+  "Habblaud World: o servidor recusou o pacote do prédio ({0}).": "Habblaud World: el servidor rechazó el paquete del edificio ({0}).",
+  "Habblaud World: esta versão do Habblaud não entra mais no mundo; atualize para o prédio voltar.": "Habblaud World: esta versión de Habblaud ya no entra al mundo; actualízala para que el edificio vuelva.",
+  "Habblaud World: o servidor encerrou a conexão do prédio ({0}).": "Habblaud World: el servidor cerró la conexión del edificio ({0}).",
+  "Habblaud World: sem conexão com o servidor do mundo; tentando de novo.": "Habblaud World: sin conexión con el servidor del mundo; intentando de nuevo.",
+  "Habblaud World: o prédio passou dos limites do mundo; {0} andar(es) e {1} agente(s) ficaram de fora.": "Habblaud World: el edificio superó los límites del mundo; {0} piso(s) y {1} agente(s) quedaron fuera.",
+  "Não foi possível gravar {0} ({1}).": "No se pudo guardar {0} ({1}).",
 };
