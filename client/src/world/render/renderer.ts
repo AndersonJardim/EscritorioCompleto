@@ -709,6 +709,22 @@ export class Renderer {
     return { x: o.x + r.x, y: o.y + r.y, w: r.w, h: r.h };
   }
 
+  /**
+   * Retângulo (px de mundo) do quadro (`painting`) da parede de uma área, pintado junto com as paredes: a cena Visita
+   * põe o quadro de carimbos da portaria em cima do da recepção.
+   */
+  paintingRect(areaId: string): { x: number; y: number; w: number; h: number } | null {
+    const vis = this.areas.get(areaId);
+    const it = vis?.layout.wallItems.find((x) => x.kind === 'painting');
+    if (!vis || !it) return null;
+    const w = toWallVis(it, vis.id);
+    const s = wallSprites(this.art, 'painting', it.variant === 'wide' ? undefined : it.variant, 0, w.seed);
+    if (!s) return null;
+    const o = wallItemOrigin(w, s.base);
+    const b = opaqueBounds(s.base.canvas);
+    return { x: o.x + b.x, y: o.y + b.y, w: b.w, h: b.h };
+  }
+
   /** Luminância média da área de texto da placa (para escolher a cor do texto). */
   signIsDark(vis: AreaVis): boolean {
     const s = vis.sign ? wallSprites(this.art, 'sign', vis.sign.variant, 0, vis.sign.seed) : null;

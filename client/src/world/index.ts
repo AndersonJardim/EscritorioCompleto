@@ -8,6 +8,7 @@ import { loadWorldAssets, type WorldAssets } from './assets';
 import { Camera, overviewFrame } from './camera';
 import { createDebug, type WorldDebug } from './debug';
 import { BUILDING_H, COL_W } from './constants';
+import { RECEPTION_ID } from './layout/core';
 import { inRect } from './layout/geometry';
 import { attachInput, type Hit } from './input';
 import type { AgentInfo } from '../../../shared/types';
@@ -37,6 +38,8 @@ export interface VisitWorld {
   exit(done: () => void): boolean;
   /** Posição do visitante na tela (px CSS), para a dica "Sair (E)"; null fora da tela ou sem visitante. */
   visitorScreen(): { x: number; y: number } | null;
+  /** O quadro da parede da recepção na tela (px CSS): o lugar do quadro de carimbos da portaria; null fora da tela. */
+  boardScreen(): { x: number; y: number; w: number; h: number } | null;
 }
 
 export interface CreateWorldOptions {
@@ -502,6 +505,14 @@ export function createWorld(canvas: HTMLCanvasElement, store: OfficeStore, o: Cr
         const p = camera.worldToScreen(h.x, h.y - 2);
         if (p.x < 0 || p.y < 0 || p.x > camera.viewW || p.y > camera.viewH) return null;
         return p;
+      },
+      boardScreen: () => {
+        const r = visitMode ? renderer.paintingRect(RECEPTION_ID) : null;
+        if (!r) return null;
+        const a = camera.worldToScreen(r.x, r.y);
+        const b = camera.worldToScreen(r.x + r.w, r.y + r.h);
+        if (b.x < 0 || b.y < 0 || a.x > camera.viewW || a.y > camera.viewH) return null;
+        return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
       },
     },
   };

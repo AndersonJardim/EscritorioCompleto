@@ -1,6 +1,6 @@
 // O social dentro do prédio (Fase 5), a parte pura: o carimbo de hoje (dia UTC) e o quadro de carimbos da recepção.
 import { describe, expect, it } from 'vitest';
-import { stampBoard, stampedToday, stampKey, stampPinTitle, utcDay } from './visit-social';
+import { stampBoard, stampedToday, stampKey, stampPinTitle, stampReply, utcDay } from './visit-social';
 
 describe('carimbo de hoje', () => {
   it('um por prédio por dia UTC; o de ontem, um id fora da lista ou lixo não valem', () => {
@@ -36,5 +36,13 @@ describe('quadro de carimbos da recepção', () => {
     const many = Array.from({ length: 12 }, () => ({ stampId: 'heart' as const }));
     expect(stampBoard(many, 1, 8)).toHaveLength(8);
     expect(stampBoard([{ stampId: 'xx' as never }], 1)).toEqual([]);
+  });
+});
+
+describe('a resposta a um carimbo', () => {
+  it('stamped confirma (o carimbo fica), already_done diz que já havia um, o resto desfaz', () => {
+    expect(stampReply('stamped')).toBe('ok');
+    expect(stampReply('already_done')).toBe('already');
+    for (const t of ['too_far', 'not_found', 'blocked', 'rate_limited', 'id_novo']) expect(stampReply(t), t).toBe('failed');
   });
 });

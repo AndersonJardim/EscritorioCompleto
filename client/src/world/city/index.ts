@@ -14,6 +14,8 @@ import { TILE } from '../../art/api';
 import { tr } from '../../../../shared/i18n';
 import { blockAt, chunkOf, lotDoor } from '../../../../shared/world/city';
 import type { WorldSceneInside } from '../../../../shared/world/api';
+import type { AwaySummary } from '../../../../shared/world/protocol';
+import { parseAwaySummary } from '../../../../shared/world/scene';
 import type { WorldStream, WorldStreamEvent } from '../../net/world-stream';
 import type { WorldOptions } from '../api';
 import { Camera } from '../camera';
@@ -124,6 +126,8 @@ export function createCityScene(o: CitySceneOptions): CityScene {
   let myChunk = '';
   /** Dentro de um prédio: a cena Visita (a cidade fica parada por baixo, com o stream aberto). */
   let visit: VisitScene | null = null;
+  /** O último "Enquanto você estava fora" do stream (os carimbos vão para o quadro da recepção do meu prédio). */
+  let awaySummary: AwaySummary | undefined;
   /** O último `enter` mandado (os avisos logo depois são da porta). */
   let entering: { id: string; at: number } | null = null;
   /** "Ver como os outros veem" pedido antes de a cidade estar pronta. */
@@ -356,6 +360,8 @@ export function createCityScene(o: CitySceneOptions): CityScene {
       version: o.version?.() ?? '',
       topInset: () => o.topInset(),
       send: (cmds) => s?.send(cmds),
+      toast: (text) => showToast(text),
+      summaryStamps: () => awaySummary?.stamps ?? [],
       // sem resposta ao `leave`: recomeça a cidade (o servidor local manda `view`, que o mundo entende como a volta)
       stuck: () => {
         endVisit();
@@ -388,6 +394,7 @@ export function createCityScene(o: CitySceneOptions): CityScene {
       case 'snapshot': {
         state.applySnapshot(ev.snapshot, performance.now());
         social?.snapshot(ev.snapshot);
+        awaySummary = ev.snapshot.summary;
         placeMe();
         if (me) myChunk = '';
         // um stream novo no meio da visita continua dentro; sem o interior, estou na rua
@@ -400,8 +407,11 @@ export function createCityScene(o: CitySceneOptions): CityScene {
         return;
       }
       case 'message': {
+        // dentro de um prédio, a visita responde primeiro aos avisos do like e do carimbo de lá
+        if (visit?.message(ev.msg)) return;
         // o social vê a mensagem antes do estado (o valor de antes) e responde aos avisos dos comandos dele
         if (social?.message(ev.msg, performance.now())) return;
+        if (ev.msg.t === 'away.summary') awaySummary = parseAwaySummary(ev.msg) ?? awaySummary;
         const eff = state.apply(ev.msg, performance.now());
         if (eff) onEffect(eff);
         return;

@@ -116,6 +116,10 @@ try {
   page.on('request', onRequest);
   await page.keyboard.press('e');
   await page.waitForFunction(() => !!window.habblaud.city.scene().visit(), null, { timeout: 10_000 });
+  // o social de dentro (Fase 5): um carimbo na portaria (vai para o quadro da recepção), sem o aviso na foto
+  await page.addStyleTag({ content: '.ui-city-toast { display: none !important; }' });
+  await page.locator('.ui-visit-social__stamp').click();
+  await page.locator('.ui-visit-social__choice[data-stamp="rocket"]').click();
   await page.mouse.move(700, 880);
   await page.waitForTimeout(2600);
   await page.screenshot({ path: join(out, 'world-visita.png') });

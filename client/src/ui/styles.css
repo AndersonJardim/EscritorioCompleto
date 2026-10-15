@@ -10601,11 +10601,6 @@ html.is-replay #world {
   flex: none;
 }
 
-.ui-visit-bar__like[disabled] {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
 .ui-visit-bar__panel {
   display: none;
 }

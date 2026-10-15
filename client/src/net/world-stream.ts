@@ -59,6 +59,7 @@ import { GREETING_IDS } from '../../../shared/world/protocol';
 import { reduceSceneBatch } from '../../../shared/world/scene';
 import { sampleBuildingDetail } from '../../../shared/world/visit-sample';
 import { reconnectDelay, type EventSourceLike } from './store';
+import { FAKE_SUMMARY } from './world';
 
 export type { WorldSceneCommand, WorldSceneMessage, WorldSceneSnapshot } from '../../../shared/world/api';
 
@@ -520,6 +521,8 @@ export class FakeWorldStream implements WorldStream {
   private later: Array<{ at: number; msg: WorldSceneMessage }> = [];
   /** Sorteios do social (determinísticos, como o resto da cidade falsa). */
   private readonly social = mulberry32(0x50c1a1);
+  /** O dono viu o "Enquanto você estava fora" (`summary.seen`): o snapshot não o traz mais. */
+  private summarySeen = false;
   /** Quem eu bloqueei (some da rua). */
   private readonly hidden = new Set<string>();
   /** Carimbos de hoje (um por prédio). */
@@ -599,6 +602,8 @@ export class FakeWorldStream implements WorldStream {
       ...(this.inside ? { inside: { id: this.inside.id, rev: this.inside.rev, detail: this.inside.detail } } : {}),
       ...(this.viewing ? { city: this.cityStatus() } : {}),
       likesToday: 3,
+      // o "Enquanto você estava fora" que o servidor manda ao dono ao conectar (o mesmo do FakeWorldApi)
+      ...(this.summarySeen ? {} : { summary: structuredClone(FAKE_SUMMARY) }),
     });
   }
 
@@ -747,6 +752,8 @@ export class FakeWorldStream implements WorldStream {
         if (!!b.likedByMe !== liked) b.likes += liked ? 1 : -1;
         b.likedByMe = liked;
         this.pending.push({ t: 'like.update', buildingId: b.id, likes: b.likes, likedByMe: liked });
+        // de dentro: o interior também (como o `building` do próximo `building.patch` do servidor)
+        if (this.inside?.id === b.id) Object.assign(this.inside.detail.building, { likes: b.likes, likedByMe: liked });
         return;
       }
       case 'greet': {
@@ -832,8 +839,9 @@ export class FakeWorldStream implements WorldStream {
         return;
       }
       default:
-        // report: o `reported`; summary.seen: nada volta.
+        // report: o `reported`; summary.seen: nada volta (e o resumo sai do snapshot).
         if (c.t === 'report') this.pending.push({ t: 'notice', level: 'info', text: 'reported' });
+        if (c.t === 'summary.seen') this.summarySeen = true;
         return;
     }
   }

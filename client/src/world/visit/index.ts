@@ -7,11 +7,15 @@
 // conecta (só `pushReplay`): o escritório desta máquina, o snapshot global e a interface dele nem ficam sabendo. Por
 // construção, nada que age é montado aqui: nem terminal, gaveta, feed, avisos, pedidos de permissão, mensagens, Meu dia,
 // timelapse, editor de personagem ou renomear sala. Só a faixa do topo, o painel só-leitura (salas e agentes, com um
-// cartão de nome, papel, ferramenta e status), Sair (botão, Esc ou o elevador da recepção) e o Like ("em breve").
+// cartão de nome, papel, ferramenta e status), Sair (botão, Esc ou o elevador da recepção) e, no topo do painel, o
+// social leve de dentro (visit-social.ts, Fase 5): **Curtir** e **Deixar um carimbo** na portaria, que respondem pelas
+// mensagens do stream (`message`). O quadro da parede da recepção vira o quadro de carimbos (`stampBoard`): o que este
+// navegador deixou hoje e, no meu próprio prédio, os do "Enquanto você estava fora".
 // O visitante (o meu personagem, com crachá) anda com o teclado e o clique; nenhum passo sai daqui.
+import { hash32 } from '../../../../shared/hash';
 import { tr } from '../../../../shared/i18n';
 import type { WorldSceneCommand, WorldSceneInside, WorldSceneMe } from '../../../../shared/world/api';
-import type { BuildingPatchMessage } from '../../../../shared/world/protocol';
+import type { BuildingPatchMessage, StampId } from '../../../../shared/world/protocol';
 import { OfficeStore } from '../../net/store';
 import { h, setHidden, setText } from '../../ui/dom';
 import { modalOpen } from '../input';
@@ -19,6 +23,7 @@ import type { WorldOptions } from '../api';
 import { intentFrom, moveKeyOf } from '../city/input';
 import { createWorld } from '../index';
 import { browserStorage, clearWorldWallets } from '../social/wallet';
+import { mountVisitSocial, stampBoard, stampPinTitle } from '../visit-social';
 import { VisitController } from './controller';
 import { findAgent, visitBanner, visitLightOf, visitorsLabel, visitPanel } from './model';
 
@@ -39,8 +44,12 @@ export interface VisitSceneOptions {
   options: () => WorldOptions;
   version: string;
   topInset: () => number;
-  /** Comandos pelo stream da cena Mundo (só `leave` e `resync {building}`). */
+  /** Comandos pelo stream da cena Mundo (`leave`, `resync {building}` e, do social, `like`, `unlike` e `stamp`). */
   send(cmds: WorldSceneCommand[]): void;
+  /** O aviso rápido da cena (o mesmo da cidade). */
+  toast(text: string): void;
+  /** No meu prédio: os carimbos do "Enquanto você estava fora" (o quadro da recepção). */
+  summaryStamps?(): ReadonlyArray<{ stampId: StampId; count: number }>;
   /** O `leave` ficou sem resposta: a cidade volta sozinha. */
   stuck(): void;
 }
@@ -51,6 +60,8 @@ export interface VisitScene {
   /** O interior inteiro de novo (`building` repetido, `resync`, o snapshot de um stream novo). */
   replace(inside: Pick<WorldSceneInside, 'rev' | 'detail'>): void;
   patch(msg: BuildingPatchMessage): void;
+  /** Uma mensagem do stream antes da cidade: true = respondeu a um like ou carimbo daqui (e a cidade não mostra). */
+  message(msg: unknown): boolean;
   /** Sair agora (botão, Esc): manda o `leave`. */
   leave(): void;
   /** Esc: fecha o cartão aberto; senão, sai. Sempre true (na visita, o Esc é dela). */
@@ -94,20 +105,13 @@ export function createVisitScene(o: VisitSceneOptions): VisitScene {
   const details = h('span', { class: 'ui-visit-bar__details' });
   const mode = h('span', { class: 'ui-visit-bar__mode', hidden: true });
   const visitors = h('span', { class: 'ui-visit-bar__visitors' });
-  const likeBtn = h('button', {
-    class: 'ui-btn ui-visit-bar__like',
-    type: 'button',
-    text: `❤️ ${tr('Curtir')}`,
-    title: tr('Curtir o prédio: em breve'),
-    attrs: { disabled: true, 'aria-disabled': 'true' },
-  });
   const panelBtn = h('button', { class: 'ui-btn ui-visit-bar__panel', type: 'button', attrs: { 'aria-expanded': 'false', 'aria-controls': 'ui-visit-panel' }, on: { click: () => setPanel(!panelOpen) } });
   const leaveBtn = h('button', { class: 'ui-btn ui-btn--primary ui-visit-bar__leave', type: 'button', text: tr('Sair do prédio'), title: tr('Sair do prédio (Esc)'), on: { click: () => leave() } });
   const bar = h(
     'header',
     { class: 'ui-visit-bar', attrs: { 'aria-label': tr('Visita') } },
     h('div', { class: 'ui-visit-bar__text' }, h('div', { class: 'ui-visit-bar__line' }, title, mode), h('div', { class: 'ui-visit-bar__line' }, details, visitors)),
-    h('div', { class: 'ui-visit-bar__actions' }, likeBtn, panelBtn, leaveBtn),
+    h('div', { class: 'ui-visit-bar__actions' }, panelBtn, leaveBtn),
   );
 
   const cardName = h('strong', { class: 'ui-visit-card__name' });
@@ -128,9 +132,12 @@ export function createVisitScene(o: VisitSceneOptions): VisitScene {
   );
   const emptyNote = h('p', { class: 'ui-visit-panel__empty', hidden: true });
   const roomsEl = h('ul', { class: 'ui-visit-panel__rooms' });
+  // Curtir e Deixar um carimbo (visit-social.ts), no topo do painel; somem no meu próprio prédio
+  const socialBox = h('div', { class: 'ui-visit-panel__social' });
   const panel = h(
     'aside',
     { class: 'ui-visit-panel', attrs: { id: 'ui-visit-panel', 'aria-label': tr('Salas do prédio') } },
+    socialBox,
     h('h3', { class: 'ui-visit-panel__title', text: tr('Salas') }),
     card,
     emptyNote,
@@ -149,10 +156,45 @@ export function createVisitScene(o: VisitSceneOptions): VisitScene {
     h('span', {}, h('kbd', { text: 'Esc' }), ' ', tr('sair')),
   );
   const leaving = h('div', { class: 'ui-visit-leaving', hidden: true, role: 'status', text: tr('Saindo do prédio…') });
-  const layer = h('div', { class: 'ui-visit' }, bar, panel, exitHint, help, leaving);
+  // o quadro de carimbos da portaria, em cima do quadro da parede da recepção (acompanha a câmera a cada quadro)
+  const boardPins = h('div', { class: 'ui-visit-board__pins' });
+  const board = h('div', { class: 'ui-visit-board', hidden: true, role: 'img' }, boardPins);
+  const layer = h('div', { class: 'ui-visit' }, board, bar, panel, exitHint, help, leaving);
   o.uiRoot.append(layer);
   // os avisos do escritório desta máquina continuam, ao lado do painel
   o.uiRoot.classList.add('is-visit');
+
+  const social = mountVisitSocial(socialBox, {
+    building: () => (destroyed ? null : controller.detail.building),
+    mine: () => o.mine,
+    send: (cmds) => o.send(cmds),
+    toast: (text) => o.toast(text),
+  });
+
+  let boardSig = '';
+  /** Os carimbos do quadro: o meu de hoje (visitante) ou os do resumo (no meu prédio). */
+  function renderBoard(): void {
+    const mine = social.stampedToday();
+    const entries = o.mine ? (o.summaryStamps?.() ?? []).map((e) => ({ stampId: e.stampId, count: e.count })) : mine ? [{ stampId: mine, mine: true }] : [];
+    const sig = JSON.stringify(entries);
+    if (sig === boardSig) return;
+    boardSig = sig;
+    const pins = stampBoard(entries, hash32(controller.id));
+    boardPins.replaceChildren(
+      ...pins.map((p) =>
+        h('span', {
+          class: `ui-visit-board__pin${p.mine ? ' is-mine' : ''}`,
+          text: p.icon,
+          title: stampPinTitle(p),
+          attrs: { style: `left:${(p.x * 100).toFixed(1)}%;top:${(p.y * 100).toFixed(1)}%;--rot:${p.rot}deg` },
+        }),
+      ),
+    );
+    const label = pins.length ? `${tr('Carimbos da portaria')}: ${pins.map(stampPinTitle).join(', ')}` : tr('Carimbos da portaria: nenhum ainda');
+    board.setAttribute('aria-label', label);
+    board.title = label;
+    board.classList.toggle('is-empty', !pins.length);
+  }
 
   let roomsSig = '';
   function render(): void {
@@ -212,6 +254,7 @@ export function createVisitScene(o: VisitSceneOptions): VisitScene {
     }
     renderCard();
     setText(panelBtn, `${tr('Salas')} (${d.floors.length})`);
+    renderBoard();
     panelBtn.setAttribute('aria-expanded', String(panelOpen));
     layer.classList.toggle('has-panel', panelOpen);
     insets();
@@ -334,6 +377,16 @@ export function createVisitScene(o: VisitSceneOptions): VisitScene {
     const show = !controller.leaving && world.visit.atExit();
     const at = show ? world.visit.visitorScreen() : null;
     setHidden(exitHint, !at);
+    // o quadro de carimbos: só com a recepção na tela e grande o bastante para ler
+    const r = world.visit.boardScreen();
+    const fits = !!r && r.h >= 18;
+    setHidden(board, !fits);
+    if (r && fits) {
+      board.style.transform = `translate(${Math.round(r.x)}px, ${Math.round(r.y)}px)`;
+      board.style.width = `${Math.round(r.w)}px`;
+      board.style.height = `${Math.round(r.h)}px`;
+      board.style.setProperty('--pin', `${Math.max(8, Math.round(r.h * 0.3))}px`);
+    }
     if (at) {
       // sobre a cabeça, sem sair da tela
       const w = exitHint.offsetWidth || 150;
@@ -351,9 +404,18 @@ export function createVisitScene(o: VisitSceneOptions): VisitScene {
     world,
     replace(inside) {
       controller.replace(inside);
+      social.sync();
     },
     patch(msg) {
       controller.patch(msg);
+      // o like otimista só é refeito quando o prédio (likes, likedByMe) vem no patch
+      if (msg.building) social.sync();
+    },
+    message(msg) {
+      if (destroyed) return false;
+      const handled = social.message(msg);
+      renderBoard();
+      return handled;
     },
     leave,
     escape() {
@@ -378,6 +440,7 @@ export function createVisitScene(o: VisitSceneOptions): VisitScene {
       if (leaveTimer) clearTimeout(leaveTimer);
       cancelAnimationFrame(raf);
       offSelect();
+      social.destroy();
       removeEventListener('keydown', onDown);
       removeEventListener('keyup', onUp);
       removeEventListener('blur', clearKeys);
@@ -392,3 +455,4 @@ export function createVisitScene(o: VisitSceneOptions): VisitScene {
     },
   };
 }
+

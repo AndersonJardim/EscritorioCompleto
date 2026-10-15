@@ -1,7 +1,7 @@
-// O social leve DENTRO do prédio de alguém (Fase 5), pronto para a cena Visita (Fase 4) ligar:
+// O social leve DENTRO do prédio de alguém (Fase 5), ligado pela cena Visita (world/visit/index.ts):
 //   const social = mountVisitSocial(painel, { building, mine, send, toast });
-//   ...a cada mensagem do stream: if (social.message(msg)) return;   // like.update e os avisos do carimbo
-//   ...ao trocar de prédio: social.sync();  ao sair: social.destroy();
+//   ...a cada mensagem do stream: if (social.message(msg)) return;   // like.update e os avisos do like e do carimbo
+//   ...com o prédio novo (`building`, ou o `building` de um patch): social.sync();  ao sair: social.destroy();
 // - Botão Like (❤️ Curtir / 💔 Descurtir, com o total): de dentro do prédio o servidor aceita sem a distância da porta.
 // - "Deixar um carimbo": os 8 carimbos da portaria (só ids), um por prédio por dia (dia UTC, como o servidor). O que
 //   foi deixado hoje fica neste navegador (localStorage) para o botão e para o quadro da recepção; o servidor guarda só
@@ -15,7 +15,7 @@ import type { StampId, WorldBuildingPublic } from '../../../shared/world/protoco
 import { STAMPS, STAMP_IDS, stampIcon, stampLabel } from '../../../shared/world/social-labels';
 import { h, setHidden } from '../ui/dom';
 import { RateGate } from './city/greetings';
-import { safeLocalStorage } from '../ui/prefs';
+import { browserStorage } from './social/wallet';
 import './visit-social.css';
 
 /** Um aviso do mundo logo depois de um comando é a resposta a ele. */
@@ -40,6 +40,14 @@ export function stampedToday(raw: string | null, day: string): StampId | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * O aviso que responde a um carimbo: `stamped` = valeu (o servidor confirma; o toast já saiu ao carimbar),
+ * `already_done` = já havia um hoje, qualquer outro (longe, prédio que saiu, limite) = não ficou.
+ */
+export function stampReply(text: string): 'ok' | 'already' | 'failed' {
+  return text === 'stamped' ? 'ok' : text === 'already_done' ? 'already' : 'failed';
 }
 
 /** Um carimbo no quadro da recepção: posição (0..1 do quadro), inclinação (graus), ícone e rótulo. */
@@ -112,7 +120,8 @@ export interface VisitSocialHandle {
 /** Monta o Like e o "Deixar um carimbo" em `container` (o painel da cena Visita). */
 export function mountVisitSocial(container: HTMLElement, api: VisitSocialApi): VisitSocialHandle {
   const now = () => api.now?.() ?? Date.now();
-  const store = safeLocalStorage();
+  // o localStorage (sem ui/prefs.ts: a cena Visita não importa nada da interface do escritório)
+  const store = browserStorage();
   let likes = 0;
   let liked = false;
   let id = '';
@@ -153,7 +162,7 @@ export function mountVisitSocial(container: HTMLElement, api: VisitSocialApi): V
   function writeStamp(bid: string, s: StampId | null): void {
     try {
       if (s) store?.setItem(stampKey(bid), JSON.stringify({ day: utcDay(now()), stampId: s }));
-      else store?.removeItem(stampKey(bid));
+      else store?.removeItem?.(stampKey(bid));
     } catch {
       // sem localStorage: vale só até fechar a página
     }
@@ -241,9 +250,9 @@ export function mountVisitSocial(container: HTMLElement, api: VisitSocialApi): V
     const p = pending;
     pending = null;
     if (p.kind === 'stamp') {
-      // `stamped`: valeu (o toast já saiu ao carimbar)
-      if (m.text === 'stamped') return true;
-      if (m.text === 'already_done') {
+      const reply = stampReply(m.text);
+      if (reply === 'ok') return true;
+      if (reply === 'already') {
         api.toast(tr('Você já deixou um carimbo aqui hoje.'));
         return true;
       }
