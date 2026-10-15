@@ -20,6 +20,8 @@ export interface CitySceneHost {
   recenter(): void;
   /** Esc: fecha o que estiver aberto na cidade (cartão); false = nada para fechar. */
   escape(): boolean;
+  /** "Ver como os outros veem": entra no próprio prédio (com a cidade já aberta). */
+  visitOwn?(): void;
 }
 
 /**
@@ -80,6 +82,12 @@ export class SceneSwitch implements UiComponent {
       this.busy = false;
       this.onChange();
     }
+  }
+
+  /** "Ver como os outros veem": abre a cidade (se preciso) e entra no próprio prédio. */
+  async visitOwn(): Promise<void> {
+    if (!this.host.open) await this.open();
+    if (this.host.open) this.host.visitOwn?.();
   }
 
   close(): void {

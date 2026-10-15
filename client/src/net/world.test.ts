@@ -301,7 +301,7 @@ describe('de onde vêm os dados', () => {
       enabled: true,
       configured: true,
       state: 'approved',
-      building: { connected: true, paused: false, floors: 2, agents: 3, lastUplinkAt: expect.any(Number) },
+      building: { connected: true, paused: false, floors: 2, agents: 3, lastUplinkAt: expect.any(Number), visitors: 0 },
       scene: { available: true },
     });
     expect(worldSource({ mock: true, liveSnapshot: null }, '?mock=1&world=waiting').meta()).toEqual({ enabled: true, configured: true, state: 'waiting' });
@@ -414,7 +414,7 @@ describe('FakeWorldApi: prédio', () => {
   it('aprovado: prédio aceso, a remessa de exemplo com o tema do dia e a resposta aceita', async () => {
     const api = new FakeWorldApi({ state: 'approved', delayMs: 0, now: () => OCT });
     const st = await api.status();
-    expect(st.ok && st.data.building).toEqual({ connected: true, paused: false, floors: 2, agents: 3, lastUplinkAt: OCT, lastAck: { ok: true } });
+    expect(st.ok && st.data.building).toEqual({ connected: true, paused: false, floors: 2, agents: 3, lastUplinkAt: OCT, lastAck: { ok: true }, visitors: 0 });
     const last = await api.lastUplink();
     const bytes = uplinkBytes({ ...FAKE_UPLINK, theme: 'halloween' });
     expect(last.ok && last.data).toEqual({ at: OCT, bytes, uplink: { ...FAKE_UPLINK, theme: 'halloween' }, ack: { ok: true, at: OCT, bytes } });
@@ -449,7 +449,7 @@ describe('FakeWorldApi: prédio', () => {
     expect(api.meta().building?.lastUplinkAt).toBe(OCT);
     c.tick(60_000);
     expect(await api.resume()).toEqual({ ok: true, data: { paused: false } });
-    expect(api.meta().building).toEqual({ connected: true, paused: false, floors: 2, agents: 3, lastUplinkAt: OCT + 120_000 });
+    expect(api.meta().building).toEqual({ connected: true, paused: false, floors: 2, agents: 3, lastUplinkAt: OCT + 120_000, visitors: expect.any(Number) });
     const last = await api.lastUplink();
     expect(last.ok && last.data?.uplink.theme).toBe('christmas');
     expect(n).toBe(3);
@@ -484,7 +484,7 @@ describe('FakeWorldApi: prédio', () => {
     expect(st.ok && st.data.building).toMatchObject({ left: true });
     c.tick(60_000);
     expect(await api.join()).toEqual({ ok: true, data: null });
-    expect(api.meta().building).toEqual({ connected: true, paused: false, floors: 2, agents: 3, lastUplinkAt: OCT + 60_000 });
+    expect(api.meta().building).toEqual({ connected: true, paused: false, floors: 2, agents: 3, lastUplinkAt: OCT + 60_000, visitors: expect.any(Number) });
     // Sem ter saído, voltar não muda nada (nem manda outra remessa).
     c.tick(60_000);
     expect((await api.join()).ok).toBe(true);

@@ -119,6 +119,8 @@ export interface CardActions {
   showBuilding(id: string): void;
   /** Até onde vai a barra do topo (px): o cartão fica abaixo dela. */
   topInset(): number;
+  /** (Opcional) Entrar no prédio: o meu, de qualquer lugar ("Ver como os outros veem"). */
+  enter?(id: string): void;
 }
 
 /** Os dois cartões (um de cada vez), posicionados perto do ponto da tela. */
@@ -193,6 +195,12 @@ export class CityCards {
       } else rows.push(h('div', { class: 'ui-city-card__muted', text: tr('Modo discreto: o dono não mostra os agentes.') }));
       if (m.closed) rows.push(h('div', { class: 'ui-city-card__muted', text: `🔒 ${tr('Fechado a visitas')}` }));
       rows.push(h('div', { class: 'ui-city-card__row ui-city-card__foot' }, h('span', { text: `❤️ ${m.likes}` }), m.since ? h('span', { class: 'ui-city-card__since', text: tr('No mundo desde {0}', [m.since]) }) : null));
+      // o meu prédio: entrar de qualquer lugar e ver o que os outros veem lá dentro
+      const enter = this.actions.enter;
+      if (m.mine && enter) {
+        const id = b.id;
+        rows.push(h('button', { class: 'ui-city-card__link', type: 'button', text: `👁 ${tr('Ver como os outros veem')}`, on: { click: () => enter(id) } }));
+      }
       this.body.replaceChildren(...rows);
     }
     this.place(at);

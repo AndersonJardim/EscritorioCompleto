@@ -4,9 +4,9 @@
 // devolve os efeitos que a cena precisa tratar (correção de posição, ausente, perfil, aviso). As regras são as de
 // shared/world/scene.ts: `area` substitui o chunk; item de `area.patch` com `lot` substitui o prédio e sem `lot` mescla;
 // ficam só os chunks dos 3×3 em volta da minha posição (o servidor não avisa quando deixa de assinar).
-import type { WorldSceneMe, WorldSceneSnapshot } from '../../../../shared/world/api';
+import type { WorldSceneInside, WorldSceneMe, WorldSceneSnapshot } from '../../../../shared/world/api';
 import { blockAt, chunkId, chunkOf, chunksAround, parseChunkId } from '../../../../shared/world/city';
-import type { WorldBuildingPublic, WorldPlayerPublic, WorldPosition } from '../../../../shared/world/protocol';
+import type { BuildingPatchMessage, WorldBuildingDetail, WorldBuildingPublic, WorldPlayerPublic, WorldPosition } from '../../../../shared/world/protocol';
 import { lotKey } from './layout';
 import { pushSample, type Sample } from './players';
 
@@ -21,7 +21,11 @@ export type CityEffect =
   | { type: 'pos'; x: number; y: number }
   | { type: 'afk' }
   | { type: 'profile'; player: WorldPlayerPublic }
-  | { type: 'notice'; level: 'info' | 'warn' | 'error'; text: string };
+  | { type: 'notice'; level: 'info' | 'warn' | 'error'; text: string }
+  /** Fase 4: o interior do prédio onde entrei (ao entrar, num `resync` ou num `enter` repetido). */
+  | { type: 'building'; inside: WorldSceneInside }
+  /** Fase 4: mudança no interior (o servidor local já conferiu o `rev`; a cena Visita confere de novo). */
+  | { type: 'building.patch'; msg: BuildingPatchMessage };
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object' && !Array.isArray(v);
@@ -43,6 +47,10 @@ function readPosition(v: unknown): WorldPosition | null {
   return { x: v.x, y: v.y, dir, moving: v.moving === true };
 }
 
+function isInside(v: unknown): v is WorldSceneInside {
+  return isObject(v) && typeof v.id === 'string' && finite(v.rev) && isObject(v.detail) && isBuilding(v.detail.building) && Array.isArray(v.detail.floors);
+}
+
 const isBlock = (b: unknown): b is { x: number; y: number; lit: number } => isObject(b) && finite(b.x) && finite(b.y) && finite(b.lit);
 
 export class CityState {
@@ -54,6 +62,8 @@ export class CityState {
   connected = false;
   /** O servidor do mundo já mandou `afk` e ninguém mexeu desde então. */
   afk = false;
+  /** Dentro de um prédio, segundo o último snapshot do servidor local (um stream novo no meio da visita). */
+  inside: WorldSceneInside | null = null;
   /** Distrito dos ids de chunk (`<distrito>:<cx>,<cy>`). */
   district: string | undefined;
   readonly buildings = new Map<string, WorldBuildingPublic>();
@@ -85,6 +95,7 @@ export class CityState {
     this.players.clear();
     this.connected = snap.connected !== false;
     this.afk = snap.afk === true;
+    this.inside = isInside(snap.inside) ? structuredClone(snap.inside) : null;
     this.district = typeof snap.district === 'string' ? snap.district : undefined;
     if (snap.me) {
       this.me = snap.me;
@@ -167,6 +178,14 @@ export class CityState {
       case 'notice':
         if (typeof msg.text === 'string') return { type: 'notice', level: msg.level === 'warn' || msg.level === 'error' ? msg.level : 'info', text: msg.text };
         return null;
+      case 'building': {
+        const d = msg.detail;
+        if (!finite(msg.rev) || !isObject(d) || !isBuilding(d.building) || !Array.isArray(d.floors)) return null;
+        return { type: 'building', inside: { id: d.building.id, rev: msg.rev, detail: { building: d.building, floors: d.floors, visitors: finite(d.visitors) ? d.visitors : 0 } as WorldBuildingDetail } };
+      }
+      case 'building.patch':
+        if (!finite(msg.rev)) return null;
+        return { type: 'building.patch', msg: msg as unknown as BuildingPatchMessage };
       default:
         return null;
     }

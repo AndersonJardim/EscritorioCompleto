@@ -25,7 +25,7 @@ export function start(): void {
   const worldCanvas = document.getElementById('world') as HTMLCanvasElement;
   const uiRoot = document.getElementById('ui') as HTMLElement;
   const world = createWorld(worldCanvas, store);
-  const city = cityHost({ world, worldCanvas, uiRoot, mock: store.mock, params });
+  const city = cityHost({ world, worldCanvas, uiRoot, mock: store.mock, params, version: () => store.liveSnapshot?.meta.version ?? '' });
   createUI(uiRoot, store, world, city);
   // O que esta página pode fazer (porta local ou remota com login) chega antes do primeiro snapshot (ou desiste em
   // poucos segundos e fica a regra de antes).
@@ -52,7 +52,7 @@ export function start(): void {
  * primeira vez que abre (quem não usa o World não baixa a cidade). Com a cidade na tela, o escritório para de
  * desenhar e o teclado é da cidade; Esc ou o botão Escritório voltam.
  */
-function cityHost(o: { world: WorldApi; worldCanvas: HTMLCanvasElement; uiRoot: HTMLElement; mock: boolean; params: URLSearchParams }): CitySceneHost & { scene(): CityScene | null } {
+function cityHost(o: { world: WorldApi; worldCanvas: HTMLCanvasElement; uiRoot: HTMLElement; mock: boolean; params: URLSearchParams; version: () => string }): CitySceneHost & { scene(): CityScene | null } {
   let scene: CityScene | null = null;
   let loading: Promise<CityScene> | null = null;
   let open = false;
@@ -72,6 +72,7 @@ function cityHost(o: { world: WorldApi; worldCanvas: HTMLCanvasElement; uiRoot: 
         openStream: () => ws.createWorldStream({ mock: o.mock, ...buildings }),
         options: () => o.world.getOptions(),
         topInset: () => o.uiRoot.querySelector('.ui-topbar')?.getBoundingClientRect().bottom ?? 64,
+        version: () => o.version(),
       });
       return scene;
     }));
@@ -95,6 +96,7 @@ function cityHost(o: { world: WorldApi; worldCanvas: HTMLCanvasElement; uiRoot: 
     zoomBy: (f) => scene?.zoomBy(f),
     recenter: () => scene?.recenter(),
     escape: () => scene?.escape() ?? false,
+    visitOwn: () => scene?.visitOwn(),
     scene: () => scene,
   };
 }

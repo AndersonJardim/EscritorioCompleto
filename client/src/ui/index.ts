@@ -248,6 +248,11 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi,
       invalidate();
     });
     topbar.addSceneButton(scene.button);
+    const sw = scene;
+    ctx.visitOwnBuilding = () => {
+      if (settings.isOpen) settings.hide();
+      void sw.visitOwn();
+    };
   }
   help = new HelpDialog();
   const day = new DayLauncher(ctx, (el) => root.append(el));

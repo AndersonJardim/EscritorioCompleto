@@ -364,6 +364,72 @@ describe('FakeWorldStream (modo demonstração)', () => {
     expect(msgs.filter((m) => m.t === 'pos')).toEqual([]);
   });
 
+  it('visita (Fase 4): longe e fechado recusam; o meu de qualquer lugar; lá dentro nada da rua desce, patches a cada 3 s; leave volta à porta', async () => {
+    let t = 0;
+    const f = new FakeWorldStream({ autoplay: false, now: () => t });
+    const msgs: any[] = [];
+    f.on((e) => e.type === 'message' && msgs.push(e.msg));
+    await Promise.resolve();
+    const all = fakeCityBuildings();
+    const other = all.find((b) => b.id !== FAKE_ME.id && b.state === 'online' && b.agents && !b.closed)!;
+    const closed = all.find((b) => b.closed)!;
+    f.send([{ t: 'enter', buildingId: other.id }]);
+    f.send([{ t: 'enter', buildingId: 'nao_existe' }]);
+    f.tick();
+    expect(msgs.filter((m) => m.t === 'notice').map((m) => m.text)).toEqual(['too_far', 'not_found']);
+    // fechado, mesmo na porta
+    const door = lotDoor(closed.lot).front;
+    (f as unknown as { me: object }).me = { x: door.x, y: door.y, dir: 'n', moving: false };
+    f.send([{ t: 'enter', buildingId: closed.id }]);
+    f.tick();
+    expect(msgs.filter((m) => m.t === 'notice').at(-1)).toMatchObject({ t: 'notice', text: 'closed' });
+    // o meu prédio, de qualquer lugar ("ver como os outros veem"); o dono não conta como visitante
+    msgs.length = 0;
+    f.send([{ t: 'enter', buildingId: FAKE_ME.id }]);
+    f.tick();
+    expect(msgs[0]).toMatchObject({ t: 'building', rev: 1, detail: { building: { id: FAKE_ME.id, owner: { name: FAKE_ME.name } }, visitors: 0 } });
+    expect(msgs[0].detail.floors).toHaveLength(3);
+    expect(f.snapshot().inside).toMatchObject({ id: FAKE_ME.id, rev: 1 });
+    expect(f.snapshot().players).toEqual([]);
+    // 3 s: um patch com o rev seguinte (e nada de players, area ou minimap)
+    msgs.length = 0;
+    for (let i = 0; i < 30; i++) f.tick();
+    expect(msgs.map((m) => m.t)).toEqual(['building.patch', 'building.patch']);
+    expect(msgs.map((m) => m.rev)).toEqual([2, 3]);
+    // leave: pos na porta e as áreas de novo
+    msgs.length = 0;
+    f.send([{ t: 'leave' }]);
+    f.tick();
+    const mine = lotDoor(all.find((b) => b.id === FAKE_ME.id)!.lot).front;
+    expect(msgs[0]).toEqual({ t: 'pos', x: mine.x, y: mine.y });
+    const areas = msgs.filter((m) => m.t === 'area');
+    expect(areas.length).toBeGreaterThan(0);
+    expect(msgs.findIndex((m) => m.t === 'area')).toBe(1);
+    expect(f.snapshot().inside).toBeUndefined();
+  });
+
+  it('visita: o interior de exemplo segue o prédio (discreto: sem agentes e `discreet`; apagado: `away`)', async () => {
+    const f = new FakeWorldStream({ autoplay: false, now: () => 0 });
+    const msgs: any[] = [];
+    f.on((e) => e.type === 'message' && msgs.push(e.msg));
+    await Promise.resolve();
+    const all = fakeCityBuildings();
+    for (const [b, check] of [
+      [all.find((x) => x.state === 'online' && !x.agents && !x.closed)!, (d: any) => d.building.discreet === true && d.floors.every((fl: any) => !fl.agents.length)],
+      [all.find((x) => x.state === 'away' && !x.closed)!, (d: any) => d.building.state === 'away' && d.floors.every((fl: any) => !fl.agents.length)],
+    ] as const) {
+      const door = lotDoor(b.lot).front;
+      (f as unknown as { me: object }).me = { x: door.x, y: door.y, dir: 'n', moving: false };
+      f.send([{ t: 'enter', buildingId: b.id }]);
+      f.tick();
+      const d = msgs.findLast((m) => m.t === 'building').detail;
+      expect(d.building.id).toBe(b.id);
+      expect(check(d)).toBe(true);
+      f.send([{ t: 'leave' }]);
+      f.tick();
+    }
+  });
+
   it('createWorldStream: mock dá a cidade falsa; close para tudo', async () => {
     const ws = createWorldStream({ mock: true, autoplay: false });
     expect(ws).toBeInstanceOf(FakeWorldStream);

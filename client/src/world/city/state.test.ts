@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import type { WorldSceneMe, WorldSceneSnapshot } from '../../../../shared/world/api';
 import type { WorldBuildingPublic, WorldPlayerPublic } from '../../../../shared/world/protocol';
+import { sampleBuildingDetail } from '../../../../shared/world/visit-sample';
 import { CityState } from './state';
 
 function building(id: string, x: number, y: number, extra: Partial<WorldBuildingPublic> = {}): WorldBuildingPublic {
@@ -162,5 +163,21 @@ describe('CityState', () => {
     s.apply({ t: 'minimap', blocks: [{ x: 1.7, y: -1, lit: 3 }, { x: 'x' }] }, 0);
     expect(s.minimap).toEqual([{ x: 1, y: -1, lit: 3 }]);
     expect(s.minimapVersion).toBe(v + 1);
+  });
+});
+
+describe('CityState: visita (Fase 4)', () => {
+  it('building vira o efeito com o interior; building.patch passa como veio; o snapshot com `inside` diz que estou dentro', () => {
+    const s = new CityState();
+    const d = sampleBuildingDetail();
+    expect(s.apply({ t: 'building', rev: 4, detail: d }, 0)).toEqual({ type: 'building', inside: { id: d.building.id, rev: 4, detail: d } });
+    expect(s.apply({ t: 'building', rev: 4, detail: { floors: [] } }, 0)).toBeNull();
+    expect(s.apply({ t: 'building.patch', rev: 5, visitors: 2 }, 0)).toEqual({ type: 'building.patch', msg: { t: 'building.patch', rev: 5, visitors: 2 } });
+    expect(s.apply({ t: 'building.patch', visitors: 2 }, 0)).toBeNull();
+    const base = { stream: 'x', connected: true, viewing: true, afk: false, chunks: [], players: [], minimap: null };
+    s.applySnapshot({ ...base, inside: { id: d.building.id, rev: 4, detail: d } }, 0);
+    expect(s.inside).toMatchObject({ id: d.building.id, rev: 4 });
+    s.applySnapshot(base, 0);
+    expect(s.inside).toBeNull();
   });
 });

@@ -400,6 +400,15 @@ interface FakeBuilding {
   /** O "mundo" parou o prédio (goodbye), até retomar. */
   stopped?: WorldBuildingStop;
   last: WorldLastUplink | null;
+  /** Quando acendeu (as visitas de mentira começam alguns segundos depois). */
+  since: number;
+  /** Visitantes agora, fixados por `setVisitors` (sem isso: a demonstração da visita, pelo relógio). */
+  visitors?: number;
+}
+
+/** Visitas de mentira no prédio da demonstração: ninguém nos primeiros segundos, depois 1 e, um pouco depois, 2. */
+export function fakeVisitorsAt(ms: number): number {
+  return ms < 8_000 ? 0 : ms < 20_000 ? 1 : 2;
 }
 
 interface FakeAccount {
@@ -545,6 +554,15 @@ export class FakeWorldApi implements WorldClient {
     return this.theme;
   }
 
+  /** Visitantes no prédio de mentira (testes e capturas); null volta à demonstração pelo relógio. */
+  setVisitors(n: number | null): void {
+    const b = this.current()?.building;
+    if (!b) return;
+    if (n === null) delete b.visitors;
+    else b.visitors = Math.max(0, Math.floor(n));
+    this.changed();
+  }
+
   /** O "mundo" passa a recusar as remessas com este código (null: volta a aceitar); manda uma remessa na hora. */
   rejectUplinks(code: UplinkAckError | null): void {
     this.rejectCode = code;
@@ -601,7 +619,7 @@ export class FakeWorldApi implements WorldClient {
   /** Acende o prédio da conta aprovada e com personagem, com a primeira remessa (o uplink de verdade faz isso). */
   private ensureBuilding(acc: FakeAccount): void {
     if (acc.building || acc.access !== 'approved' || !acc.player) return;
-    acc.building = { connected: true, paused: false, last: null };
+    acc.building = { connected: true, paused: false, last: null, since: this.now() };
     this.sendUplink(acc);
   }
 
@@ -627,6 +645,8 @@ export class FakeWorldApi implements WorldClient {
     }
     if (b.left) out.left = true;
     if (b.stopped) out.stopped = b.stopped;
+    // visitantes: só aceso e aberto a visitas (fechado, o mundo não manda nem o 0)
+    if (b.connected && !b.paused && !b.left && !acc?.player?.visibility.closed) out.visitors = b.visitors ?? fakeVisitorsAt(this.now() - b.since);
     return out;
   }
 

@@ -14,6 +14,10 @@
 // A cidade falsa (só dados fictícios, nada do escritório): 20 prédios nos primeiros lotes da espiral, o meu no lote
 // (3,1) com a porta na calçada sul (onde eu nasço, como o servidor faz), 5 pessoas dando a volta nos quarteirões e uma
 // sentada num banco da praça, um prédio mudando a cada 3 s e o `afk` depois de 60 s sem andar; `?perf=N` enche N lotes.
+// Visita (Fase 4): `enter` na porta (a até 3 tiles, como o servidor; o meu prédio de qualquer lugar) responde com o
+// interior de exemplo (shared/world/visit-sample.ts: ao vivo, discreto ou apagado, conforme o prédio), um
+// `building.patch` a cada 3 s (agentes trocando de status) e a contagem de visitantes; fechado a visitas, `closed`;
+// longe, `too_far`. Lá dentro, nada da rua desce; `leave` responde o `pos` na porta e as áreas de novo.
 import type { WorldSceneCommand, WorldSceneMe, WorldSceneMessage, WorldSceneSnapshot } from '../../../shared/world/api';
 import { WORLD_SCENE_LIMITS, WORLD_SCENE_MESSAGES } from '../../../shared/world/api';
 import { flattenAppearance } from '../../../shared/world/appearance-flat';
@@ -36,6 +40,7 @@ import {
 import type {
   Direction,
   GreetingId,
+  WorldBuildingDetail,
   IntroId,
   TokenBand,
   TraitId,
@@ -45,6 +50,7 @@ import type {
   WorldTheme,
 } from '../../../shared/world/protocol';
 import { reduceSceneBatch } from '../../../shared/world/scene';
+import { sampleBuildingDetail } from '../../../shared/world/visit-sample';
 import { reconnectDelay, type EventSourceLike } from './store';
 
 export type { WorldSceneCommand, WorldSceneMessage, WorldSceneSnapshot } from '../../../shared/world/api';
@@ -298,6 +304,15 @@ export interface FakeWorldStreamOptions {
 const DISTRICT = 'centro';
 /** Sem `move` por isto, o falso manda `afk` (como o servidor). */
 const FAKE_AFK_MS = 60_000;
+/** O servidor aceita o `enter` a até isto da frente da porta (2 tiles + 1 de folga). */
+const FAKE_ENTER_MAX = 3;
+/** Status que os agentes do interior de exemplo vão trocando, um patch a cada 3 s. */
+const FAKE_STATUS_CYCLE: ReadonlyArray<Readonly<Record<string, WorldBuildingDetail['floors'][number]['agents'][number]['status']>>> = [
+  { Beatriz: 'working', Larissa: 'idle', Thiago: 'shell' },
+  { Beatriz: 'working', Larissa: 'working', Thiago: 'working' },
+  { Beatriz: 'waiting', Larissa: 'working', Thiago: 'shell' },
+  { Beatriz: 'waiting', Larissa: 'idle', Thiago: 'shell' },
+];
 
 /** Eu na cidade falsa: o personagem da conta de exemplo do FakeWorldApi (net/world.ts), o das Configurações. */
 export const FAKE_ME: WorldSceneMe = {
@@ -449,6 +464,8 @@ export class FakeWorldStream implements WorldStream {
   private timer: ReturnType<typeof setInterval> | null = null;
   /** Respostas aos comandos: saem no próximo passo, como uma ida e volta. */
   private pending: WorldSceneMessage[] = [];
+  /** Dentro de um prédio (visita): o interior e o `rev` dele. */
+  private inside: { id: string; rev: number; detail: WorldBuildingDetail; patches: number } | null = null;
 
   constructor(o: FakeWorldStreamOptions = {}) {
     this.now = o.now ?? Date.now;
@@ -514,8 +531,9 @@ export class FakeWorldStream implements WorldStream {
       pos: this.me,
       afk: this.afkSent,
       chunks: this.viewing ? [...byChunk.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([chunk, buildings]) => ({ chunk, rev: this.revs.get(chunk) ?? 1, buildings })) : [],
-      players: this.viewing ? this.walkers : [],
+      players: this.viewing && !this.inside ? this.walkers : [],
       minimap: this.viewing ? this.minimap() : null,
+      ...(this.inside ? { inside: { id: this.inside.id, rev: this.inside.rev, detail: this.inside.detail } } : {}),
     });
   }
 
@@ -541,6 +559,11 @@ export class FakeWorldStream implements WorldStream {
     this.pending = [];
     for (const m of out) this.emit(m);
     if (!this.viewing) return;
+    // dentro de um prédio, nada da rua desce: só o interior mudando a cada 3 s
+    if (this.inside) {
+      if (this.ticks % 15 === 0) this.patchInside();
+      return;
+    }
     const now = this.now();
     const t = (now - this.start) / 1000;
     const byChunk = new Map<string, Array<{ id: string; pos: WorldPosition }>>();
@@ -621,11 +644,71 @@ export class FakeWorldStream implements WorldStream {
         return;
       case 'view.off':
         this.viewing = false;
+        this.inside = null;
         return;
+      case 'enter':
+        this.enter(c.buildingId);
+        return;
+      case 'leave': {
+        const b = this.inside ? this.buildings.find((x) => x.id === this.inside!.id) : undefined;
+        this.inside = null;
+        if (b) {
+          const d = lotDoor(b.lot);
+          this.me = { x: d.front.x, y: d.front.y, dir: d.side === 's' ? 's' : 'n', moving: false };
+        }
+        this.lastMoveAt = this.now();
+        this.pending.push({ t: 'pos', x: this.me.x, y: this.me.y });
+        for (const ch of this.snapshot().chunks) this.pending.push({ t: 'area', chunk: ch.chunk, rev: ch.rev, buildings: ch.buildings });
+        return;
+      }
       default:
-        // enter, leave, block, unblock, report: as próximas fases.
+        // block, unblock, report: as próximas fases.
         return;
     }
+  }
+
+  /** `enter`: como o servidor (não existe, longe, fechado), e o interior de exemplo conforme o prédio. */
+  private enter(id: string): void {
+    const b = this.buildings.find((x) => x.id === id);
+    if (!b) {
+      this.pending.push({ t: 'notice', level: 'info', text: 'not_found' });
+      return;
+    }
+    const mine = b.id === FAKE_ME.id;
+    const d = lotDoor(b.lot).front;
+    if (!mine && Math.hypot(this.me.x - d.x, this.me.y - d.y) > FAKE_ENTER_MAX) {
+      this.pending.push({ t: 'notice', level: 'info', text: 'too_far' });
+      return;
+    }
+    if (!mine && b.closed) {
+      this.pending.push({ t: 'notice', level: 'info', text: 'closed' });
+      return;
+    }
+    const mode = b.state === 'away' ? 'away' : b.agents ? 'live' : 'discreet';
+    const detail = sampleBuildingDetail(mode);
+    const { agents: _agents, ...pub } = b;
+    detail.building = { ...pub, ...(detail.building.agents ? { agents: detail.building.agents } : {}), floors: detail.floors.length, ...(mode === 'discreet' ? { discreet: true } : {}) };
+    detail.visitors = mine ? 0 : 2; // o dono vendo o próprio prédio não conta
+    this.inside = { id: b.id, rev: 1, detail, patches: 0 };
+    this.pending.push({ t: 'building', rev: 1, detail: structuredClone(detail) });
+  }
+
+  /** O interior muda: agentes trocam de status (ao vivo) e, de vez em quando, alguém entra ou sai. */
+  private patchInside(): void {
+    const ins = this.inside;
+    if (!ins) return;
+    ins.patches++;
+    if (ins.patches % 4 === 0) {
+      ins.detail.visitors = ins.detail.visitors >= 3 ? 2 : ins.detail.visitors + 1;
+      ins.rev++;
+      this.emit({ t: 'building.patch', rev: ins.rev, visitors: ins.detail.visitors });
+      return;
+    }
+    if (ins.detail.building.state !== 'online' || ins.detail.building.discreet) return;
+    const next = FAKE_STATUS_CYCLE[ins.patches % FAKE_STATUS_CYCLE.length]!;
+    for (const f of ins.detail.floors) for (const a of f.agents) if (next[a.name]) a.status = next[a.name]!;
+    ins.rev++;
+    this.emit({ t: 'building.patch', rev: ins.rev, floors: structuredClone(ins.detail.floors) });
   }
 
   private emit(msg: WorldSceneMessage): void {
