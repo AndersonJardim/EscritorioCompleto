@@ -364,6 +364,7 @@ export interface WorldBuildingPublic {
   floors: number;             // até 24 (acima, o cartão mostra "24+")
   agents?: { total: number; working: number; waiting: number; idle: number }; // ausente no modo discreto
   closed?: boolean;           // fechado a visitas
+  discreet?: boolean;         // modo discreto: por dentro, as salas aparecem vazias (com a luz acesa); ausente = ao vivo
   tokens?: { day: TokenBand; week: TokenBand }; // faixa (0..5), nunca o número; ausente se o dono desligou
   rev: number;                // revisão (sobe a cada mudança publicada)
   likes: number;
@@ -486,6 +487,7 @@ export interface BuildingPatchMessage {
   rev: number;
   floors?: WorldBuildingDetail['floors'];
   visitors?: number;
+  building?: WorldBuildingPublic; // mudou o prédio (ficou discreto, apagado, fechado...): o cartão inteiro de novo
 }
 export interface AfkMessage { t: 'afk' }
 export interface LikeUpdateMessage { t: 'like.update'; buildingId: string; likes: number; likedByMe: boolean }
