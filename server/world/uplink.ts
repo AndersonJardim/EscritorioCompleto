@@ -151,9 +151,27 @@ export interface BuildingUplinkOptions {
   onChange?: () => void;
   socket?: SocketFactory;
   now?: () => number;
+  /** Os timers (os do Node por padrão); os testes passam os de um relógio manual, junto com `now`. */
+  timers?: UplinkTimers;
   random?: () => number;
   timing?: Partial<UplinkTiming>;
 }
+
+/** Os timers que o uplink usa: as esperas da remessa, do welcome, do ping, da reconexão e do fechamento. */
+export interface UplinkTimers {
+  setTimeout(fn: () => void, ms: number): unknown;
+  clearTimeout(handle: unknown): void;
+  setInterval(fn: () => void, ms: number): unknown;
+  clearInterval(handle: unknown): void;
+}
+
+/** Os do Node, sem segurar o processo aberto (`unref`). */
+const NODE_TIMERS: UplinkTimers = {
+  setTimeout: (fn, ms) => setTimeout(fn, ms).unref(),
+  clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
+  setInterval: (fn, ms) => setInterval(fn, ms).unref(),
+  clearInterval: (h) => clearInterval(h as ReturnType<typeof setInterval>),
+};
 
 /** Quem escuta a cidade pela conexão do prédio (server/world/viewer.ts). */
 export interface CityListener {
@@ -203,12 +221,13 @@ export class BuildingUplink {
   private stop_?: { reason: WorldBuildingStop; key: string };
   private attempt = 0;
   private deviceId?: string;
-  private reconnectTimer?: ReturnType<typeof setTimeout>;
-  private sendTimer?: ReturnType<typeof setTimeout>;
-  private welcomeTimer?: ReturnType<typeof setTimeout>;
-  private pingTimer?: ReturnType<typeof setInterval>;
-  private refreshTimer?: ReturnType<typeof setInterval>;
-  private observeTimer?: ReturnType<typeof setTimeout>;
+  private readonly timers: UplinkTimers;
+  private reconnectTimer?: unknown;
+  private sendTimer?: unknown;
+  private welcomeTimer?: unknown;
+  private pingTimer?: unknown;
+  private refreshTimer?: unknown;
+  private observeTimer?: unknown;
   private unsubscribe?: () => void;
   private lastSentAt = -Infinity;
   private lastJson?: string;
@@ -230,6 +249,7 @@ export class BuildingUplink {
   constructor(private readonly o: BuildingUplinkOptions) {
     this.t = { ...UPLINK_TIMING, ...o.timing };
     this.now = o.now ?? Date.now;
+    this.timers = o.timers ?? NODE_TIMERS;
     this.random = o.random ?? Math.random;
     this.ids = o.ids ?? new WorldIds();
     const tz = systemTimeZone();
@@ -243,12 +263,11 @@ export class BuildingUplink {
     this.started = true;
     this.loadLast();
     this.unsubscribe = this.o.subscribe?.(() => this.noteChange());
-    this.refreshTimer = setInterval(() => {
+    this.refreshTimer = this.timers.setInterval(() => {
       this.sync();
       this.observeSignals();
       this.schedule();
     }, this.t.refreshMs);
-    this.refreshTimer.unref?.();
     this.sync();
   }
 
@@ -257,9 +276,9 @@ export class BuildingUplink {
     this.stopped = true;
     this.unsubscribe?.();
     this.unsubscribe = undefined;
-    if (this.refreshTimer) clearInterval(this.refreshTimer);
+    if (this.refreshTimer) this.timers.clearInterval(this.refreshTimer);
     this.refreshTimer = undefined;
-    if (this.observeTimer) clearTimeout(this.observeTimer);
+    if (this.observeTimer) this.timers.clearTimeout(this.observeTimer);
     this.observeTimer = undefined;
     this.clearReconnect();
     void this.closeSocket();
@@ -433,10 +452,9 @@ export class BuildingUplink {
     ws.onclose = () => {
       if (this.ws === ws) this.onClosed();
     };
-    this.welcomeTimer = setTimeout(() => {
+    this.welcomeTimer = this.timers.setTimeout(() => {
       if (this.ws === ws && !this.welcomed) ws.close(4000, 'welcome');
     }, this.t.welcomeTimeoutMs);
-    this.welcomeTimer.unref?.();
   }
 
   private onMessage(data: unknown): void {
@@ -498,11 +516,10 @@ export class BuildingUplink {
     this.welcomed = true;
     this.attempt = 0;
     this.stop_ = undefined;
-    if (this.welcomeTimer) clearTimeout(this.welcomeTimer);
+    if (this.welcomeTimer) this.timers.clearTimeout(this.welcomeTimer);
     log.clearOnce('world-uplink-conn');
     log.info(tr('Habblaud World: prédio conectado.'));
-    this.pingTimer = setInterval(() => this.ping(), this.t.pingMs);
-    this.pingTimer.unref?.();
+    this.pingTimer = this.timers.setInterval(() => this.ping(), this.t.pingMs);
     // A cada welcome o pacote vai inteiro, mesmo igual ao último (o servidor não guarda o conteúdo dos andares); pausado
     // ou fora do mundo (conexão só da cena Mundo), nada vai, e a retomada manda o pacote inteiro.
     this.forceNext = true;
@@ -595,15 +612,14 @@ export class BuildingUplink {
   private scheduleReconnect(): void {
     if (this.reconnectTimer || this.stopped) return;
     const delay = backoffDelay(this.attempt++, this.random, this.t.backoffMinMs, this.t.backoffMaxMs);
-    this.reconnectTimer = setTimeout(() => {
+    this.reconnectTimer = this.timers.setTimeout(() => {
       this.reconnectTimer = undefined;
       this.sync();
     }, delay);
-    this.reconnectTimer.unref?.();
   }
 
   private clearReconnect(): void {
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    if (this.reconnectTimer) this.timers.clearTimeout(this.reconnectTimer);
     this.reconnectTimer = undefined;
   }
 
@@ -615,16 +631,15 @@ export class BuildingUplink {
     if (was) this.o.onChange?.();
     if (!ws) return Promise.resolve();
     return new Promise<void>((done) => {
-      const timer = setTimeout(done, this.t.closeWaitMs);
-      timer.unref?.();
+      const timer = this.timers.setTimeout(done, this.t.closeWaitMs);
       ws.addEventListener('close', () => {
-        clearTimeout(timer);
+        this.timers.clearTimeout(timer);
         done();
       });
       try {
         ws.close(1000, 'bye');
       } catch {
-        clearTimeout(timer);
+        this.timers.clearTimeout(timer);
         done();
       }
     });
@@ -637,8 +652,8 @@ export class BuildingUplink {
     this.welcomed = false;
     this.visitors = undefined;
     this.clearSendTimer();
-    if (this.welcomeTimer) clearTimeout(this.welcomeTimer);
-    if (this.pingTimer) clearInterval(this.pingTimer);
+    if (this.welcomeTimer) this.timers.clearTimeout(this.welcomeTimer);
+    if (this.pingTimer) this.timers.clearInterval(this.pingTimer);
     this.welcomeTimer = undefined;
     this.pingTimer = undefined;
     if (was) this.city?.closed();
@@ -668,11 +683,10 @@ export class BuildingUplink {
   private noteChange(): void {
     this.schedule();
     if (this.observeTimer || this.stopped) return;
-    this.observeTimer = setTimeout(() => {
+    this.observeTimer = this.timers.setTimeout(() => {
       this.observeTimer = undefined;
       this.observeSignals();
     }, this.t.observeMs);
-    this.observeTimer.unref?.();
   }
 
   /**
@@ -697,15 +711,14 @@ export class BuildingUplink {
   }
 
   private armSend(delay: number): void {
-    this.sendTimer = setTimeout(() => {
+    this.sendTimer = this.timers.setTimeout(() => {
       this.sendTimer = undefined;
       this.flush();
     }, delay);
-    this.sendTimer.unref?.();
   }
 
   private clearSendTimer(): void {
-    if (this.sendTimer) clearTimeout(this.sendTimer);
+    if (this.sendTimer) this.timers.clearTimeout(this.sendTimer);
     this.sendTimer = undefined;
   }
 

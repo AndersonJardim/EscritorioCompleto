@@ -16,7 +16,7 @@ import { setQuiet } from '../log';
 import { startFakeWorld, type FakeWorld } from '../test/fake-world';
 import { tempDir } from '../test/fixtures';
 import { WorldSettingsStore } from './settings';
-import { backoffDelay, BuildingUplink, type UplinkTiming } from './uplink';
+import { backoffDelay, BuildingUplink, type UplinkTimers, type UplinkTiming } from './uplink';
 
 setQuiet(true);
 
@@ -64,6 +64,48 @@ async function waitFor(cond: () => boolean, what: string, ms = 3_000): Promise<v
   }
 }
 const sleep = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
+/** Uma volta do laço de eventos (o que o WebSocket de verdade já recebeu é processado). */
+const turn = () => new Promise((ok) => setImmediate(ok));
+
+/**
+ * Relógio manual para o uplink (`now` e `timers`): o tempo só anda com `advance`, que dispara na ordem cada timer
+ * vencido, no instante dele. A conexão continua de verdade (o WebSocket do mundo de mentira); só as esperas do uplink
+ * (remessa, welcome, ping, reconexão, fechamento) ficam no tempo controlado, e o teste não depende da máquina estar lenta.
+ */
+class ManualClock {
+  t = 1_000_000;
+  private seq = 0;
+  private readonly pending = new Map<number, { at: number; fn: () => void; every?: number }>();
+  readonly now = () => this.t;
+  readonly timers: UplinkTimers = {
+    setTimeout: (fn, ms) => this.add(fn, ms),
+    clearTimeout: (h) => void this.pending.delete(h as number),
+    setInterval: (fn, ms) => this.add(fn, ms, Math.max(1, ms)),
+    clearInterval: (h) => void this.pending.delete(h as number),
+  };
+
+  private add(fn: () => void, ms: number, every?: number): number {
+    const id = ++this.seq;
+    this.pending.set(id, { at: this.t + Math.max(0, ms), fn, every });
+    return id;
+  }
+
+  /** Avança `ms`: cada timer vencido dispara no seu instante (`now()` vale o instante dele), na ordem. */
+  advance(ms: number): void {
+    const end = this.t + ms;
+    for (;;) {
+      let next: [number, { at: number; fn: () => void; every?: number }] | undefined;
+      for (const e of this.pending) if (e[1].at <= end && (!next || e[1].at < next[1].at)) next = e;
+      if (!next) break;
+      const [id, timer] = next;
+      this.t = Math.max(this.t, timer.at);
+      if (timer.every) timer.at += timer.every;
+      else this.pending.delete(id);
+      timer.fn();
+    }
+    this.t = end;
+  }
+}
 
 interface Harness {
   world: FakeWorld;
@@ -83,7 +125,16 @@ interface Harness {
 }
 
 async function start(
-  opts: { session?: 'approved' | 'waiting' | 'no-player' | 'none'; start?: boolean; tokensVisible?: boolean; compactions?: boolean; booting?: { v: boolean } } = {},
+  opts: {
+    session?: 'approved' | 'waiting' | 'no-player' | 'none';
+    start?: boolean;
+    tokensVisible?: boolean;
+    compactions?: boolean;
+    booting?: { v: boolean };
+    /** O tempo do uplink num relógio manual (com `timing` por cima do FAST). */
+    clock?: ManualClock;
+    timing?: Partial<UplinkTiming>;
+  } = {},
 ): Promise<Harness> {
   const world = await startFakeWorld();
   closers.push(world.close);
@@ -140,7 +191,8 @@ async function start(
         h.changes.n++;
         h.metas.push(h.uplink?.meta());
       },
-      timing: FAST,
+      timing: { ...FAST, ...opts.timing },
+      ...(opts.clock ? { now: opts.clock.now, timers: opts.clock.timers } : {}),
       random: () => 0.5,
     });
     closers.push(() => u.stop());
@@ -230,41 +282,83 @@ describe('BuildingUplink: conexão e remessas', () => {
   });
 
   it('manda ao mudar: espera desde a primeira mudança, uma remessa a cada minGap e nada se o pacote não mudou', async () => {
-    const h = await start();
+    // Tempo do uplink controlado (sem o ping, que tem o caso dele): cada remessa é anotada no instante em que saiu.
+    const clock = new ManualClock();
+    const h = await start({ clock, timing: { pingMs: 3_600_000 } });
+    const sent: number[] = [];
+    let lastAt = -1;
+    const run = async (ms: number) => {
+      for (let left = ms; left > 0; left -= 5) {
+        clock.advance(Math.min(5, left));
+        const at = h.uplink.lastUplink()?.at;
+        if (at !== undefined && at !== lastAt) {
+          sent.push(at);
+          lastAt = at;
+        }
+        await turn();
+      }
+    };
+    await waitFor(() => h.uplink.status().connected, 'welcome');
+    await run(5);
     await waitFor(() => h.world.ws.uplinks.length === 1, 'primeira');
+    expect(sent).toEqual([clock.t - 5]);
+    sent.length = 0;
     // Mudanças sem efeito no pacote (o escritório muda a toda hora: atividade, balões...).
     for (let i = 0; i < 10; i++) {
       h.change();
-      await sleep(15);
+      await run(15);
     }
-    await sleep(250);
-    expect(h.world.ws.uplinks).toHaveLength(1);
+    await run(250);
+    expect(sent).toEqual([]);
     // Agora muda de verdade, sem parar, por 600 ms.
-    const t0 = Date.now();
+    const t0 = clock.t;
     for (let i = 0; i < 40; i++) {
       h.agents = [...h.agents, agent(`.claude:${200 + i}`, '/Users/ana/projeto-secreto')];
       h.change();
-      await sleep(15);
+      await run(15);
     }
-    await sleep(300);
-    const sent = h.world.ws.uplinks.slice(1);
+    await run(300);
     expect(sent.length).toBeGreaterThanOrEqual(2);
-    expect(sent.length).toBeLessThanOrEqual(Math.ceil((Date.now() - t0) / 150) + 1);
-    expect(sent[0].at - t0).toBeGreaterThanOrEqual(35);
-    for (let i = 1; i < sent.length; i++) expect(sent[i].at - sent[i - 1].at).toBeGreaterThanOrEqual(100);
-    expect(agentsOf(sent[sent.length - 1].uplink)).toHaveLength(43);
+    expect(sent.length).toBeLessThanOrEqual(Math.ceil((clock.t - t0) / FAST.minGapMs!) + 1);
+    // a primeira sai `debounceMs` depois da primeira mudança (sem reiniciar a espera a cada mudança)
+    expect(sent[0] - t0).toBe(FAST.debounceMs);
+    for (let i = 1; i < sent.length; i++) expect(sent[i] - sent[i - 1]).toBeGreaterThanOrEqual(FAST.minGapMs!);
+    // o que saiu chegou ao mundo, na ordem, e a última remessa tem todos os agentes
+    await waitFor(() => h.world.ws.uplinks.length === 1 + sent.length, 'todas as remessas no mundo');
+    expect(agentsOf(h.world.ws.uplinks[sent.length].uplink)).toHaveLength(43);
   });
 
   it('ping a cada pingMs', async () => {
-    const h = await start();
+    const clock = new ManualClock();
+    const h = await start({ clock });
+    await waitFor(() => h.uplink.status().connected, 'welcome');
+    clock.advance(0);
     await waitFor(() => h.world.ws.uplinks.length === 1, 'primeira');
-    await waitFor(() => h.world.ws.pings >= 2, 'dois pings', 1_000);
+    clock.advance(FAST.pingMs! - 1);
+    await sleep(30);
+    expect(h.world.ws.pings).toBe(0);
+    clock.advance(1);
+    await waitFor(() => h.world.ws.pings === 1, 'primeiro ping');
+    clock.advance(FAST.pingMs!);
+    await waitFor(() => h.world.ws.pings === 2, 'segundo ping');
   });
 
   it('sem resposta ao ping, fecha e reconecta', async () => {
-    const h = await start();
+    const clock = new ManualClock();
+    const h = await start({ clock });
     h.world.ws.options.pong = false;
-    await waitFor(() => h.world.ws.connections.length >= 2, 'reconectou depois do silêncio', 2_000);
+    await waitFor(() => h.uplink.status().connected, 'welcome');
+    clock.advance(0);
+    await waitFor(() => h.world.ws.uplinks.length === 1 && !!h.uplink.status().lastAck, 'primeira e o ack');
+    // Silêncio: os pings de 1 e 2 × pingMs saem; o de 3 × pingMs (mais de 2,5 pings sem nada) fecha a conexão.
+    clock.advance(2 * FAST.pingMs!);
+    await waitFor(() => h.world.ws.pings === 2, 'dois pings sem resposta');
+    expect(h.world.ws.open).toHaveLength(1);
+    clock.advance(FAST.pingMs!);
+    await waitFor(() => h.world.ws.open.length === 0, 'fechou pelo silêncio');
+    expect(h.world.ws.pings).toBe(2);
+    clock.advance(FAST.backoffMaxMs!);
+    await waitFor(() => h.world.ws.connections.length === 2, 'reconectou');
   });
 
   it('caiu: reconecta com espera e manda o pacote inteiro de novo, mesmo igual', async () => {
@@ -278,10 +372,19 @@ describe('BuildingUplink: conexão e remessas', () => {
   });
 
   it('sem welcome no prazo: fecha e tenta de novo', async () => {
-    const h = await start({ start: false });
+    const clock = new ManualClock();
+    const h = await start({ start: false, clock });
     h.world.ws.options.hello = 'silent';
     h.uplink.start();
-    await waitFor(() => h.world.ws.connections.length >= 2, 'segunda tentativa', 2_000);
+    await waitFor(() => h.world.ws.open.length === 1, 'conectou');
+    clock.advance(FAST.welcomeTimeoutMs! - 1);
+    await sleep(30);
+    expect(h.world.ws.open).toHaveLength(1);
+    clock.advance(1);
+    await waitFor(() => h.world.ws.open.length === 0, 'fechou no prazo do welcome');
+    expect(h.world.ws.connections).toHaveLength(1);
+    clock.advance(FAST.backoffMaxMs!);
+    await waitFor(() => h.world.ws.connections.length === 2, 'segunda tentativa');
     expect(h.world.ws.uplinks).toHaveLength(0);
   });
 
@@ -517,20 +620,26 @@ describe('BuildingUplink: goodbye, pausa e retomada', () => {
   });
 
   it('pausa com o servidor mudo: responde no prazo (closeWaitMs) mesmo sem o close de volta', async () => {
-    const h = await start();
+    const clock = new ManualClock();
+    const h = await start({ clock });
+    await waitFor(() => h.uplink.status().connected, 'welcome');
+    clock.advance(0);
     await waitFor(() => h.world.ws.uplinks.length === 1, 'primeira');
     h.world.ws.options.answerClose = false;
-    const t0 = Date.now();
     h.store.update({ paused: true });
-    await h.uplink.pause();
-    const took = Date.now() - t0;
-    expect(took).toBeGreaterThanOrEqual(450);
-    expect(took).toBeLessThan(2_000);
+    let answered = false;
+    const paused = h.uplink.pause().then(() => void (answered = true));
+    clock.advance(FAST.closeWaitMs! - 1);
+    await sleep(30);
+    expect(answered).toBe(false);
+    clock.advance(1);
+    await paused;
     expect(h.uplink.status().connected).toBe(false);
     // Nada mais sai pela conexão pendurada.
     const before = h.world.ws.connections[0].messages.length;
     h.change();
-    await sleep(200);
+    clock.advance(FAST.debounceMs! + FAST.minGapMs!);
+    await sleep(50);
     expect(h.world.ws.connections[0].messages.length).toBe(before);
   });
 
