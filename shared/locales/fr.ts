@@ -2956,4 +2956,5 @@ export const FR: Readonly<Record<string, string>> = {
   "Seu prédio está pausado e apagado no Habblaud World: nada sai deste computador. Clique para retomar em Configurações.": "Votre immeuble est en pause et éteint dans Habblaud World : rien ne quitte cet ordinateur. Cliquez pour le reprendre dans les Réglages.",
   "Sem conexão com o Habblaud World agora; o Habblaud tenta de novo sozinho. Clique para ver em Configurações.": "Pas de connexion à Habblaud World pour l'instant ; Habblaud réessaie tout seul. Cliquez pour le voir dans les Réglages.",
   "Um erro no servidor do mundo. A próxima remessa tenta de novo.": "Une erreur sur le serveur du monde. Le prochain envoi réessaiera.",
+  "Habblaud World: o servidor do mundo não confirmou a saída do prédio ({0}).": "Habblaud World : le serveur du monde n'a pas confirmé le retrait de l'immeuble ({0}).",
 };

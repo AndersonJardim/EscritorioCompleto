@@ -37,6 +37,8 @@ interface Account {
   invite?: string;
   /** Prédio pausado pelo dono (POST /v1/me/building/pause). */
   buildingPaused?: boolean;
+  /** Quantas vezes o dono saiu do mundo (DELETE /v1/me/building). */
+  buildingLeft?: number;
 }
 
 /** Uma conexão do WebSocket de mentira. */
@@ -91,8 +93,11 @@ export interface FakeWorld {
   accounts: Map<string, Account>;
   /** token -> {email, deviceId} (só os válidos). */
   devices: Map<string, { email: string; deviceId: string }>;
-  /** Login exige ALTCHA (simula "muitas tentativas"); `pauseDelayMs` atrasa só a resposta de /v1/me/building/pause. */
-  options: { loginNeedsAltcha: boolean; altchaMax: number; delayMs: number; pauseDelayMs: number };
+  /**
+   * Login exige ALTCHA (simula "muitas tentativas"); `pauseDelayMs` atrasa só a resposta de /v1/me/building/pause;
+   * `buildingFailures` faz as próximas N chamadas de /v1/me/building* responderem 503.
+   */
+  options: { loginNeedsAltcha: boolean; altchaMax: number; delayMs: number; pauseDelayMs: number; buildingFailures: number };
   close(): Promise<void>;
 }
 
@@ -107,7 +112,7 @@ export async function startFakeWorld(): Promise<FakeWorld> {
   const requests: FakeRequest[] = [];
   const accounts = new Map<string, Account>();
   const devices = new Map<string, { email: string; deviceId: string }>();
-  const options = { loginNeedsAltcha: false, altchaMax: 2_000, delayMs: 0, pauseDelayMs: 0 };
+  const options = { loginNeedsAltcha: false, altchaMax: 2_000, delayMs: 0, pauseDelayMs: 0, buildingFailures: 0 };
   let deviceSeq = 0;
 
   const send = (res: http.ServerResponse, status: number, body?: unknown) => {
@@ -231,6 +236,16 @@ export async function startFakeWorld(): Promise<FakeWorld> {
         const v = b as unknown as Visibility;
         if (a.player) a.player.visibility = v;
         return send(res, 200, v);
+      }
+      if (path.startsWith('/v1/me/building') && options.buildingFailures > 0) {
+        options.buildingFailures--;
+        return error(res, 503, 'unavailable');
+      }
+      if (method === 'DELETE' && path === '/v1/me/building') {
+        const a = accounts.get(device!.email)!;
+        a.buildingLeft = (a.buildingLeft ?? 0) + 1;
+        a.buildingPaused = false;
+        return send(res, 204);
       }
       if (method === 'POST' && (path === '/v1/me/building/pause' || path === '/v1/me/building/resume')) {
         const a = accounts.get(device!.email)!;

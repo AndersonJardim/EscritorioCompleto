@@ -236,20 +236,26 @@ export class WorldClient {
     return this.call('POST', '/v1/me/building/resume', { token, parse: parseBuildingState });
   }
 
+  /** "Sair do mundo": o servidor retira o prédio na hora (204, com ou sem prédio); a conta e o personagem continuam. */
+  leaveBuilding(token: string): Promise<WorldResult<Record<string, never>>> {
+    return this.call('DELETE', '/v1/me/building', { token, parse: none });
+  }
+
   revokeDevice(token: string, id: string): Promise<WorldResult<Record<string, never>>> {
     if (!DEVICE_ID_RE.test(id)) return Promise.resolve({ ok: false, status: 404, code: 'not_found' });
     return this.call('POST', `/v1/me/devices/${encodeURIComponent(id)}/revoke`, { token, parse: none });
   }
 
   private async call<T>(
-    method: 'GET' | 'POST' | 'PUT',
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     path: string,
     o: { body?: unknown; token?: string; parse: (raw: unknown) => T | undefined; signal?: AbortSignal },
   ): Promise<WorldResult<T>> {
     const headers: Record<string, string> = { Accept: 'application/json', 'User-Agent': `Habblaud/${this.opts.version}` };
     if (o.token) headers.Authorization = `Bearer ${o.token}`;
-    // POST sem corpo também vai como JSON vazio (o servidor do mundo exige o Content-Type, como o daqui).
-    const body = method === 'GET' ? undefined : JSON.stringify(o.body ?? {});
+    // POST sem corpo também vai como JSON vazio (o servidor do mundo exige o Content-Type, como o daqui); GET e
+    // DELETE vão sem corpo.
+    const body = method === 'GET' || method === 'DELETE' ? undefined : JSON.stringify(o.body ?? {});
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     const timeout = AbortSignal.timeout(this.timeoutMs);
     const signal = o.signal ? AbortSignal.any([timeout, o.signal]) : timeout;

@@ -253,22 +253,26 @@ export class BuildingUplink {
 
   /** GET /api/world/status → building. */
   status(): WorldBuildingStatus {
-    const st: WorldBuildingStatus = { ...this.meta() };
+    const { stopped: _stopped, ...meta } = this.meta();
+    const st: WorldBuildingStatus = { ...meta };
     if (this.last?.ack) st.lastAck = this.last.ack.ok ? { ok: true } : { ok: false, error: this.last.ack.error ?? 'internal' };
     if (this.stop_) st.stopped = this.stop_.reason;
     return st;
   }
 
-  /** OfficeSnapshot.meta.world.building. */
+  /** OfficeSnapshot.meta.world.building (a parada só como sim/não: o snapshot também vai ao celular). */
   meta(): WorldBuildingMeta {
     const u = this.last?.uplink;
+    const s = this.o.store.get();
     const m: WorldBuildingMeta = {
       connected: this.welcomed,
-      paused: !!this.o.store.get()?.paused,
+      paused: !!s?.paused,
       floors: u ? u.floors.length : (this.fromWelcome?.floors ?? 0),
       agents: u ? u.floors.reduce((n, f) => n + f.agents.length, 0) : (this.fromWelcome?.agents ?? 0),
     };
     if (this.last) m.lastUplinkAt = this.last.at;
+    if (s?.left) m.left = true;
+    if (this.stop_) m.stopped = true;
     return m;
   }
 

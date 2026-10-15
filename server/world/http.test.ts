@@ -582,11 +582,67 @@ describe('o prédio no mundo (uplink) pelas rotas', () => {
     expect(w.accounts.get(EMAIL)!.buildingPaused).toBe(false);
   });
 
+  it('sair do mundo: fecha o prédio antes de responder, o servidor retira o prédio e nada reconecta; retomar volta', async () => {
+    const s = await start({ uplink: true });
+    const w = s.world!;
+    s.office.addMain({ id: '.claude:8', account: '.claude', sessionId: 'sess-8', cwd: '/p/b', role: 'Agente principal', startedAt: Date.now(), status: 'working' });
+    await call(s.base, 'POST', '/api/world/register', { email: EMAIL, password: PASSWORD });
+    await call(s.base, 'POST', '/api/world/verify', { email: EMAIL, code: FAKE_CODE });
+    await call(s.base, 'PUT', '/api/world/character', CHARACTER);
+    w.accounts.get(EMAIL)!.access = 'approved';
+    await call(s.base, 'GET', '/api/world/status?refresh=1');
+    await waitFor(() => w.ws.uplinks.length === 1, 'primeira remessa');
+
+    const left = await call(s.base, 'POST', '/api/world/leave', {});
+    expect(left.status).toBe(200);
+    // Quando a resposta chega, a conexão já fechou e o DELETE já foi.
+    expect(w.ws.open).toHaveLength(0);
+    expect(w.accounts.get(EMAIL)!.buildingLeft).toBe(1);
+    const del = w.requests.find((r) => r.method === 'DELETE');
+    expect(del).toMatchObject({ path: '/v1/me/building', body: undefined });
+    expect(left.body.building).toMatchObject({ connected: false, paused: true, left: true });
+    expect(s.hub.current().meta.world?.building).toMatchObject({ connected: false, paused: true, left: true });
+    expect(JSON.parse(readFileSync(s.file, 'utf8'))).toMatchObject({ paused: true, left: true });
+    // A conta e o personagem continuam; o prédio não volta sozinho (bem mais que a espera da reconexão).
+    await new Promise((ok) => setTimeout(ok, 200));
+    expect(w.ws.connections).toHaveLength(1);
+    const st = (await call(s.base, 'GET', '/api/world/status')).body;
+    expect(st).toMatchObject({ state: 'approved', player: { name: 'Ana Pixel' }, building: { left: true } });
+
+    // Voltar ao mundo: um prédio novo (o servidor de mentira só recebe a conexão e o pacote inteiro).
+    const back = await call(s.base, 'POST', '/api/world/resume', {});
+    expect(back.body.building).toMatchObject({ paused: false });
+    expect(back.body.building.left).toBeUndefined();
+    await waitFor(() => w.ws.uplinks.length === 2, 'de volta ao mundo');
+    expect(JSON.parse(readFileSync(s.file, 'utf8')).left).toBeUndefined();
+  });
+
+  it('sair do mundo sem resposta boa do servidor: o erro volta, o prédio fica só pausado e a pausa é avisada', async () => {
+    const s = await start({ uplink: true });
+    const w = s.world!;
+    await call(s.base, 'POST', '/api/world/register', { email: EMAIL, password: PASSWORD });
+    await call(s.base, 'POST', '/api/world/verify', { email: EMAIL, code: FAKE_CODE });
+    await call(s.base, 'PUT', '/api/world/character', CHARACTER);
+    w.accounts.get(EMAIL)!.access = 'approved';
+    await call(s.base, 'GET', '/api/world/status?refresh=1');
+    await waitFor(() => w.ws.uplinks.length === 1, 'primeira remessa');
+    w.options.buildingFailures = 1;
+    const r = await call(s.base, 'POST', '/api/world/leave', {});
+    expect(r.status).toBe(503);
+    expect(r.body.error.code).toBe('unavailable');
+    expect(w.ws.open).toHaveLength(0);
+    const st = (await call(s.base, 'GET', '/api/world/status')).body;
+    expect(st.building).toMatchObject({ connected: false, paused: true });
+    expect(st.building.left).toBeUndefined();
+    await waitFor(() => w.accounts.get(EMAIL)!.buildingPaused === true, 'pausa no servidor');
+    expect(w.accounts.get(EMAIL)!.buildingLeft).toBeUndefined();
+  });
+
   it('sem conta: tema grava, pausa e retomada pedem a conta, última remessa vazia', async () => {
     const s = await start({ uplink: true });
     expect((await call(s.base, 'PUT', '/api/world/theme', { theme: 'halloween' })).body).toEqual({ theme: 'halloween' });
     expect(JSON.parse(readFileSync(s.file, 'utf8'))).toEqual({ theme: 'halloween' });
-    for (const path of ['/api/world/pause', '/api/world/resume']) {
+    for (const path of ['/api/world/pause', '/api/world/resume', '/api/world/leave']) {
       const r = await call(s.base, 'POST', path, {});
       expect(r.status, path).toBe(401);
       expect(r.body.error.code).toBe('not_logged_in');
@@ -609,7 +665,7 @@ describe('o prédio no mundo (uplink) pelas rotas', () => {
 
   it('sem a trava do terminal: tema, pausa e retomada recusam; status e última remessa respondem', async () => {
     const s = await start({ uplink: true, terminal: false });
-    for (const [method, path] of [['PUT', '/api/world/theme'], ['POST', '/api/world/pause'], ['POST', '/api/world/resume']] as const) {
+    for (const [method, path] of [['PUT', '/api/world/theme'], ['POST', '/api/world/pause'], ['POST', '/api/world/resume'], ['POST', '/api/world/leave']] as const) {
       const r = await call(s.base, method, path, method === 'PUT' ? { theme: 'none' } : {});
       expect(r.status, path).toBe(403);
       expect(r.body.error.code).toBe('terminal_off');

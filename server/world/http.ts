@@ -209,6 +209,15 @@ export function createWorldRoutes(service: WorldService): (req: IncomingMessage,
         sendOutcome(res, service.setTheme(b.theme));
       },
     },
+    // "Sair do mundo": fecha o uplink e espera o servidor do mundo retirar o prédio antes de responder.
+    '/api/world/leave': {
+      method: 'POST',
+      account: true,
+      run: async (req, res) => {
+        await readBody(req);
+        sendOutcome(res, await service.leave());
+      },
+    },
     // Pausar fecha o uplink antes de responder.
     '/api/world/pause': {
       method: 'POST',

@@ -334,12 +334,16 @@ describe('BuildingUplink: goodbye, pausa e retomada', () => {
       expect(h.world.ws.connections).toHaveLength(1);
       expect(h.goodbyes).toEqual([reason]);
       expect(h.uplink.status().connected).toBe(false);
+      // No snapshot (que também vai ao celular), só "parou", sem o motivo.
+      expect(h.uplink.meta().stopped).toBe(true);
+      expect(JSON.stringify(h.uplink.meta())).not.toContain(reason);
       h.uplink.sync();
       await sleep(80);
       expect(h.world.ws.connections).toHaveLength(1);
       h.uplink.resume();
       await waitFor(() => h.world.ws.uplinks.length === 2, 'retomou');
       expect(h.uplink.status().stopped).toBeUndefined();
+      expect(h.uplink.meta().stopped).toBeUndefined();
     });
   }
 

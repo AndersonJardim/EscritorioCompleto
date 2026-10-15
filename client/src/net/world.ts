@@ -13,6 +13,7 @@ import {
   isWorldThemeChoice,
   WORLD_KNOWN_ERROR_CODES,
   WORLD_THEME_CHOICES,
+  type WorldBuildingMeta,
   type WorldBuildingStatus,
   type WorldBuildingStop,
   type WorldKnownErrorCode,
@@ -135,7 +136,7 @@ export function readWorldMeta(snap: OfficeSnapshot | null | undefined): WorldMet
   if (!w || typeof w !== 'object' || typeof w.enabled !== 'boolean') return undefined;
   const state = STATES.includes(w.state as WorldServerState) ? (w.state as WorldServerState) : 'off';
   const out: WorldMeta = { enabled: w.enabled, configured: w.configured === true, state };
-  const building = parseBuilding(w.building);
+  const building = parseBuildingMeta(w.building);
   if (building) out.building = building;
   return out;
 }
@@ -176,15 +177,33 @@ function parseUplinkAck(v: unknown): WorldUplinkAck | undefined {
 /** Motivos com que o prédio para (o `deploy` só reconecta e nunca chega aqui). */
 const STOPS = GOODBYE_REASONS.filter((r): r is WorldBuildingStop => r !== 'deploy');
 
-/** `building` de meta.world ou do status, conferido (corpo torto: sem prédio). */
-export function parseBuilding(v: unknown): WorldBuildingStatus | undefined {
+/** `building` de meta.world, conferido (corpo torto: sem prédio). A parada vem só como sim/não. */
+export function parseBuildingMeta(v: unknown): WorldBuildingMeta | undefined {
   if (!isObject(v)) return undefined;
-  const b: WorldBuildingStatus = { connected: v.connected === true, paused: v.paused === true, floors: count(v.floors), agents: count(v.agents) };
+  const b: WorldBuildingMeta = { connected: v.connected === true, paused: v.paused === true, floors: count(v.floors), agents: count(v.agents) };
   const at = epochMs(v.lastUplinkAt);
   if (at) b.lastUplinkAt = at;
+  if (v.left === true) b.left = true;
+  if (v.stopped === true) b.stopped = true;
+  return b;
+}
+
+/** `building` do status, conferido (corpo torto: sem prédio): com a resposta à última remessa e o motivo da parada. */
+export function parseBuilding(v: unknown): WorldBuildingStatus | undefined {
+  const meta = parseBuildingMeta(v);
+  if (!meta || !isObject(v)) return undefined;
+  const { stopped: _stopped, ...b } = meta;
+  const st: WorldBuildingStatus = b;
   const ack = parseAckState(v.lastAck);
-  if (ack) b.lastAck = ack;
-  if ((STOPS as readonly unknown[]).includes(v.stopped)) b.stopped = v.stopped as WorldBuildingStop;
+  if (ack) st.lastAck = ack;
+  if ((STOPS as readonly unknown[]).includes(v.stopped)) st.stopped = v.stopped as WorldBuildingStop;
+  return st;
+}
+
+/** O prédio do snapshot como o cartão usa antes do primeiro status (o motivo de uma parada só vem no status). */
+export function buildingFromMeta(m: WorldBuildingMeta | undefined): WorldBuildingStatus | undefined {
+  if (!m) return undefined;
+  const { stopped: _stopped, ...b } = m;
   return b;
 }
 
@@ -496,8 +515,8 @@ export class FakeWorldApi implements WorldClient {
     const meta: WorldMeta = { enabled: this.configured, configured: this.configured, state: this.state() };
     const b = this.buildingOf(this.current());
     if (b) {
-      const { lastAck: _ack, ...building } = b;
-      meta.building = building;
+      const { lastAck: _ack, stopped, ...building } = b;
+      meta.building = stopped ? { ...building, stopped: true } : building;
     }
     return meta;
   }

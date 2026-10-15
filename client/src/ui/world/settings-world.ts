@@ -12,6 +12,7 @@ import { getLocale, intlLocale, tr } from '../../../../shared/i18n';
 import type { Appearance } from '../../art/api';
 import { access } from '../../net/access';
 import {
+  buildingFromMeta,
   FAKE_CODE,
   type WorldClient,
   type WorldDevice,
@@ -740,7 +741,7 @@ export class WorldSettingsGroup {
     const wrap = h('div', { class: 'ui-world__stack' });
     const card = new BuildingCard({
       client: this.client,
-      building: () => this.status?.building ?? this.src.meta()?.building,
+      building: () => this.status?.building ?? buildingFromMeta(this.src.meta()?.building),
       hasPlayer: () => !!this.status?.player,
       refresh: () => void this.refresh(),
       openSent: (opener) => void this.sent.open(opener),

@@ -17,7 +17,7 @@
 // dispositivo. O token só sai daqui para o servidor do mundo (cabeçalho Authorization por HTTPS e a primeira mensagem
 // do WebSocket, `hello`, por TLS); nunca vai ao navegador, ao snapshot nem ao log. No Docker o arquivo fica no volume
 // habblaud-data (/data/world.json). O mesmo arquivo guarda o tema escolhido para o prédio (`theme`, que sobrevive a
-// sair da conta) e a pausa do prédio (`paused`, da sessão).
+// sair da conta), a pausa do prédio (`paused`, da sessão) e a saída do mundo (`left`, da sessão).
 import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { tr } from '../../shared/i18n';
@@ -35,6 +35,11 @@ export interface WorldSession {
   player?: Player;
   /** Prédio pausado pelo dono (POST /api/world/pause): o uplink fica fechado até retomar. */
   paused?: true;
+  /**
+   * Saiu do mundo (POST /api/world/leave, sempre junto com `paused`): o prédio foi retirado do mundo. O uplink fica
+   * fechado como na pausa; retomar cria um prédio novo, em outro lote.
+   */
+  left?: true;
   /** Última gravação (ms). */
   updatedAt: number;
 }
@@ -66,6 +71,7 @@ export function parseWorldSession(raw: unknown): WorldSession | undefined {
     s.player = v.player as Player;
   }
   if (v.paused === true) s.paused = true;
+  if (v.left === true) s.left = true;
   return s;
 }
 
@@ -128,8 +134,8 @@ export class WorldSettingsStore {
     return this.write();
   }
 
-  /** Atualiza campos da sessão atual (access, player, paused); sem sessão, não faz nada. */
-  update(patch: Partial<Pick<WorldSession, 'access' | 'player' | 'paused'>>): boolean {
+  /** Atualiza campos da sessão atual (access, player, paused, left); sem sessão, não faz nada. */
+  update(patch: Partial<Pick<WorldSession, 'access' | 'player' | 'paused' | 'left'>>): boolean {
     const cur = this.session;
     if (!cur) return false;
     const next = { ...cur, ...patch };

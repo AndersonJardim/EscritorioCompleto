@@ -17,7 +17,11 @@
 //   PUT  /api/world/theme                    {theme: WorldThemeChoice} → 200 {theme} (com ou sem conta: fica em world.json)
 //   POST /api/world/pause                    {} → 200 WorldStatus (fecha o uplink antes de responder; avisa
 //                                                POST /v1/me/building/pause, documentada em protocol.ts)
-//   POST /api/world/resume                   {} → 200 WorldStatus (avisa POST /v1/me/building/resume e reabre o uplink)
+//   POST /api/world/resume                   {} → 200 WorldStatus (avisa POST /v1/me/building/resume e reabre o uplink;
+//                                                sem resposta do servidor do mundo, tenta de novo com espera crescente)
+//   POST /api/world/leave                    {} → 200 WorldStatus ("Sair do mundo": fecha o uplink, chama
+//                                                DELETE /v1/me/building e só então responde; a conta e o personagem
+//                                                continuam, e o resume cria um prédio novo, em outro lote)
 //   GET  /api/world/last-uplink              → WorldLastUplink | {} (o que foi enviado por último, exato)
 //
 // Erros: {error: {code, message?, retryAfter?}} com o status do servidor do mundo quando vêm de lá (códigos em
@@ -86,6 +90,8 @@ export interface WorldBuildingStatus {
    * `no_player`, `unauthorized` (a conta mudou do outro lado; o estado daqui é atualizado).
    */
   stopped?: WorldBuildingStop;
+  /** Saiu do mundo (POST /api/world/leave): o prédio foi retirado e nada sai até o resume (prédio novo, lote novo). */
+  left?: true;
 }
 
 /** OfficeSnapshot.meta.world.building: o resumo do prédio (sem a conta), para a interface mostrar sem pedir o status. */
@@ -95,6 +101,10 @@ export interface WorldBuildingMeta {
   floors: number;
   agents: number;
   lastUplinkAt?: number;
+  /** Saiu do mundo (veja WorldBuildingStatus.left). */
+  left?: true;
+  /** O servidor do mundo parou o prédio (`goodbye`); o motivo só vai no status, que não chega ao celular. */
+  stopped?: true;
 }
 
 /** GET /api/world/last-uplink ("Ver o que foi enviado"): o pacote exato da última remessa, os bytes e a resposta. */
