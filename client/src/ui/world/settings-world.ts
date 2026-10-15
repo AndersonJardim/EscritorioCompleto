@@ -405,7 +405,6 @@ export class WorldSettingsGroup {
   }
 
   private chipText(): string {
-    if (this.mode === 'off') return tr('Desligado');
     if (this.mode === 'local_only') return tr('Só pelo computador');
     switch (this.ui.server) {
       case 'logged_out':
@@ -420,7 +419,6 @@ export class WorldSettingsGroup {
   }
 
   private build(): View {
-    if (this.mode === 'off') return this.buildOff();
     if (this.mode === 'local_only') return { el: para('ui-set__hint', tr('A conta do Habblaud World só pode ser mexida no próprio computador, com o Habblaud em acesso local (bind 127.0.0.1) e aberto por http://localhost.')) };
     if (this.mode !== 'active') return { el: h('div') };
     const key = this.builtKey;
@@ -448,17 +446,6 @@ export class WorldSettingsGroup {
       case 'devices':
         return this.buildDevices();
     }
-  }
-
-  private buildOff(): View {
-    return {
-      el: h(
-        'div',
-        { class: 'ui-world__stack' },
-        para('ui-set__hint', tr('Desligado: nenhum servidor do Habblaud World configurado neste Habblaud. Nada sai deste computador.')),
-        extLink(tr('Como o World cuida da privacidade'), WORLD_PRIVACY_URL),
-      ),
-    };
   }
 
   private buildStatusError(): View {

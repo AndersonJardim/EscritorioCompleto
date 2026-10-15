@@ -366,9 +366,10 @@ export interface OfficeSnapshot {
     /** Verificação de versão nova no GitHub (ausente nos testes e no timelapse). */
     updates?: UpdateStatus;
     /**
-     * Habblaud World (server/world/): `enabled` = HABBLAUD_WORLD não é 0; `configured` = HABBLAUD_WORLD_URL válida (sem
-     * ela o recurso fica desligado e a seção não aparece); `state` = a conta neste computador. Nada da conta além disso
-     * (o snapshot também vai ao celular e à linha do tempo). Ausente nos testes e no timelapse.
+     * Habblaud World (server/world/): `enabled` = a seção aparece (HABBLAUD_WORLD não é 0 e HABBLAUD_WORLD_URL é válida;
+     * sem a URL o recurso fica desligado e nada do World aparece); `configured` = HABBLAUD_WORLD_URL válida; `state` = a
+     * conta neste computador. Nada da conta além disso (o snapshot também vai ao celular e à linha do tempo). Ausente
+     * nos testes e no timelapse.
      */
     world?: WorldMeta;
   };

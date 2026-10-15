@@ -156,7 +156,7 @@ describe('HABBLAUD_WORLD e HABBLAUD_WORLD_URL', () => {
     expect((await call(s.base, 'GET', '/api/access')).body.world).toBe(false);
   });
 
-  it('sem URL: status off e o resto 409 not_configured', async () => {
+  it('sem URL: recurso desligado (meta.world sem enabled), status off e o resto 409 not_configured', async () => {
     const s = await start({ world: 'no-url' });
     expect((await call(s.base, 'GET', '/api/world/status')).body).toEqual({ available: true, configured: false, state: 'off' });
     const r = await call(s.base, 'POST', '/api/world/register', { email: EMAIL, password: PASSWORD });
@@ -164,7 +164,7 @@ describe('HABBLAUD_WORLD e HABBLAUD_WORLD_URL', () => {
     expect(r.body.error.code).toBe('not_configured');
     expect((await call(s.base, 'PUT', '/api/world/character', CHARACTER)).body.error.code).toBe('not_configured');
     expect((await call(s.base, 'GET', '/api/world/devices')).status).toBe(409);
-    expect(s.hub.current().meta.world).toEqual({ enabled: true, configured: false, state: 'off' });
+    expect(s.hub.current().meta.world).toEqual({ enabled: false, configured: false, state: 'off' });
   });
 
   it('parseWorldConfig: só https/wss; http://127.0.0.1 no modo de desenvolvimento; só a origem', () => {

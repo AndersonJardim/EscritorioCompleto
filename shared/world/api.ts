@@ -28,9 +28,12 @@ export type WorldState = 'off' | 'logged_out' | 'waiting' | 'approved';
  * celular e à linha do tempo: nada da conta aqui).
  */
 export interface WorldMeta {
-  /** HABBLAUD_WORLD não é 0: a seção existe. */
+  /**
+   * A seção aparece: HABBLAUD_WORLD não é 0 e há HABBLAUD_WORLD_URL válida. Sem a URL o recurso está desligado (o
+   * padrão até a versão que ligar o World) e nada do World aparece na interface.
+   */
   enabled: boolean;
-  /** HABBLAUD_WORLD_URL válida. Sem ela a seção não aparece (recurso desligado). */
+  /** HABBLAUD_WORLD_URL válida. */
   configured: boolean;
   state: WorldState;
 }

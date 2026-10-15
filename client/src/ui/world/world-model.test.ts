@@ -33,9 +33,11 @@ describe('quando a seção aparece', () => {
     expect(worldSectionMode(meta('logged_out', { enabled: false }), LOCAL)).toBe('hidden');
   });
 
-  it('sem servidor configurado: a seção mostra "desligado"', () => {
-    expect(worldSectionMode(meta('off', { configured: false }), LOCAL)).toBe('off');
-    expect(worldSectionMode(meta('off'), LOCAL)).toBe('off');
+  it('sem servidor configurado (o padrão): nada do World, nem o aviso de desligado', () => {
+    expect(worldSectionMode(meta('off', { enabled: false, configured: false }), LOCAL)).toBe('hidden');
+    expect(worldSectionMode(meta('off', { configured: false }), LOCAL)).toBe('hidden');
+    expect(worldSectionMode(meta('off'), LOCAL)).toBe('hidden');
+    expect(worldSectionMode(meta('off', { configured: false }), { ...LOCAL, fake: true })).toBe('hidden');
   });
 
   it('pela porta remota (celular), some; sem a trava do terminal ou fora do localhost, só o aviso', () => {

@@ -16,12 +16,12 @@ import { tr } from '../../../../shared/i18n';
 // ------------------------------------------------------------------ quando aparece
 
 /**
- * - hidden: nada do World (sem `meta.world`, `enabled: false` ou a página do celular pela porta remota);
- * - off: a seção mostra "desligado" (sem servidor do World configurado);
+ * - hidden: nada do World (sem `meta.world`, `enabled: false`, sem servidor do World configurado, que é o padrão:
+ *   o recurso fica desligado e nada aparece; ou a página do celular pela porta remota);
  * - local_only: aberto por outro endereço ou sem a trava do terminal: as rotas da conta respondem 403;
  * - active: dá para criar conta, entrar, editar o personagem...
  */
-export type WorldSectionMode = 'hidden' | 'off' | 'local_only' | 'active';
+export type WorldSectionMode = 'hidden' | 'local_only' | 'active';
 
 export interface WorldGate {
   /** Página do celular (porta remota com login). */
@@ -35,8 +35,7 @@ export interface WorldGate {
 }
 
 export function worldSectionMode(meta: WorldMeta | undefined, gate: WorldGate): WorldSectionMode {
-  if (!meta?.enabled || gate.remote) return 'hidden';
-  if (!meta.configured || meta.state === 'off') return 'off';
+  if (!meta?.enabled || !meta.configured || meta.state === 'off' || gate.remote) return 'hidden';
   if (!gate.fake && (!gate.local || !gate.terminal)) return 'local_only';
   return 'active';
 }

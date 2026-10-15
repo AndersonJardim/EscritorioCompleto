@@ -227,7 +227,7 @@ describe('FakeWorldApi', () => {
 
   it('sem servidor configurado: tudo responde not_configured', async () => {
     const api = fake({ state: 'off' });
-    expect(api.meta()).toEqual({ enabled: true, configured: false, state: 'off' });
+    expect(api.meta()).toEqual({ enabled: false, configured: false, state: 'off' });
     expect(await api.login({ email: 'a@b.co', password: 'x' })).toMatchObject({ code: 'not_configured' });
   });
 

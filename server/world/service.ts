@@ -95,9 +95,9 @@ export class WorldService {
     return s ? s.access : 'logged_out';
   }
 
-  /** OfficeSnapshot.meta.world. */
+  /** OfficeSnapshot.meta.world. Sem HABBLAUD_WORLD_URL, `enabled: false`: o recurso está desligado e nada aparece. */
   meta(): WorldMeta {
-    return { enabled: this.o.config.enabled, configured: this.configured, state: this.state() };
+    return { enabled: this.o.config.enabled && this.configured, configured: this.configured, state: this.state() };
   }
 
   /** GET /api/world/status: o estado da conta, relendo /v1/me quando venceu (ou com `refresh`). */

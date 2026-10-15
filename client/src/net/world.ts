@@ -230,7 +230,7 @@ export class HttpWorldApi implements WorldClient {
 // ------------------------------------------------------------------ servidor falso (demonstração e testes)
 
 export interface FakeWorldOptions {
-  /** Estado inicial: sem servidor ('off'), sem conta, ou com uma conta de exemplo já entrando (na espera ou liberada). */
+  /** Estado inicial: sem servidor ('off': nada do World aparece), sem conta, ou com uma conta de exemplo já entrando (na espera ou liberada). */
   state?: WorldServerState;
   /** Espera de cada resposta, em ms (padrão 450; 0 nos testes). */
   delayMs?: number;
@@ -307,9 +307,9 @@ export class FakeWorldApi implements WorldClient {
     }
   }
 
-  /** O que o snapshot diria em `meta.world`. */
+  /** O que o snapshot diria em `meta.world` (sem servidor, como o de verdade: desligado, nada aparece). */
   meta(): WorldMeta {
-    return { enabled: true, configured: this.configured, state: this.state() };
+    return { enabled: this.configured, configured: this.configured, state: this.state() };
   }
 
   /** Avisa quando o estado muda (a interface redesenha, como faria com um snapshot novo). */
