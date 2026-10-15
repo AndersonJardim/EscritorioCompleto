@@ -293,7 +293,7 @@ describe('projeção: regras', () => {
     expect(agentsOf(edited)[0].parts).toEqual({ ...flattenAppearance(hash32(wid), undefined, 'm'), skin: '#5a3623', topStyle: 'polo' });
   });
 
-  it('parentId vira o id do mundo do pai; subagente sem o pai no pacote sai como principal', () => {
+  it('parentId vira o id do mundo do pai; subagente sem o pai no pacote vai sem parentId', () => {
     const ids = new FakeIds();
     const rooms = [room('/p/a')];
     const agents = [
@@ -310,7 +310,7 @@ describe('projeção: regras', () => {
     expect(byId.get(ids.agents.get('s2')!)).toMatchObject({ kind: 'sub', parentId: ids.agents.get('s1') });
     for (const orphan of ['s3', 's4']) {
       const w = byId.get(ids.agents.get(orphan)!)!;
-      expect(w.kind).toBe('main');
+      expect(w.kind).toBe('sub');
       expect('parentId' in w).toBe(false);
     }
     expect(byId.get(ids.agents.get('m1')!)!.parentId).toBeUndefined();

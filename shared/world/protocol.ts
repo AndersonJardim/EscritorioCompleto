@@ -115,6 +115,10 @@ export const GOODBYE_REASONS = [
 ] as const;
 export type GoodbyeReason = (typeof GOODBYE_REASONS)[number];
 
+/** Códigos de recusa do `uplink.ack {error}`: esquema, limites, nome fora do pool, peças, ids, frequência e erro do servidor. */
+export const UPLINK_ACK_ERRORS = ['schema', 'limits', 'name_pool', 'parts', 'ids', 'rate', 'internal'] as const;
+export type UplinkAckError = (typeof UPLINK_ACK_ERRORS)[number];
+
 /** Versão dos Termos de Uso aceita no cadastro. */
 export const TOS_VERSION = 'v1';
 
@@ -236,12 +240,41 @@ export interface DeviceInfo {
   current: boolean;
 }
 
+/** Estado do prédio no ciclo de vida (seção 9), como o dono vê. Pausado é `paused` (ou `dormant`, se dormiu pausado). */
+export type BuildingState = 'online' | 'away' | 'paused' | 'dormant';
+
+/** O prédio da conta no `GET /v1/me` (só para o dono). */
+export interface MeBuilding {
+  state: BuildingState;
+  /** O dono pausou (e ainda não retomou). */
+  paused: boolean;
+  lot: WorldLot;
+  floors: number;
+  agents: { total: number; working: number; waiting: number; idle: number };
+  /** Faixas, como o mundo publica; ausente se o dono desligou os tokens. */
+  tokens?: { day: TokenBand; week: TokenBand };
+  likes: number;
+  /** "2026-10": só o mês de entrada no mundo. */
+  firstOnlineMonth: string;
+}
+
 /** `GET /v1/me`. */
 export interface MeResponse {
   account: { emailMasked: string; access: WorldAccess; locale: WorldLocale; createdAt: string };
   player?: Player;
   devices: DeviceInfo[];
+  /** O prédio da conta, se ela já tem um no mundo. */
+  building?: MeBuilding;
 }
+
+/**
+ * O prédio de quem chama (Bearer):
+ * - `POST /v1/me/building/pause` → `200 {state}`: apagado na hora para todos; o sinal de vida não acende, só o resume.
+ * - `POST /v1/me/building/resume` → `200 {state}`: `online` se a instalação está mandando sinal, senão `away`.
+ * - `DELETE /v1/me/building` → `204`: "Sair do mundo" (lote liberado, likes zerados; voltar = prédio novo).
+ * Sem prédio, pause e resume respondem `404 not_found`.
+ */
+export interface BuildingStateResponse { state: BuildingState }
 
 /**
  * Erros: `{error: {code, message}}`, com o `message` em inglês (cada cliente traduz pelo `code`). Os códigos abaixo
@@ -289,7 +322,7 @@ export type WorldAgentStatus = 'working' | 'waiting' | 'idle' | 'shell'; // done
 export interface WorldAgent {
   id: string;                 // "a_" + 8 hex aleatórios; novo quando o agente chega e a cada 24 h ± 6 h
   kind: 'main' | 'sub';
-  parentId?: string;          // sub: id do agente que o chamou
+  parentId?: string;          // sub: id do agente que o chamou (ausente se o pai não está no pacote)
   provider: 'claude' | 'codex';
   status: WorldAgentStatus;   // sem "desde quando": nenhum tempo sai (seção 3.5)
   look: 'f' | 'm';
@@ -430,7 +463,8 @@ export interface WelcomeMessage {
   rev: number;
 }
 export interface GoodbyeMessage { t: 'goodbye'; reason: GoodbyeReason }
-export type UplinkAckMessage = { t: 'uplink.ack'; at: number; bytes: number } | { t: 'uplink.ack'; error: string };
+/** Resposta a cada `uplink`: aceito, com o horário e os bytes que o servidor contou, ou recusado (UPLINK_ACK_ERRORS). */
+export type UplinkAckMessage = { t: 'uplink.ack'; at: number; bytes: number } | { t: 'uplink.ack'; error: UplinkAckError | (string & {}) };
 export interface AreaMessage { t: 'area'; chunk: string; rev: number; buildings: WorldBuildingPublic[] }
 export interface AreaPatchMessage {
   t: 'area.patch';

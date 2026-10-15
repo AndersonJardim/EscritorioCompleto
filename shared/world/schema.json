@@ -73,7 +73,7 @@
         "compacted": { "const": true }
       },
       "if": { "properties": { "kind": { "const": "sub" } } },
-      "then": { "properties": { "parentId": { "$ref": "#/$defs/agentId" } }, "required": ["parentId"] },
+      "then": { "properties": { "parentId": { "$ref": "#/$defs/agentId" } } },
       "else": { "properties": { "parentId": false } }
     },
     "parts": {

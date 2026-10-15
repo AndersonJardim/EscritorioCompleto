@@ -22,7 +22,8 @@
 //   pasta, a conta ou o pid. Andares e agentes saem ordenados pelo id do mundo (a ordem de chegada não vaza).
 // - Nome sorteado do pool (`pickName`) pelo id do mundo, do mesmo look e sem repetir no pacote; o nome do escritório,
 //   editado ou não, nunca entra. Aparência: `flattenAppearance(hash32(id do mundo))` com as peças do editor por cima.
-// - Subagente cujo pai não está no pacote sai como principal: o esquema exige `parentId` dentro do pacote.
+// - `parentId` é o id do mundo do pai; subagente cujo pai não está no pacote (já saiu, ou ficou de fora pelos limites)
+//   vai sem `parentId`.
 // - Nada de tempo (since, startedAt...), caminhos, nomes de sala, títulos, atividades, tarefas em texto, shells,
 //   modelo, branch, conta, e-mail, uso, custo, linhas ou semente. Os testes de chaves e de canários garantem.
 // - Limites de UPLINK_LIMITS (64 andares, 64 agentes por andar, 256 no total, 64 KB): acima, corta e avisa em
@@ -244,7 +245,7 @@ function toWorldAgent(c: Candidate, widOf: ReadonlyMap<string, string>, name: st
   const parts: AppearanceParts = flattenAppearance(hash32(c.wid), a.parts, a.look);
   const out: WorldAgent = {
     id: c.wid,
-    kind: parent ? 'sub' : 'main',
+    kind: a.kind,
     ...(parent ? { parentId: parent } : {}),
     provider: a.provider === 'codex' ? 'codex' : 'claude',
     status: a.status as WorldAgentStatus,

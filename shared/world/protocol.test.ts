@@ -143,7 +143,6 @@ describe('schema.json do WorldUplink (validador mínimo)', () => {
       (u) => { u.floors[0]!.agents[0]!.name = 'Projeto /Users/x'; },
       (u) => { u.tokens = { day: -1, week: 0 }; },
       (u) => { u.tokens = { day: 1.5, week: 0 }; },
-      (u) => { delete u.floors[0]!.agents[1]!.parentId; }, // subagente sem pai
       (u) => { u.floors[0]!.agents[0]!.parentId = 'a_71c0b5a9'; }, // principal com pai
       (u) => { u.floors = Array.from({ length: 65 }, (_, i) => ({ id: `f_${i.toString(16).padStart(10, '0')}`, agents: [] })); },
     ];
@@ -152,6 +151,14 @@ describe('schema.json do WorldUplink (validador mínimo)', () => {
       mudar(u);
       expect(valid(u), `caso ${i}`).toBe(false);
     }
+  });
+
+  it('subagente sem o pai no pacote vai sem parentId (o pai já saiu); principal nunca leva parentId', () => {
+    const u = clone(EXEMPLO_COMPLETO);
+    delete u.floors[0]!.agents[1]!.parentId;
+    expect(validate(u)).toEqual([]);
+    u.floors[0]!.agents[0]!.parentId = 'a_71c0b5a9';
+    expect(valid(u)).toBe(false);
   });
 
   it('o validador mínimo não ignora palavra-chave nenhuma', () => {
