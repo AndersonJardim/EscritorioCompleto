@@ -769,20 +769,29 @@ export class WorldSettingsGroup {
       refresh: () => void this.refresh(),
       openSent: (opener) => void this.sent.open(opener),
       now: () => this.ctx.now(),
+      visitOwn: () => {
+        const go = this.ctx.visitOwnBuilding;
+        return go && this.src.meta()?.scene?.available === true ? () => go() : null;
+      },
     });
+    // "Avisar quando alguém visitar" (o aviso do primeiro visitante de cada conexão; ui/world/world-chip.ts)
+    const notify = switchRow(tr('Avisar quando alguém visitar'), tr('Um aviso quando o primeiro visitante entra no seu prédio. Você vê só quantos estão lá dentro, nunca quem.'), () =>
+      this.ctx.updatePrefs({ worldVisitNotify: !this.ctx.prefs.worldVisitNotify }),
+    );
     let rev = -1;
     const sync = () => {
       if (rev !== this.statusRev) {
         rev = this.statusRev;
-        wrap.replaceChildren(...this.homeContent(card));
+        wrap.replaceChildren(...this.homeContent(card, notify.row));
       }
       card.sync();
+      setAttr(notify.btn, 'aria-checked', String(this.ctx.prefs.worldVisitNotify));
     };
     sync();
     return { el: wrap, sync };
   }
 
-  private homeContent(card: BuildingCard): Node[] {
+  private homeContent(card: BuildingCard, notifyRow: HTMLElement): Node[] {
     const s = this.status;
     const approved = this.ui.server === 'approved';
     const out: Node[] = [];
@@ -849,6 +858,7 @@ export class WorldSettingsGroup {
     const devices = s?.devices?.length;
     nav.append(this.navRow(tr('Dispositivos'), devices ? tr('{0} de 3', [devices]) : '', () => this.go('devices')));
     out.push(nav);
+    if (approved && player) out.push(notifyRow);
 
     if (s?.lastError) out.push(para('ui-world__warn', tr('Último problema com o mundo: {0}', [worldErrorText(s.lastError, 'status')])));
 

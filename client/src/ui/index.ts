@@ -233,7 +233,7 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi,
   settings = new SettingsPopover(ctx, notifier, sound, hw);
   const invite = new InviteCard(ctx, hw, { openWorld: () => settings.showWorld(topbar.settingsBtn, 'register'), settingsOpen: () => settings.isOpen });
   // Chip "🏙️ no mundo" / "⏸ pausado" na barra do topo (conta aprovada; nunca pela porta do celular).
-  const worldChip = new WorldChip(ctx, hw, () => settings.showWorld(topbar.settingsBtn, 'home'));
+  const worldChip = new WorldChip(ctx, hw, () => settings.showWorld(topbar.settingsBtn, 'home'), (n) => toasts.push(n));
   topbar.addStatus(worldChip.el);
   // Botão Mundo: troca o escritório pela cidade (a cena vem de app.ts, carregada sob demanda).
   if (city) {

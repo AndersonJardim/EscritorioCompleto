@@ -10928,3 +10928,18 @@ html.is-replay #world {
     z-index: 51;
   }
 }
+
+/* "👀 N" no chip do mundo: gente visitando o seu prédio agora */
+.ui-world-chip__visitors {
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(255, 206, 110, 0.16);
+  color: #ffe3a0;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ui-world-chip__visitors[hidden] {
+  display: none;
+}

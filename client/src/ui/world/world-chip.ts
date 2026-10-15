@@ -2,12 +2,15 @@
 // "reconectando…" quando a conexão caiu e "⚠️ parado" quando o servidor do mundo parou o prédio. Só com
 // `meta.world.building` (conta aprovada; fora do mundo, nada) e nunca no celular pela porta remota (worldChipState).
 // Um clique abre Configurações › Habblaud World, onde estão o cartão "Seu prédio", a pausa e o motivo de uma parada.
+// Com gente visitando o prédio, "👀 N" ao lado; o primeiro visitante de cada conexão ainda dá o aviso "Alguém entrou
+// no seu prédio" (desligável em Configurações › Habblaud World).
+import type { Notice } from '../../../../shared/types';
 import { tr } from '../../../../shared/i18n';
 import type { WorldSource } from '../../net/world';
 import type { UiComponent, UiContext } from '../context';
 import { h, setAttr, setHidden, setText, setTitle, setVariant } from '../dom';
 import { worldGate } from './settings-world';
-import { agentsText, floorsText, worldChipState, type WorldChipState } from './world-model';
+import { agentsText, floorsText, nextVisitorAlert, VISITOR_ALERT_START, visitorsText, worldChipState, type WorldChipState } from './world-model';
 
 const ICON: Record<WorldChipState, string> = { live: '🏙️', paused: '⏸', reconnecting: '🏙️', stopped: '⚠️' };
 
@@ -15,21 +18,34 @@ export class WorldChip implements UiComponent {
   readonly el: HTMLButtonElement;
   private readonly icon: HTMLElement;
   private readonly text: HTMLElement;
+  private readonly visitors: HTMLElement;
+  private alert = VISITOR_ALERT_START;
+  private alertSeq = 0;
 
   constructor(
     private readonly ctx: UiContext,
     private readonly src: WorldSource,
     open: () => void,
+    /** O aviso "Alguém entrou no seu prédio" (os toasts da interface). */
+    private readonly notify?: (n: Notice) => void,
   ) {
     this.icon = h('span', { class: 'ui-world-chip__icon', attrs: { 'aria-hidden': 'true' } });
     this.text = h('span', { class: 'ui-world-chip__text' });
-    this.el = h('button', { class: 'ui-world-chip', type: 'button', hidden: true, attrs: { 'aria-haspopup': 'dialog' }, on: { click: open } }, this.icon, this.text);
+    this.visitors = h('span', { class: 'ui-world-chip__visitors', hidden: true });
+    this.el = h('button', { class: 'ui-world-chip', type: 'button', hidden: true, attrs: { 'aria-haspopup': 'dialog' }, on: { click: open } }, this.icon, this.text, this.visitors);
   }
 
   render(): void {
     const meta = this.src.meta();
     const state = worldChipState(meta, worldGate(this.ctx, this.src));
+    // visitantes no prédio: o aviso do primeiro de cada conexão (fora do mundo ou sem conta, sem contagem)
+    const count = state ? meta?.building?.visitors : undefined;
+    const next = nextVisitorAlert(this.alert, count, this.ctx.prefs.worldVisitNotify);
+    this.alert = next.state;
+    if (next.notify) this.notify?.({ id: `world-visit-${++this.alertSeq}`, level: 'info', text: `👀 ${tr('Alguém entrou no seu prédio no Habblaud World.')}`, at: Date.now() });
     setHidden(this.el, !state);
+    setHidden(this.visitors, !count);
+    setText(this.visitors, count ? `👀 ${count}` : '');
     if (!state) return;
     const b = meta?.building;
     setVariant(this.el, 'is-', state);
@@ -40,7 +56,8 @@ export class WorldChip implements UiComponent {
       reconnecting: [tr('reconectando…'), tr('Sem conexão com o Habblaud World agora; o Habblaud tenta de novo sozinho. Clique para ver em Configurações.')],
       stopped: [tr('parado'), tr('Seu prédio parou de subir ao Habblaud World. Clique para ver o motivo em Configurações.')],
     };
-    const [text, title] = texts[state];
+    const [text, base] = texts[state];
+    const title = count ? `${base} ${visitorsText(count)}.` : base;
     setText(this.text, text);
     setTitle(this.el, title);
     setAttr(this.el, 'aria-label', title);

@@ -517,6 +517,36 @@ export function agentsText(n: number): string {
   return n === 1 ? tr('1 agente') : tr('{0} agentes', [formatInt(n)]);
 }
 
+/** "1 visitante agora", "3 visitantes agora". */
+export function visitorsText(n: number): string {
+  return n === 1 ? tr('1 visitante agora') : tr('{0} visitantes agora', [formatInt(n)]);
+}
+
+/**
+ * O aviso "Alguém entrou no seu prédio": uma vez por conexão, quando a contagem de visitantes (meta.world.building
+ * .visitors) passa de nenhum a algum. Sem contagem (a conexão caiu, fechado a visitas), o aviso se rearma. A primeira
+ * contagem que esta página vê não avisa (a visita já estava lá antes de abrir a página).
+ */
+export interface VisitorAlertState {
+  /** Já viu uma contagem (ou a falta dela) nesta página. */
+  started: boolean;
+  /** A última contagem (undefined: sem contagem). */
+  last: number | undefined;
+  /** Já avisou nesta conexão. */
+  notified: boolean;
+}
+
+export const VISITOR_ALERT_START: VisitorAlertState = { started: false, last: undefined, notified: false };
+
+export function nextVisitorAlert(s: VisitorAlertState, visitors: number | undefined, enabled: boolean): { state: VisitorAlertState; notify: boolean } {
+  const n = typeof visitors === 'number' && visitors > 0 ? visitors : visitors === 0 ? 0 : undefined;
+  if (!s.started) return { state: { started: true, last: n, notified: n !== undefined && n > 0 }, notify: false };
+  if (n === undefined) return { state: { started: true, last: undefined, notified: false }, notify: false };
+  const arrived = n > 0 && (s.last ?? 0) === 0;
+  const notify = arrived && !s.notified && enabled;
+  return { state: { started: true, last: n, notified: s.notified || arrived }, notify };
+}
+
 /** Tudo o que o cartão "Seu prédio" mostra, sem DOM. */
 export function buildingView(b: WorldBuildingStatus | undefined, hasPlayer: boolean, now: number): BuildingView {
   const state = buildingState(b, hasPlayer);
@@ -529,6 +559,7 @@ export function buildingView(b: WorldBuildingStatus | undefined, hasPlayer: bool
           floorsText(floors),
           agentsText(agents),
           b?.lastUplinkAt ? tr('Última remessa: {0}', [relativeTime(b.lastUplinkAt, now)]) : tr('Nenhuma remessa ainda'),
+          ...(b?.visitors ? [`👀 ${visitorsText(b.visitors)}`] : []),
         ];
   const live = state === 'connected' || state === 'reconnecting' || state === 'paused';
   const rejected = live && b?.lastAck?.ok === false ? uplinkRejectText(b.lastAck.error) : null;

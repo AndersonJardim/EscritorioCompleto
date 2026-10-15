@@ -400,6 +400,21 @@ describe('FakeWorldApi: prédio', () => {
     return { now: () => t, tick: (ms: number) => (t += ms) };
   };
 
+  it('visitantes de mentira (Fase 4): ninguém nos primeiros segundos, depois 1 e 2; setVisitors fixa; pausado, nada', async () => {
+    const c = clock(OCT);
+    const api = new FakeWorldApi({ state: 'approved', delayMs: 0, now: c.now });
+    expect(api.meta().building?.visitors).toBe(0);
+    c.tick(9_000);
+    expect(api.meta().building?.visitors).toBe(1);
+    c.tick(15_000);
+    expect(api.meta().building?.visitors).toBe(2);
+    api.setVisitors(5);
+    expect(api.meta().building?.visitors).toBe(5);
+    expect((await api.status()).ok && (await api.status() as { data: { building?: { visitors?: number } } }).data.building?.visitors).toBe(5);
+    await api.pause();
+    expect(api.meta().building).not.toHaveProperty('visitors');
+  });
+
   it('o exemplo da 3.3: ids aleatórios no formato do protocolo, pais presentes, peças completas', () => {
     const agents = FAKE_UPLINK.floors.flatMap((f) => f.agents);
     for (const f of FAKE_UPLINK.floors) expect(f.id).toMatch(/^f_[0-9a-f]{10}$/);

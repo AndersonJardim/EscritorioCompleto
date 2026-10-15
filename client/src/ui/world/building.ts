@@ -23,6 +23,8 @@ export interface BuildingHost {
   refresh(): void;
   /** Abre a janela "Ver o que foi enviado". */
   openSent(opener: HTMLElement): void;
+  /** "Ver como os outros veem": entra no próprio prédio pela cidade (null: a cena Mundo não está disponível aqui). */
+  visitOwn?(): (() => void) | null;
   now(): number;
 }
 
@@ -36,6 +38,7 @@ export class BuildingCard {
   private readonly actions: HTMLElement;
   private readonly toggleBtn: HTMLButtonElement;
   private readonly sentBtn: HTMLButtonElement;
+  private readonly visitBtn: HTMLButtonElement;
   private readonly hint: HTMLElement;
   private readonly error: HTMLElement;
   private readonly leaveRow: HTMLElement;
@@ -55,7 +58,15 @@ export class BuildingCard {
     this.rejected = h('p', { class: 'ui-world__brejected', role: 'status', hidden: true }, h('strong', { text: tr('O mundo recusou a última remessa.') }), ' ', this.rejectedReason);
     this.toggleBtn = h('button', { class: 'ui-btn', type: 'button', on: { click: () => void this.toggle() } });
     this.sentBtn = h('button', { class: 'ui-btn', type: 'button', text: tr('Ver o que foi enviado'), attrs: { 'aria-haspopup': 'dialog' }, on: { click: () => host.openSent(this.sentBtn) } });
-    this.actions = h('div', { class: 'ui-world__actions' }, this.toggleBtn, this.sentBtn);
+    this.visitBtn = h('button', {
+      class: 'ui-btn',
+      type: 'button',
+      text: `👁 ${tr('Ver como os outros veem')}`,
+      title: tr('Entrar no seu prédio pela cidade e ver o que quem visita vê (sem nada do escritório real)'),
+      hidden: true,
+      on: { click: () => host.visitOwn?.()?.() },
+    });
+    this.actions = h('div', { class: 'ui-world__actions' }, this.toggleBtn, this.sentBtn, this.visitBtn);
     this.hint = h('p', { class: 'ui-set__hint' });
     this.error = h('p', { class: 'ui-world__error', role: 'alert', hidden: true });
     this.leaveBtn = h('button', { class: 'ui-btn', type: 'button', text: tr('Sair do mundo'), on: { click: () => void this.leave() } });
@@ -102,6 +113,8 @@ export class BuildingCard {
       setText(this.toggleBtn, v.toggle.text);
       setText(this.hint, v.toggle.hint);
     }
+    // o próprio prédio, como os outros veem: com o prédio no mundo (aceso ou pausado) e a cena Mundo disponível
+    setHidden(this.visitBtn, !(v.state === 'connected' || v.state === 'paused' || v.state === 'reconnecting') || !this.host.visitOwn?.());
     setHidden(this.leaveRow, !v.leave);
     if (!v.leave && this.confirmingLeave) this.resetLeave();
   }

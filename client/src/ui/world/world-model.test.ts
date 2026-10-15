@@ -11,6 +11,8 @@ import {
   bytesText,
   floorsText,
   leaveHint,
+  nextVisitorAlert,
+  VISITOR_ALERT_START,
   prettyUplink,
   themeGoesToWorld,
   UPLINK_REJECT_CODES,
@@ -392,5 +394,45 @@ describe('tema e chip do topo', () => {
     expect(worldChipState(meta('waiting', { building }), LOCAL)).toBeNull();
     // Aberto por outro endereço (sem a trava), o chip informa; a seção explica que a conta só mexe pelo computador.
     expect(worldChipState(meta('approved', { building }), { ...LOCAL, local: false })).toBe('live');
+  });
+});
+
+describe('visitantes no seu prédio (Fase 4)', () => {
+  it('o cartão "Seu prédio" mostra "N visitantes agora" só com alguém lá dentro', () => {
+    const b: WorldBuildingStatus = { connected: true, paused: false, floors: 2, agents: 3, lastUplinkAt: 1 };
+    expect(buildingView({ ...b, visitors: 3 }, true, 2).stats).toContain('👀 3 visitantes agora');
+    expect(buildingView({ ...b, visitors: 1 }, true, 2).stats).toContain('👀 1 visitante agora');
+    expect(buildingView({ ...b, visitors: 0 }, true, 2).stats.some((t) => t.includes('visitante'))).toBe(false);
+    expect(buildingView(b, true, 2).stats.some((t) => t.includes('visitante'))).toBe(false);
+  });
+
+  it('o aviso: uma vez por conexão, quando passa de nenhum a algum; a primeira contagem da página não avisa; desligado, nunca', () => {
+    let s = VISITOR_ALERT_START;
+    const step = (v: number | undefined, enabled = true) => {
+      const r = nextVisitorAlert(s, v, enabled);
+      s = r.state;
+      return r.notify;
+    };
+    // a página abriu com gente lá dentro: sem aviso
+    expect(step(2)).toBe(false);
+    expect(step(0)).toBe(false);
+    // o primeiro desta conexão já foi (estava lá ao abrir): o próximo não avisa
+    expect(step(1)).toBe(false);
+    // a conexão caiu e voltou: rearma
+    expect(step(undefined)).toBe(false);
+    expect(step(0)).toBe(false);
+    expect(step(1)).toBe(true);
+    expect(step(2)).toBe(false);
+    expect(step(0)).toBe(false);
+    expect(step(1)).toBe(false);
+    // desligado em Configurações
+    s = VISITOR_ALERT_START;
+    expect(step(0, false)).toBe(false);
+    expect(step(1, false)).toBe(false);
+    // página aberta sem ninguém, depois alguém entra
+    s = VISITOR_ALERT_START;
+    expect(step(undefined)).toBe(false);
+    expect(step(0)).toBe(false);
+    expect(step(3)).toBe(true);
   });
 });
