@@ -124,6 +124,8 @@ export function parsePlayer(raw: unknown): Player | undefined {
     updatedAt: str(v.updatedAt, ISO_MAX) ?? '',
   };
   if (typeof v.country === 'string' && /^[A-Z]{2}$/.test(v.country)) p.country = v.country;
+  // Nome trocado à força pela moderação ("???"): a interface pede um nome novo.
+  if (v.mustRename === true) p.mustRename = true;
   return p;
 }
 

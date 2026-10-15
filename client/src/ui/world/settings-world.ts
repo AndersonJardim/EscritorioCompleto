@@ -718,6 +718,9 @@ export class WorldSettingsGroup {
     );
 
     const player = s?.player;
+    if (player?.mustRename) {
+      out.push(para('ui-world__warn', tr('Escolha um nome novo: a moderação trocou o seu nome de jogador. O nome novo entra na hora, sem esperar os 30 dias.')));
+    }
     if (player) {
       const traits = h('span', { class: 'ui-world__traits' }, ...player.traits.filter((t) => TRAITS[t]).map((t) => h('span', { class: 'ui-world__trait', text: `${TRAITS[t].emoji} ${TRAITS[t].label}` })));
       const country = player.country ? countryName(player.country) : player.visibility.hideCountry ? tr('país escondido') : '';
@@ -735,7 +738,13 @@ export class WorldSettingsGroup {
             country ? h('span', { class: 'ui-set__hint', text: country }) : null,
           ),
         ),
-        h('div', { class: 'ui-world__actions' }, h('button', { class: 'ui-btn', type: 'button', text: tr('Editar personagem'), on: { click: () => this.go('character') } })),
+        h(
+          'div',
+          { class: 'ui-world__actions' },
+          player.mustRename
+            ? h('button', { class: 'ui-btn ui-btn--primary', type: 'button', text: tr('Escolher nome novo'), on: { click: () => this.go('character') } })
+            : h('button', { class: 'ui-btn', type: 'button', text: tr('Editar personagem'), on: { click: () => this.go('character') } }),
+        ),
       );
     } else {
       out.push(
@@ -813,7 +822,10 @@ export class WorldSettingsGroup {
     fields.set(player ? draftAppearance(look, player.parts) : draftAppearance(look, undefined, randomSeed()));
 
     const name = h('input', { class: 'ui-char__name', type: 'text', attrs: { maxlength: PLAYER_NAME_LIMITS.max * 2, autocomplete: 'nickname', spellcheck: 'false', 'aria-describedby': 'ui-world-name-hint' } });
-    name.value = player?.name ?? '';
+    // Nome trocado à força pela moderação ("???"): o campo começa vazio e recebe o foco.
+    const rename = player?.mustRename === true;
+    name.value = rename ? '' : (player?.name ?? '');
+    if (rename) requestAnimationFrame(() => name.isConnected && name.focus());
     const roll = h('button', {
       class: 'ui-btn ui-btn--sm',
       type: 'button',
@@ -887,6 +899,7 @@ export class WorldSettingsGroup {
       void this.refresh();
     };
     form.el.append(
+      rename ? para('ui-world__warn', tr('Escolha um nome novo')) : '',
       h(
         'div',
         { class: 'ui-char__top' },
@@ -896,7 +909,7 @@ export class WorldSettingsGroup {
       para(
         'ui-set__hint',
         h('span', { attrs: { id: 'ui-world-name-hint' } }, tr('De 3 a 20 caracteres: letras de um só alfabeto, números, espaço, _ - e . É o seu nome no mundo e não pode repetir o de ninguém.')),
-        player ? ` ${tr('Dá para trocar uma vez a cada 30 dias.')}` : '',
+        rename ? ` ${tr('Desta vez o nome novo entra na hora, sem esperar os 30 dias.')}` : player ? ` ${tr('Dá para trocar uma vez a cada 30 dias.')}` : '',
       ),
       lookSeg.row,
       fields.groups,

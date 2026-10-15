@@ -221,7 +221,7 @@ describe('personagem', () => {
 describe('erros', () => {
   it('todo código tem texto próprio (nenhum cai no genérico, menos os que não dizem nada)', () => {
     const generic = worldErrorText('qualquer-coisa', 'status');
-    const vague = ['unknown', 'world_error', 'internal'];
+    const vague = ['unknown', 'world_error'];
     for (const code of WORLD_UI_ERROR_CODES) {
       const text = worldErrorText(code, 'register');
       expect(text, code).toBeTruthy();
@@ -234,6 +234,7 @@ describe('erros', () => {
     expect(worldErrorText('name_cooldown', 'character')).toMatch(/30 dias/);
     expect(worldErrorText('no_player', 'visibility')).toMatch(/personagem/);
     expect(worldErrorText('unavailable', 'status')).toMatch(/manutenção/);
+    expect(worldErrorText('internal', 'character')).toBe('O servidor do mundo teve um erro; tente de novo.');
     for (const c of ['invalid_json', 'too_large', 'unsupported_media_type', 'method_not_allowed']) expect(worldErrorText(c, 'login')).toMatch(/formato/);
   });
 

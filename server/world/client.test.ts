@@ -140,6 +140,13 @@ describe('respostas copiadas campo a campo', () => {
     expect(parsePlayer({ name: 'Ana' })).toBeUndefined();
   });
 
+  it('parsePlayer: mustRename só quando é true (nome trocado à força pela moderação)', () => {
+    const base = { name: '???', look: 'm', parts: {}, traits: ['games', 'cafeina'], intro: 'vim', updatedAt: '' };
+    expect(parsePlayer({ ...base, mustRename: true })?.mustRename).toBe(true);
+    expect(parsePlayer({ ...base, mustRename: 'sim' })).not.toHaveProperty('mustRename');
+    expect(parsePlayer(base)).not.toHaveProperty('mustRename');
+  });
+
   it('parseMe exige conta com acesso conhecido', () => {
     expect(parseMe({ account: { emailMasked: 'a***@b.co', access: 'banned' }, devices: [] })).toBeUndefined();
     expect(parseMe({ account: { emailMasked: 'a***@b.co', access: 'approved', locale: 'xx' }, devices: [{ id: 'd1', current: true }, { id: '../x' }] })).toEqual({

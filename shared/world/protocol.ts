@@ -204,7 +204,7 @@ export const VISIBILITY_DEFAULTS: Readonly<Visibility> = {
   compactions: false,
 };
 
-/** `PUT /v1/me/player` → `200 Player`; `409 name_taken`; `422 name_invalid | name_blocked | invalid`. */
+/** `PUT /v1/me/player` → `200 Player`; `409 name_taken`; `422 name_invalid | name_blocked | name_cooldown | invalid`. */
 export interface PlayerInput {
   name: string;
   look: 'f' | 'm';
@@ -219,6 +219,11 @@ export interface Player extends PlayerInput {
   country?: string;
   visibility: Visibility;
   updatedAt: string;
+  /**
+   * A moderação trocou o nome à força (`name` vem `"???"`, só no `GET /v1/me`): o jogador escolhe um nome novo, que
+   * entra sem esperar os 30 dias da troca de nome.
+   */
+  mustRename?: true;
 }
 
 /** Dispositivo da conta (`label` é sempre "Dispositivo N", nunca o nome do computador). */
@@ -270,6 +275,7 @@ export const WORLD_ERROR_CODES = [
   'too_large', // corpo grande demais (413)
   'unsupported_media_type', // sem Content-Type: application/json (415)
   'method_not_allowed', // método errado para a rota (405)
+  'internal', // erro do próprio servidor do mundo (500)
 ] as const;
 export type WorldErrorCode = (typeof WORLD_ERROR_CODES)[number];
 

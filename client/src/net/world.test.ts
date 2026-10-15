@@ -129,6 +129,12 @@ describe('meta.world e status', () => {
     const s = parseWorldStatus({ state: 'approved', configured: true, player: { name: 'Pixel', look: 'm', parts: {}, traits: ['games', 'cafeina'], intro: 'coffee', visibility: { mode: 'discreet' } } });
     expect(s?.player?.visibility).toEqual({ mode: 'discreet', closed: false, hideCountry: false, tokensVisible: true, leaderboard: false, compactions: false });
   });
+
+  it('parseWorldStatus: mustRename só quando é true', () => {
+    const player = { name: '???', look: 'm', parts: {}, traits: ['games', 'cafeina'], intro: 'coffee' };
+    expect(parseWorldStatus({ state: 'approved', player: { ...player, mustRename: true } })?.player?.mustRename).toBe(true);
+    expect(parseWorldStatus({ state: 'approved', player: { ...player, mustRename: 1 } })?.player).not.toHaveProperty('mustRename');
+  });
 });
 
 describe('FakeWorldApi', () => {
@@ -145,6 +151,18 @@ describe('FakeWorldApi', () => {
     expect(st.ok && st.data.account).toEqual({ emailMasked: 'no***@exemplo.com', access: 'waiting' });
     api.approve();
     expect(api.meta().state).toBe('approved');
+  });
+
+  it('nome trocado à força: o status pede um nome novo e salvar o personagem resolve', async () => {
+    const api = fake({ state: 'approved' });
+    api.forceRename();
+    const before = await api.status();
+    expect(before.ok && before.data.player).toMatchObject({ name: '???', mustRename: true });
+    const p = before.ok ? before.data.player! : null;
+    expect((await api.saveCharacter({ name: 'Pixel Nova', look: p!.look, parts: p!.parts, traits: p!.traits, intro: p!.intro })).ok).toBe(true);
+    const after = await api.status();
+    expect(after.ok && after.data.player?.name).toBe('Pixel Nova');
+    expect(after.ok && after.data.player).not.toHaveProperty('mustRename');
   });
 
   it('login: credenciais erradas, e-mail sem confirmar, banido', async () => {

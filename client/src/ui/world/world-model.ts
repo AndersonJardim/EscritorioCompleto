@@ -385,8 +385,9 @@ export function worldErrorText(raw: WorldErrorCode | string, action: WorldAction
         default:
           return tr('O servidor recusou o pedido. Confira os dados e tente de novo.');
       }
-    case 'world_error':
     case 'internal':
+      return tr('O servidor do mundo teve um erro; tente de novo.');
+    case 'world_error':
     case 'unknown':
       return tr('Algo deu errado. Tente de novo em instantes.');
   }

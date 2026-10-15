@@ -24,7 +24,8 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
   editor de aparência da gaveta do agente, 2 ou 3 traços de personalidade (os que não combinam ficam desabilitados)
   e uma frase de apresentação da lista. Com o acesso liberado, "Seu prédio entra no mundo na próxima versão".
   Também: visibilidade do prédio (ao vivo ou discreto, fechado a visitas, esconder o país, tokens, placar,
-  compactações), dispositivos (revogar) e sair. Tudo só pelo próprio computador; nada pela porta remota do celular.
+  compactações), dispositivos (revogar) e sair. Se a moderação trocar o nome de jogador, a seção pede um nome novo,
+  que entra sem esperar os 30 dias. Tudo só pelo próprio computador; nada pela porta remota do celular.
   O cartão **Conheça o Habblaud World** aparece uma vez, para quem ainda não tem conta. No modo demonstração,
   `?mock=1&world=logged_out` (ou `waiting`, `approved`) simula o servidor; o código é 123456.
 - **Conta e personagem pelo servidor local:** rotas `/api/world/*` para criar a conta (o desafio anti-robô é resolvido

@@ -58,7 +58,7 @@ export interface WorldErrorResponse {
 /**
  * Códigos dados pelo próprio servidor local. Ele também usa, com o mesmo sentido, alguns de WORLD_ERROR_CODES (os do
  * servidor do mundo): invalid, invalid_code, password_invalid, name_invalid, name_blocked, invalid_json, too_large,
- * unsupported_media_type, method_not_allowed e not_found.
+ * unsupported_media_type, method_not_allowed, not_found e internal (500: erro do próprio servidor local).
  */
 export const WORLD_LOCAL_ERROR_CODES = [
   'not_configured', // 409: sem HABBLAUD_WORLD_URL
@@ -73,7 +73,6 @@ export const WORLD_LOCAL_ERROR_CODES = [
   'world_bad_response', // 502: resposta fora do formato
   'world_error', // erro do servidor do mundo sem código legível (mesmo status)
   'storage_failed', // em lastError: não deu para gravar world.json (a sessão vale só até reiniciar)
-  'internal', // 500
   'network', // em lastError: sem conexão com o servidor do mundo ou sem resposta no prazo
   'unknown', // em lastError: outro problema (resposta fora do formato, código que esta versão não conhece)
 ] as const;
@@ -93,6 +92,6 @@ export function isWorldKnownErrorCode(v: unknown): v is WorldKnownErrorCode {
  */
 export function worldLastError(code: string): WorldKnownErrorCode {
   if (code === 'world_unreachable' || code === 'world_timeout') return 'network';
-  if (code === 'world_bad_response' || code === 'world_error' || code === 'internal') return 'unknown';
+  if (code === 'world_bad_response' || code === 'world_error') return 'unknown';
   return isWorldKnownErrorCode(code) ? code : 'unknown';
 }

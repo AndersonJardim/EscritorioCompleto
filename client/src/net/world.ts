@@ -36,6 +36,8 @@ export interface WorldPlayer {
   country?: string;
   visibility: WorldVisibility;
   updatedAt?: number | string;
+  /** A moderação trocou o nome à força (o nome vem "???"): falta escolher um novo, que entra sem esperar 30 dias. */
+  mustRename?: true;
 }
 
 export interface WorldDevice {
@@ -126,6 +128,7 @@ export function parseWorldStatus(v: unknown): WorldStatus | null {
       look: p.look === 'm' ? 'm' : 'f',
       visibility: { ...DEFAULT_VISIBILITY, ...(isObject(p.visibility) ? (p.visibility as Partial<WorldVisibility>) : {}) },
     };
+    if (p.mustRename !== true) delete out.player.mustRename;
   }
   const devices = v.devices === undefined ? null : parseDevices(v.devices);
   if (devices) out.devices = devices;
@@ -321,6 +324,14 @@ export class FakeWorldApi implements WorldClient {
   /** A próxima chamada falha com este código (testes e demonstração). */
   failNext(code: WorldErrorCode): void {
     this.failures.push(code);
+  }
+
+  /** A moderação troca à força o nome do personagem da conta que está entrando (vira "???" até escolher outro). */
+  forceRename(): void {
+    const acc = this.current();
+    if (!acc?.player) return;
+    acc.player = { ...acc.player, name: '???', mustRename: true };
+    this.changed();
   }
 
   /** Libera da lista de espera a conta que está entrando (o painel do servidor faria isso por lote). */
