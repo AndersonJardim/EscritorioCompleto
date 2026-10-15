@@ -73,6 +73,20 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
 - **Transparência:** `docs/world/privacidade.md` lista cada campo do pacote e da conexão, com um teste que confere a
   página contra o `schema.json`; os testes da projeção conferem cada chave e que nenhum texto do escritório aparece no
   pacote. Os 60 nomes fictícios de andar ("Projeto Ipê", "Projeto Jade"...) ficam em `shared/world/`, traduzidos.
+- **A cidade pelo servidor local (Fase 3):** com a cena Mundo aberta no navegador, o Habblaud pede ao servidor do mundo
+  o pedaço da cidade em volta do seu personagem (`view`) pela mesma conexão do prédio e repassa ao navegador por
+  `GET /api/world/stream` (SSE: o estado inteiro ao abrir, depois cada mudança na ordem); fechada a cena, avisa
+  (`view.off`) e nada mais desce. Prédios por chunk com revisão (um salto pede a área de novo), jogadores por perto,
+  minimapa e a sua posição ficam só em memória. Os comandos do personagem (`POST /api/world/cmd`: andar, perfil e, nas
+  próximas fases, entrar, like, cumprimento, bloqueio e denúncia) são conferidos campo a campo, no máximo 5 lotes por
+  segundo e só o último passo de cada lote; no máximo 4 abas com a cidade. Só pelo próprio computador e só pela
+  própria página (nunca por outro site). O snapshot ganha `meta.world.scene` para a barra mostrar o botão Mundo, e o
+  modo demonstração tem uma cidade falsa (20 prédios, 5 pessoas andando). A geometria da cidade (lotes, quarteirões,
+  portas, chunks e o que é caminhável) fica em `shared/world/city.ts`, a mesma do servidor do mundo.
+- **Voltar ao mundo** (`POST /api/world/join`): depois de sair, o cartão pede a volta ao servidor do mundo
+  (`POST /v1/me/building/join`) antes de reconectar; o prédio volta novo, em outro lote. Sair do mundo em outro
+  computador também vale aqui: o pacote recusado (`left`) ou a conta marcada como fora do mundo deixam este Habblaud
+  fora do mundo, sem enviar nada, até **Voltar ao mundo**.
 
 ## [0.11.0] - 2026-10-13
 

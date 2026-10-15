@@ -26,6 +26,7 @@ Ao usar o World, sai do computador, por HTTPS, para o servidor do mundo:
 | Qual dispositivo desconectar | Ao desconectar um | Só o id que o próprio servidor deu ao dispositivo |
 | Pausar e retomar o prédio | Ao clicar em Pausar ou Retomar (`POST /v1/me/building/pause` e `/resume`, só com o token) | Para o prédio apagar na hora para todos e voltar quando você quiser |
 | Sair do mundo | Ao confirmar "Sair do mundo" (`DELETE /v1/me/building`, só com o token) | Para o prédio sair do mundo na hora e o lote ficar livre; a conta e o personagem continuam |
+| Voltar ao mundo | Ao clicar em "Voltar ao mundo" depois de sair (`POST /v1/me/building/join`, só com o token) | Para o servidor aceitar o prédio de novo (um prédio novo, em outro lote) |
 | Versão do Habblaud | Em toda chamada, no cabeçalho `User-Agent` (`Habblaud/0.11.0`) | Compatibilidade e diagnóstico |
 
 Enquanto a conta está na lista de espera, o Habblaud aberto pergunta ao servidor do mundo, a cada 30 minutos, se o
@@ -43,7 +44,11 @@ mundo e o seu prédio entra na cidade. Pela conexão sai **só** isto:
 | Primeira mensagem da conexão (`hello`) | O `token` do dispositivo, a `version` do Habblaud, o `build` (`commit` do código em uso e `dirty`, a marca de "cópia modificada") e o `locale` da interface (`pt-BR`, `en`, `es` ou `fr`) | Autenticar, saber se é uma versão oficial e mandar os avisos no seu idioma. O token vai só aqui, nunca na URL; o idioma não vai no pacote do prédio. Nunca o caminho da pasta nem nada da máquina |
 | O pacote do prédio | Ao conectar e, depois, quando o escritório muda: no máximo um a cada 5 segundos, e nada se o pacote não mudou | É o prédio ao vivo |
 | Sinal de vida (`ping`) | A cada 30 segundos, sem conteúdo | Para o prédio ficar aceso enquanto o Habblaud está aberto |
-| Comandos do seu personagem no mundo (próximas fases) | Andar, entrar e sair de prédios, like, cumprimento, perfil, bloqueio, denúncia | São seus no mundo, nunca do escritório |
+| Cena Mundo aberta ou fechada (`view` e `view.off`) | Ao abrir e ao fechar a cidade no navegador, sem conteúdo | Para o servidor mandar o pedaço da cidade em volta do seu personagem só enquanto você olha; com a cena fechada, nada desce |
+| Os passos do seu personagem (`move`) | Enquanto você anda na cidade (no máximo 5 por segundo): a posição na cidade (`x`, `y`, em tiles), a direção (`dir`: `n`, `s`, `e` ou `w`) e se está andando (`moving`) | É o seu personagem na rua; a posição é na cidade do mundo, nunca nada do escritório. Com a aba em segundo plano, um passo parado a cada 30 s |
+| Pedido de área de novo (`resync`) | Quando chega uma mudança de prédio fora de ordem: só o id do pedaço da cidade (`chunk`) | Para o seu Habblaud mostrar os prédios certos |
+| Pedido de perfil (`profile`) | Ao clicar em alguém na rua: só o id (`playerId`) que o próprio mundo deu a essa pessoa | Para mostrar o cartão de quem está perto |
+| Outros comandos do seu personagem (próximas fases) | Entrar e sair de prédios, like, cumprimento (da lista fixa), bloqueio, denúncia (motivo da lista fixa), sempre com os ids que o mundo deu | São seus no mundo, nunca do escritório |
 
 O pacote do prédio tem estes campos e mais nenhum (o formato exato está em
 [`shared/world/schema.json`](../../shared/world/schema.json); um teste confere que cada campo dele está nesta página):
@@ -158,8 +163,13 @@ exemplo). Quem não quiser nem isso usa o modo discreto ou pausa.
 - **Pausar** fecha a conexão do prédio antes de responder e avisa o servidor do mundo: o prédio apaga na hora para
   todos e o lote fica guardado. **Retomar** reabre (sem resposta do servidor, o Habblaud tenta avisar de novo).
 - **Sair do mundo** fecha a conexão do prédio e só responde depois que o servidor do mundo retira o prédio e libera
-  o lote. A conta e o personagem continuam; nada sai até você clicar em **Voltar ao mundo**, que cria um prédio novo,
-  em outro lote.
+  o lote. A conta e o personagem continuam; nada sai até você clicar em **Voltar ao mundo**, que pede a volta ao
+  servidor do mundo e cria um prédio novo, em outro lote. Se a conta sair do mundo em outro computador, este também
+  fica fora do mundo, sem enviar nada, até **Voltar ao mundo**.
+- **A cidade** (a cena Mundo) só desce com ela aberta no navegador: os prédios e as pessoas por perto que o servidor
+  do mundo manda ficam na memória do Habblaud e vão à página pelo `localhost`, nunca para o disco nem para os logs, e
+  são esquecidos ao fechar a cena ou cair a conexão. A cena só abre pela própria página do Habblaud, nunca por outro
+  site.
 - Tarefas concluídas e compactações são contadas na memória do Habblaud também com o prédio pausado ou sem conexão;
   só a faixa do dia (e o "compactou desde o pacote anterior") sai, na remessa seguinte.
 - **Sair** apaga o token deste computador e o desconecta no servidor. A lista de dispositivos mostra onde a conta está

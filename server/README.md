@@ -386,7 +386,9 @@ Em desenvolvimento e desligado por padrão (o que sai do computador: `docs/world
   (`shared/world/projection.ts`) e manda se mudou: 3 s desde a primeira mudança, no máximo uma remessa a cada 5 s.
   `{t: 'ping'}` a cada 30 s (sem resposta por 75 s, reconecta). Reconexão de 2 s a 60 s (dobra, ±25 %). `goodbye`:
   `deploy` reconecta; `banned`, `suspended`, `update` e `other-device` param até retomar (ou reabrir); `waiting`,
-  `no_player` e `unauthorized` param até a sessão mudar e avisam a conta (`service.goodbye`). A última remessa
+  `no_player` e `unauthorized` param até a sessão mudar e avisam a conta (`service.goodbye`). `uplink.ack {error:
+  'left'}` (a conta saiu do mundo, aqui ou em outro computador) e o `left: true` do `/v1/me` gravam `left` e `paused`
+  (`service.leftElsewhere`) e fecham a conexão até o join. A última remessa
   `{at, bytes, uplink, ack}` fica em memória e em `<dataDir>/world-last-uplink.json` (modo 600; só da mesma sessão,
   apagado ao sair). Avisa o snapshot (`markDirty`) ao conectar, cair, pausar, retomar e a cada ack. Tarefas e
   compactações (`signals.ts`) são observadas pelo mesmo `Office.onChange`, no máximo uma vez por segundo, com ou sem
@@ -405,17 +407,53 @@ Em desenvolvimento e desligado por padrão (o que sai do computador: `docs/world
   Do prédio: `PUT /api/world/theme` `{theme}` (com ou sem conta), `POST /api/world/pause` (fecha o uplink antes de
   responder e avisa `POST /v1/me/building/pause`), `POST /api/world/resume` (avisa `/resume` e reconecta),
   `POST /api/world/leave` ("Sair do mundo": grava `left` e `paused`, fecha o uplink e responde depois do
-  `DELETE /v1/me/building`; sem resposta boa, fica só pausado e devolve o erro) e
+  `DELETE /v1/me/building`; sem resposta boa, fica só pausado e devolve o erro), `POST /api/world/join` ("Voltar ao
+  mundo": `POST /v1/me/building/join` e, só com a resposta boa, tira `left` e `paused` e reabre o uplink; o 404 aqui
+  não conta como feito; o `/resume` fora do mundo passa por ele) e
   `GET /api/world/last-uplink` (`{at, bytes, uplink, ack?}` ou `{}`, sem a trava do terminal, como o status). O
   `GET /api/world/status` ganha `building` (conta aprovada com personagem) e `theme`; sem `?refresh=1` responde da
   memória e relê `/v1/me` em segundo plano quando venceu.
 
-O estado vai no snapshot em `meta.world` (`{enabled, configured, state, building?}`, nada da conta; `building` =
+O estado vai no snapshot em `meta.world` (`{enabled, configured, state, building?, scene?}`, nada da conta; `building` =
 `{connected, paused, floors, agents, lastUplinkAt?, left?, stopped?}`, com `stopped: true` sem o motivo, que só vai no
-status) e em `GET /api/access` (`world`). O build grava
+status; `scene` = `{available}` com a conta aprovada e o personagem, `available` com a trava do terminal: o botão
+Mundo da barra) e em `GET /api/access` (`world`). O build grava
 `dist/build.json` (`{commit, dirty, builtAt}`, `scripts/build-info.mjs`; sem git, `unknown`;
 `HABBLAUD_BUILD_COMMIT`/`HABBLAUD_BUILD_DIRTY` substituem o git), lido por `readBuildInfo()` (`build.ts`) a cada conexão
 do uplink: o `hello` leva só `{commit, dirty}`.
+
+### Cena do mundo: stream e comandos
+
+A cidade (Fase 3) desce pela mesma conexão do prédio e só com a cena Mundo aberta no navegador. `world/viewer.ts` é
+o "viewer"; o estado e as regras ficam em `shared/world/scene.ts` (puro, o navegador pode usar o mesmo), e a geometria
+em `shared/world/city.ts` (fonte da verdade; o servidor do mundo guarda a cópia exata).
+
+- `GET /api/world/stream` (SSE, as mesmas travas das rotas da conta, e só pela própria página: `Origin` de outro host
+  ou `Sec-Fetch-Site` cross-site/same-site recebem 403 `local_only`). No máximo 4 abertos (429 `too_many_streams`).
+  Eventos: `world.snapshot` (`WorldSceneSnapshot` de `shared/world/api.ts`: `{stream, connected, viewing, district?,
+  me?, pos?, afk, chunks: [{chunk, rev, buildings}], players, minimap}`) ao conectar e a cada recomeço (conexão aberta
+  ou caída, `view` de novo): o navegador troca o estado inteiro; depois `world` com cada mensagem da cidade como veio
+  (`area`, `area.patch`, `players`, `player.join`, `player.leave`, `pos`, `minimap`, `afk`, `profile`, `notice`,
+  `like.update`, `greeting`, `building`, `building.patch`), na ordem e já sem salto de `rev`; `: ping` a cada 15 s.
+  Cliente com mais de 1 MB acumulado é desconectado (o EventSource reconecta).
+- O primeiro stream (com a conexão aceita) manda `view`; o último que fecha manda `view.off`. A cada `welcome` com
+  stream aberto, `view` de novo; a cada queda, a cidade daqui é esquecida e sai um snapshot com `connected: false`.
+  Pausado ou fora do mundo, a conexão fica fechada e a cena não recebe nada.
+- Regras do estado: `area` substitui o chunk e o `rev` (mesmo menor); `area.patch` só com `rev` = último + 1 (item
+  com `lot` substitui o prédio, sem `lot` mescla, `removed` tira); salto, chunk desconhecido ou item parcial de prédio
+  que não está aqui pedem `resync {chunk}` (no máximo um a cada 5 s por chunk) e o patch não passa; ficam só os 3×3
+  chunks em volta da minha posição (o último `pos`, o meu id num `players` ou o último `move`); `players` só mexe em
+  quem já está (por id); `player.join` substitui o perfil; `afk` vale até andar ou virar, `view` ou `profile`. Tudo só
+  em memória, nada no log.
+- `POST /api/world/cmd` `{stream, cmds}` → `202 {sent}`: 1 a 20 comandos, só `move`, `profile`, `resync`, `view`,
+  `view.off`, `enter`, `leave`, `like`, `unlike`, `greet`, `block`, `unblock` e `report`, refeitos campo a campo
+  (`parseSceneCommand`; `hello`, `uplink` e `ping` nunca: 400 `invalid`); de cada lote só o último `move`. Até 5 lotes
+  por segundo por stream (balde de 5, recarga de 5/s: um lote a cada 200 ms nunca é recusado; 429 `rate_limited` com
+  `Retry-After: 1`). Stream que não está aberto: 409 `no_stream`; sem a conexão: 409 `not_connected`. `view` e
+  `view.off` dizem se aquele stream quer a cidade (o viewer decide o que vai ao mundo; `view` com a cidade aberta
+  recomeça tudo).
+- No navegador, `client/src/net/world-stream.ts`: `createWorldStream({mock})` com `on`, `send` (fila e um lote a cada
+  200 ms) e `close`; no modo demonstração, `FakeWorldStream` (20 prédios, 5 pessoas andando nas calçadas, minimapa).
 
 ## Variáveis de ambiente
 

@@ -31,6 +31,7 @@ navegador ──/api/world/*──▶ servidor local do Habblaud ──HTTPS /v1
 | --- | --- |
 | `protocol.ts` | **Fonte da verdade** do protocolo: rotas REST da conta, mensagens do WebSocket, o pacote do prédio (`WorldUplink`) e as listas fixas (traços, frases, cumprimentos, idiomas). Sem imports: o servidor do mundo guarda uma cópia exata. |
 | `city.ts` | **Fonte da verdade** da geometria da cidade (Fase 3): lotes, quarteirões, a espiral, portas, chunks e o que é caminhável, em tiles. Puro e sem imports: o servidor do mundo guarda uma cópia exata (`protocol/city.ts`) e usa as mesmas contas para validar quem anda. |
+| `scene.ts` | A cena Mundo (Fase 3): o estado da cidade que desce (`SceneState`: `rev` por chunk, resync no salto, prédios mesclados ou substituídos, jogadores por id, a minha posição) e os comandos que sobem, refeitos campo a campo (`parseSceneCommand`). Os tipos do stream local estão em `api.ts`. |
 | `schema.json` | O JSON Schema do `WorldUplink`, estrito (`additionalProperties: false`). O servidor valida cada pacote com ele. |
 | `api.ts` | Tipos e códigos de erro das rotas locais `/api/world/*` (o que a interface usa). |
 | `traits.ts`, `intro.ts` | Rótulos traduzidos (`tr()`) dos traços de personalidade e das frases de apresentação. |
@@ -39,7 +40,7 @@ navegador ──/api/world/*──▶ servidor local do Habblaud ──HTTPS /v1
 | `appearance-flat.ts` | O sorteio da aparência (`appearanceFromSeed`, o mesmo do escritório) e `flattenAppearance` (as 13 peças, sem a semente). |
 | `floor-names.ts`, `floor-labels.ts` | Os 60 nomes fictícios de andar (`ipe`, `jade`, `aurora`...; o servidor guarda a cópia exata) e os rótulos `tr()` ("Projeto Ipê"). |
 | `schema-validator.ts` | Validador mínimo do `schema.json` e a lista de chaves dele, para os testes (o servidor usa o Ajv). |
-| `server/world/` | `settings.ts` (world.json), `client.ts` (HTTP do servidor do mundo), `altcha.ts` (desafio anti-robô), `service.ts` (a conta), `http.ts` (as rotas locais), `uplink.ts` (o WebSocket do prédio), `ids.ts` (ids aleatórios do mundo), `tokens.ts`, `theme.ts` e `signals.ts`. |
+| `server/world/` | `settings.ts` (world.json), `client.ts` (HTTP do servidor do mundo), `altcha.ts` (desafio anti-robô), `service.ts` (a conta), `http.ts` (as rotas locais), `uplink.ts` (o WebSocket do prédio), `viewer.ts` (a cena Mundo: a cidade pelo mesmo WebSocket, o SSE e os comandos do jogador), `ids.ts` (ids aleatórios do mundo), `tokens.ts`, `theme.ts` e `signals.ts`. |
 
 ## Regras para mudar
 
