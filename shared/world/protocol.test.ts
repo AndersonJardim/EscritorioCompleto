@@ -18,6 +18,9 @@ import {
   NOTICE_IDS,
   PLAYER_NAME_LIMITS,
   REPORT_REASONS,
+  STAMP_IDS,
+  CITY_GOAL_IDS,
+  VISIBILITY_DEFAULTS,
   TOP_STYLES,
   TRAIT_CLASHES,
   TRAIT_IDS,
@@ -214,9 +217,20 @@ describe('listas do protocolo', () => {
   it('Fase 3: os ids dos avisos (o `text` do notice) e o `left` do ack, só acrescentados', () => {
     expect([...NOTICE_IDS]).toEqual([
       'ignored', 'invalid', 'rate_limited', 'view_required', 'not_found', 'street_left', 'chunk_full', 'afk', 'server_restart', 'left',
+      'too_far', 'closed', 'blocked', 'full', 'daily_limit', 'already_done',
     ]);
     for (const id of NOTICE_IDS) expect(id).toMatch(/^[a-z]+(_[a-z]+)*$/);
     // Os códigos da Fase 2 continuam na mesma ordem; `left` entra no fim.
     expect([...UPLINK_ACK_ERRORS]).toEqual(['schema', 'limits', 'name_pool', 'parts', 'ids', 'rate', 'internal', 'left']);
+  });
+
+  it('Fase 5: 8 carimbos, 3 metas da cidade, os 6 motivos de denúncia e "bater na porta" desligado por padrão', () => {
+    const unique = (l: readonly string[]) => new Set(l).size === l.length;
+    expect([...STAMP_IDS]).toEqual(['visited', 'nice_building', 'keep_going', 'coffee', 'wave', 'star', 'heart', 'rocket']);
+    expect([...CITY_GOAL_IDS]).toEqual(['agent_hours_10k', 'agent_hours_50k', 'agent_hours_100k']);
+    expect([...REPORT_REASONS]).toEqual(['offensive_name', 'impersonation', 'harassment', 'greeting_spam', 'fake_building', 'other']);
+    for (const l of [STAMP_IDS, CITY_GOAL_IDS]) expect(unique(l)).toBe(true);
+    for (const id of [...STAMP_IDS, ...CITY_GOAL_IDS]) expect(id).toMatch(/^[a-z0-9]+(_[a-z0-9]+)*$/);
+    expect(VISIBILITY_DEFAULTS.knocks).toBe(false);
   });
 });

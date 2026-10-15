@@ -222,3 +222,65 @@ describe('comandos da cena', () => {
     expect(reduceSceneBatch([m(1), { t: 'view' }])).toEqual([m(1), { t: 'view' }]);
   });
 });
+
+describe('social leve (Fase 5)', () => {
+  it('comandos novos refeitos campo a campo: carimbo da lista, código só no formato, bater na porta, resumo visto', () => {
+    expect(parseSceneCommand({ t: 'stamp', buildingId: 'b1', stampId: 'rocket', x: 1 })).toEqual({ t: 'stamp', buildingId: 'b1', stampId: 'rocket' });
+    expect(parseSceneCommand({ t: 'teleport' })).toEqual({ t: 'teleport' });
+    expect(parseSceneCommand({ t: 'teleport', code: 'hb-4f2k' })).toEqual({ t: 'teleport', code: 'hb-4f2k' });
+    expect(parseSceneCommand({ t: 'knock', buildingId: 'b1' })).toEqual({ t: 'knock', buildingId: 'b1' });
+    expect(parseSceneCommand({ t: 'summary.seen', since: 'x' })).toEqual({ t: 'summary.seen' });
+    for (const b of [
+      { t: 'stamp', buildingId: 'b1', stampId: 'texto livre' },
+      { t: 'stamp', stampId: 'star' },
+      { t: 'teleport', code: 'HB-4F2K-MUITO-LONGO-DEMAIS' },
+      { t: 'teleport', code: '<script>' },
+      { t: 'teleport', code: 7 },
+      { t: 'knock', buildingId: '' },
+    ]) expect(parseSceneCommand(b), JSON.stringify(b)).toBeNull();
+  });
+
+  it('city fica guardado e vai no snapshot (campo a campo); fogos passam; o que está torto não', () => {
+    const { s } = fresh();
+    const city = { t: 'city', lit: 42, goal: { id: '2026-10-12:agent_hours_10k', label: 'agent_hours_10k', target: 10000, progress: 8000, until: 1 }, tokensBand: 4, extra: 'x' };
+    expect(s.apply(city)).toEqual({ forward: true });
+    expect(s.snapshot().city).toEqual({ lit: 42, goal: { id: '2026-10-12:agent_hours_10k', label: 'agent_hours_10k', target: 10000, progress: 8000, until: 1 }, tokensBand: 4 });
+    // meta de id desconhecido ou faixa fora de 0..5: só o que vale fica
+    expect(s.apply({ t: 'city', lit: 3, goal: { id: 'x', label: 'agent_hours_1', target: 1, progress: 0, until: 0 }, tokensBand: 9 })).toEqual({ forward: true });
+    expect(s.city).toEqual({ lit: 3 });
+    expect(s.apply({ t: 'city', lit: -1 }).forward).toBe(false);
+    expect(s.apply({ t: 'city.fireworks', goalId: '2026-10-12:agent_hours_10k' }).forward).toBe(true);
+    expect(s.apply({ t: 'city.fireworks' }).forward).toBe(false);
+    // ao desligar a cidade (clear), o city some: o servidor manda outro ao abrir de novo
+    s.clear();
+    expect(s.snapshot().city).toBeUndefined();
+  });
+
+  it('likes do dia e resumo: guardados até a próxima conexão; summary.seen tira o resumo; knock passa', () => {
+    const { s } = fresh();
+    expect(s.apply({ t: 'likes.today', count: 3 })).toEqual({ forward: true });
+    expect(s.apply({ t: 'likes.today', count: -2 }).forward).toBe(false);
+    const sum = { t: 'away.summary', since: '2026-10-14', visits: 5, likes: 12, stamps: [{ stampId: 'star', count: 2 }, { stampId: 'xx', count: 1 }, { stampId: 'star', count: 9 }] };
+    expect(s.apply(sum)).toEqual({ forward: true });
+    expect(s.snapshot()).toMatchObject({ likesToday: 3, summary: { since: '2026-10-14', visits: 5, likes: 12, stamps: [{ stampId: 'star', count: 2 }] } });
+    expect(s.apply({ t: 'away.summary', since: 'ontem', visits: 1, likes: 0, stamps: [] }).forward).toBe(false);
+    expect(s.apply({ t: 'knock' })).toEqual({ forward: true });
+    s.clear();
+    expect(s.likesToday).toBe(3);
+    s.noteCommand({ t: 'summary.seen' });
+    expect(s.summary).toBeUndefined();
+    s.apply({ t: 'away.summary', since: '2026-10-14', visits: 1, likes: 0, stamps: [] });
+    s.welcome(WELCOME);
+    expect(s.likesToday).toBeUndefined();
+    expect(s.summary).toBeUndefined();
+  });
+
+  it('curtir, cumprimentar, carimbar, bater e ir até um prédio tiram o afk', () => {
+    const { s } = fresh();
+    for (const cmd of [{ t: 'like', buildingId: 'b' }, { t: 'greet', playerId: 'p', greetingId: 'wave' }, { t: 'stamp', buildingId: 'b', stampId: 'star' }, { t: 'knock', buildingId: 'b' }, { t: 'teleport' }] as const) {
+      s.apply({ t: 'afk' });
+      s.noteCommand(cmd);
+      expect(s.afk, cmd.t).toBe(false);
+    }
+  });
+});

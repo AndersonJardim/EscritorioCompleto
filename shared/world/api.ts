@@ -29,6 +29,14 @@
 //                                                resume)
 //   GET  /api/world/last-uplink              → WorldLastUplink | {} (o que foi enviado por último, exato)
 //
+// O social leve (Fase 5; server/world/social.ts), pela conexão do prédio, com a cena Mundo aberta ou não:
+//   POST /api/world/summary/seen             {} → 204 (manda ↑ `summary.seen`: o dono viu "Enquanto você estava fora";
+//                                                409 not_connected sem a conexão com o mundo)
+//   POST /api/world/unblock                  {playerId} → 204 (manda ↑ `unblock`; tira da lista de bloqueados daqui
+//                                                na hora e relê /v1/me; 409 not_connected sem a conexão)
+// O código do prédio ("Ir para HB-XXXX") vai direto no ↑ `teleport {code}` da cena: a rota GET /v1/buildings/:code do
+// protocolo (BuildingCodeResponse) não é usada pela página.
+//
 // A cena Mundo (Fase 3; server/world/viewer.ts), com as mesmas travas e sem a porta do celular:
 //   GET  /api/world/stream                   → text/event-stream: `world.snapshot` (WorldSceneSnapshot) ao conectar e
 //                                                a cada recomeço (conexão com o mundo aberta ou caída, `view` de
@@ -48,6 +56,16 @@ import {
   type AppearanceParts,
   type AreaMessage,
   type AreaPatchMessage,
+  type AwaySummary,
+  type AwaySummaryMessage,
+  type CityFireworksMessage,
+  type CityStatusMessage,
+  type KnockedMessage,
+  type KnockMessage,
+  type LikesTodayMessage,
+  type StampMessage,
+  type SummarySeenMessage,
+  type TeleportMessage,
   type BlockMessage,
   type BuildingMessage,
   type BuildingPatchMessage,
@@ -141,6 +159,14 @@ export interface WorldBuildingStatus {
   stopped?: WorldBuildingStop;
   /** Saiu do mundo (POST /api/world/leave): o prédio foi retirado e nenhum pacote sai até o join (prédio novo, lote novo). */
   left?: true;
+  /** Likes recebidos hoje (veja WorldBuildingMeta.likesToday). */
+  likesToday?: number;
+  /** Batidas na porta desde que este Habblaud abriu (veja WorldBuildingMeta.knocks). */
+  knocks?: number;
+  /** "Enquanto você estava fora" ainda não visto (↓ `away.summary` ou /v1/me): visitas, likes e carimbos, sem quem. */
+  summary?: AwaySummary;
+  /** O código do prédio ("HB-4F2K", do /v1/me), para mandar a um amigo. */
+  code?: string;
 }
 
 /** OfficeSnapshot.meta.world.building: o resumo do prédio (sem a conta), para a interface mostrar sem pedir o status. */
@@ -154,6 +180,15 @@ export interface WorldBuildingMeta {
   left?: true;
   /** O servidor do mundo parou o prédio (`goodbye`); o motivo só vai no status, que não chega ao celular. */
   stopped?: true;
+  /** Likes recebidos hoje (↓ `likes.today` ou /v1/me; Fase 5): o chip "❤️ 3 hoje" da barra. */
+  likesToday?: number;
+  /**
+   * Batidas na porta desde que este Habblaud abriu (↓ `knock {}`, sem nome; só com `knocks` ligado na visibilidade):
+   * a página mostra o aviso quando o número sobe.
+   */
+  knocks?: number;
+  /** Há um "Enquanto você estava fora" ainda não visto (o resumo em si só vai no status, que não chega ao celular). */
+  awaySummary?: true;
 }
 
 /** GET /api/world/last-uplink ("Ver o que foi enviado"): o pacote exato da última remessa, os bytes e a resposta. */
@@ -198,6 +233,7 @@ export interface WorldSceneMeta {
 /** Os comandos que o navegador pode mandar em POST /api/world/cmd (nada do prédio: hello, uplink e ping nunca). */
 export const WORLD_SCENE_COMMANDS = [
   'move', 'profile', 'resync', 'view', 'view.off', 'enter', 'leave', 'like', 'unlike', 'greet', 'block', 'unblock', 'report',
+  'stamp', 'teleport', 'knock', 'summary.seen',
 ] as const;
 export type WorldSceneCommand =
   | MoveMessage
@@ -210,7 +246,11 @@ export type WorldSceneCommand =
   | LikeMessage
   | GreetMessage
   | BlockMessage
-  | ReportMessage;
+  | ReportMessage
+  | StampMessage
+  | TeleportMessage
+  | KnockMessage
+  | SummarySeenMessage;
 
 /** Comandos por lote (POST /api/world/cmd) e lotes por segundo por stream. */
 export const WORLD_SCENE_LIMITS = { cmdsPerBatch: 20, batchesPerSec: 5, streams: 4 } as const;
@@ -233,12 +273,21 @@ export type WorldSceneMessage =
   | LikeUpdateMessage
   | GreetingMessage
   | BuildingMessage
-  | BuildingPatchMessage;
+  | BuildingPatchMessage
+  | CityStatusMessage
+  | CityFireworksMessage
+  | LikesTodayMessage
+  | AwaySummaryMessage
+  | KnockedMessage;
 
 export const WORLD_SCENE_MESSAGES = [
   'area', 'area.patch', 'players', 'player.join', 'player.leave', 'pos', 'minimap', 'afk', 'profile', 'notice', 'like.update',
   'greeting', 'building', 'building.patch',
+  'city', 'city.fireworks', 'likes.today', 'away.summary', 'knock',
 ] as const satisfies readonly WorldSceneMessage['t'][];
+
+/** A cidade (↓ `city`, Fase 5): prédios acesos, a meta da semana e a faixa dos tokens (as duas só com 10 prédios ou mais). */
+export type WorldSceneCity = Omit<CityStatusMessage, 't'>;
 
 /** Eu na cena: o jogador desta conta (do `welcome`), sem as opções de visibilidade. */
 export interface WorldSceneMe {
@@ -284,6 +333,12 @@ export interface WorldSceneSnapshot {
   players: WorldPlayerPublic[];
   /** O minimapa (prédios acesos por quarteirão), ou null antes do primeiro. */
   minimap: MinimapMessage['blocks'] | null;
+  /** O último `city` (Fase 5): o servidor do mundo manda um ao abrir a cena e depois um por minuto. */
+  city?: WorldSceneCity;
+  /** Likes recebidos hoje pelo meu prédio (último ↓ `likes.today` desta conexão). */
+  likesToday?: number;
+  /** O último "Enquanto você estava fora" desta conexão, até o `summary.seen`. */
+  summary?: AwaySummary;
 }
 
 /** GET /api/world/status (e a resposta de verify, login e logout). */
@@ -301,6 +356,14 @@ export interface WorldStatus {
   building?: WorldBuildingStatus;
   /** Tema guardado para o prédio (PUT /api/world/theme); ausente = 'auto'. */
   theme?: WorldThemeChoice;
+  /** Quem esta conta bloqueou (/v1/me; Fase 5): Configurações › Habblaud World › Bloqueados. */
+  blocked?: WorldBlockedPlayer[];
+}
+
+/** Um jogador bloqueado (só o id que o mundo deu e o nome). */
+export interface WorldBlockedPlayer {
+  id: string;
+  name: string;
 }
 
 export interface WorldErrorResponse {

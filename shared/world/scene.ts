@@ -29,18 +29,30 @@
 //   * `pos` é a minha posição absoluta: o nascimento (decidido pelo servidor no primeiro `view`) e cada correção.
 //   * `afk` vale até um comando de verdade: andar ou virar, `view`, `profile`.
 //   * Os comandos do navegador são refeitos campo a campo (`parseSceneCommand`): nada além do formato do protocolo sobe.
+// O social leve (Fase 5):
+//   * `city` (a cada minuto e ao abrir a cena) fica guardado e vai no snapshot; `city.fireworks` passa como veio.
+//   * `likes.today`, `away.summary` e `knock` chegam pela conexão do dono (também com a cena fechada: quem guarda para a
+//     interface é server/world/social.ts); com a cena aberta, passam ao navegador e os dois primeiros ficam no estado
+//     até a próxima conexão (`summary.seen` mandado daqui tira o resumo).
 import { blockAt, chunkId, chunkOf, chunksAround, parseChunkId } from './city';
 import {
   WORLD_SCENE_COMMANDS,
   type WorldSceneChunk,
+  type WorldSceneCity,
   type WorldSceneCommand,
   type WorldSceneMe,
   type WorldSceneSnapshot,
 } from './api';
 import {
+  CITY_GOAL_IDS,
   GREETING_IDS,
   REPORT_REASONS,
+  STAMP_IDS,
   type AppearanceParts,
+  type AwaySummary,
+  type CityGoalId,
+  type StampId,
+  type TokenBand,
   type Direction,
   type GreetingId,
   type IntroId,
@@ -70,6 +82,39 @@ const DIRS: readonly Direction[] = ['n', 's', 'e', 'w'];
 const isDir = (v: unknown): v is Direction => typeof v === 'string' && (DIRS as readonly string[]).includes(v);
 /** Id opaco do servidor do mundo (jogador, prédio, chunk): texto ASCII visível, de 1 a 64. */
 const isId = (v: unknown): v is string => typeof v === 'string' && /^[\x21-\x7e]{1,64}$/.test(v);
+/** Contagem: inteiro de 0 a 1 bilhão. */
+const isCount = (v: unknown): v is number => isNum(v) && Number.isInteger(v) && v >= 0 && v <= 1e9;
+/** Código de prédio como alguém digitou ("HB-4F2K", "hb 4f2k"): o servidor do mundo normaliza; aqui, só o formato. */
+const CODE_TYPED = /^[A-Za-z0-9 _-]{1,16}$/;
+
+/** `city` do servidor do mundo, refeito campo a campo (sem `t`); undefined se está fora do formato. */
+export function parseCityStatus(v: unknown): WorldSceneCity | undefined {
+  if (!isObj(v) || !isCount(v.lit)) return undefined;
+  const out: WorldSceneCity = { lit: v.lit };
+  const g = v.goal;
+  if (isObj(g) && typeof g.id === 'string' && g.id.length <= 64 && (CITY_GOAL_IDS as readonly unknown[]).includes(g.label) && isNum(g.target) && g.target > 0 && isNum(g.progress) && g.progress >= 0 && isNum(g.until)) {
+    out.goal = { id: g.id, label: g.label as CityGoalId, target: g.target, progress: g.progress, until: g.until };
+  }
+  if (isNum(v.tokensBand) && Number.isInteger(v.tokensBand) && v.tokensBand >= 0 && v.tokensBand <= 5) out.tokensBand = v.tokensBand as TokenBand;
+  return out;
+}
+
+/** "Enquanto você estava fora" (↓ `away.summary` ou o `building.summary` do /v1/me), campo a campo; undefined se torto. */
+export function parseAwaySummary(v: unknown): AwaySummary | undefined {
+  if (!isObj(v) || typeof v.since !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v.since) || !isCount(v.visits) || !isCount(v.likes)) return undefined;
+  const stamps: AwaySummary['stamps'] = [];
+  for (const st of Array.isArray(v.stamps) ? v.stamps : []) {
+    if (!isObj(st) || !(STAMP_IDS as readonly unknown[]).includes(st.stampId) || !isCount(st.count) || st.count === 0) continue;
+    if (stamps.some((x) => x.stampId === st.stampId)) continue;
+    stamps.push({ stampId: st.stampId as StampId, count: st.count });
+  }
+  return { since: v.since, visits: v.visits, likes: v.likes, stamps };
+}
+
+/** O resumo tem alguma novidade (uma visita, um like ou um carimbo)? */
+export function summaryHasNews(s: AwaySummary | undefined): boolean {
+  return !!s && (s.visits > 0 || s.likes > 0 || s.stamps.some((x) => x.count > 0));
+}
 
 function position(v: unknown): WorldPosition | undefined {
   if (!isObj(v) || !isNum(v.x) || !isNum(v.y)) return undefined;
@@ -112,10 +157,23 @@ export function parseSceneCommand(v: unknown): WorldSceneCommand | null {
     case 'report':
       if (!isId(v.playerId) || !(REPORT_REASONS as readonly unknown[]).includes(v.reason)) return null;
       return { t: 'report', playerId: v.playerId, reason: v.reason as (typeof REPORT_REASONS)[number] };
+    case 'stamp':
+      if (!isId(v.buildingId) || !(STAMP_IDS as readonly unknown[]).includes(v.stampId)) return null;
+      return { t: 'stamp', buildingId: v.buildingId, stampId: v.stampId as StampId };
+    case 'teleport':
+      if (v.code === undefined) return { t: 'teleport' };
+      return typeof v.code === 'string' && CODE_TYPED.test(v.code) ? { t: 'teleport', code: v.code } : null;
+    case 'knock':
+      return isId(v.buildingId) ? { t: 'knock', buildingId: v.buildingId } : null;
+    case 'summary.seen':
+      return { t: 'summary.seen' };
     default:
       return null;
   }
 }
+
+/** Comandos do social leve que tiram o `afk` (o servidor do mundo os conta como atividade). */
+const SOCIAL_ACTIVE: ReadonlySet<string> = new Set(['like', 'unlike', 'greet', 'stamp', 'knock', 'teleport']);
 
 /** De um lote, só o último `move` vai (no lugar dele); o resto, na ordem. */
 export function reduceSceneBatch(cmds: readonly WorldSceneCommand[]): WorldSceneCommand[] {
@@ -157,6 +215,11 @@ export class SceneState {
   pos?: WorldPosition;
   afk = false;
   minimap: WorldSceneSnapshot['minimap'] = null;
+  /** O último `city` (Fase 5). */
+  city?: WorldSceneCity;
+  /** Likes de hoje do meu prédio e o resumo "enquanto você estava fora" (conexão do dono; Fase 5). */
+  likesToday?: number;
+  summary?: AwaySummary;
   private readonly chunks = new Map<string, ChunkState>();
   private readonly players = new Map<string, WorldPlayerPublic>();
   private readonly resyncAt = new Map<string, number>();
@@ -172,6 +235,9 @@ export class SceneState {
     s.pos = c.pos;
     s.afk = c.afk;
     s.minimap = c.minimap;
+    if (c.city) s.city = c.city;
+    if (c.likesToday !== undefined) s.likesToday = c.likesToday;
+    if (c.summary) s.summary = c.summary;
     for (const ch of c.chunks) s.chunks.set(ch.chunk, { rev: ch.rev, buildings: new Map(ch.buildings.map((b) => [b.id, b])) });
     for (const p of c.players) s.players.set(p.id, p);
     return s;
@@ -180,6 +246,9 @@ export class SceneState {
   /** Conexão nova (`welcome`): quem sou eu e o distrito; a cidade começa vazia. */
   welcome(msg: Obj): void {
     this.clear();
+    // Conexão nova: o servidor manda de novo os likes do dia e o resumo, se houver.
+    this.likesToday = undefined;
+    this.summary = undefined;
     this.me = sceneMeFrom(msg);
     const city = isObj(msg.city) ? msg.city : undefined;
     const d = Array.isArray(city?.districts) ? city.districts[0] : undefined;
@@ -194,6 +263,7 @@ export class SceneState {
     this.minimap = null;
     this.pos = undefined;
     this.afk = false;
+    this.city = undefined;
   }
 
   /** O prédio pelo id, em qualquer chunk guardado. */
@@ -294,6 +364,26 @@ export class SceneState {
       }
       case 'notice':
         return { forward: typeof msg.text === 'string' };
+      case 'city': {
+        const city = parseCityStatus(msg);
+        if (!city) return { forward: false };
+        this.city = city;
+        return { forward: true };
+      }
+      case 'city.fireworks':
+        return { forward: typeof msg.goalId === 'string' && msg.goalId.length <= 64 };
+      case 'likes.today':
+        if (!isCount(msg.count)) return { forward: false };
+        this.likesToday = msg.count;
+        return { forward: true };
+      case 'away.summary': {
+        const summary = parseAwaySummary(msg);
+        if (!summary) return { forward: false };
+        this.summary = summary;
+        return { forward: true };
+      }
+      case 'knock':
+        return { forward: true };
       case 'building':
       case 'building.patch':
         return { forward: true };
@@ -311,6 +401,11 @@ export class SceneState {
       this.setPos({ x: cmd.x, y: cmd.y, dir: cmd.dir, moving: cmd.moving });
     } else if (cmd.t === 'view' || cmd.t === 'profile') {
       this.afk = false;
+    } else if (cmd.t === 'summary.seen') {
+      this.summary = undefined;
+    } else if (SOCIAL_ACTIVE.has(cmd.t)) {
+      // curtir, cumprimentar, carimbar, bater na porta e ir até um prédio contam como comando de verdade
+      this.afk = false;
     }
   }
 
@@ -327,6 +422,9 @@ export class SceneState {
       chunks,
       players: [...this.players.values()],
       minimap: this.minimap,
+      ...(this.city ? { city: this.city } : {}),
+      ...(this.likesToday !== undefined ? { likesToday: this.likesToday } : {}),
+      ...(this.summary ? { summary: this.summary } : {}),
     });
   }
 

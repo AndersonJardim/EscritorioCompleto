@@ -29,6 +29,18 @@ export function noticeText(raw: NoticeId | (string & {})): string | null {
       return tr('O Habblaud World vai reiniciar: a conexão cai e volta sozinha.');
     case 'left':
       return tr('Sua conta saiu do mundo: o prédio volta com "Voltar ao mundo", em Configurações.');
+    case 'too_far':
+      return tr('Chegue mais perto da porta para entrar.');
+    case 'closed':
+      return tr('Este prédio está fechado a visitas.');
+    case 'blocked':
+      return tr('Você não pode entrar neste prédio.');
+    case 'full':
+      return tr('O prédio está lotado (20 visitantes). Tente daqui a pouco.');
+    case 'daily_limit':
+      return tr('Limite do dia atingido: amanhã tem mais.');
+    case 'already_done':
+      return tr('Você já fez isso hoje.');
     default:
       void (id satisfies never);
       return tr('Aviso do Habblaud World.');
