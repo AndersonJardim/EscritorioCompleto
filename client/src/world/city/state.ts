@@ -88,7 +88,9 @@ export class CityState {
     this.district = typeof snap.district === 'string' ? snap.district : undefined;
     if (snap.me) {
       this.me = snap.me;
-      this.myBuildingId = snap.me.buildingId ?? null;
+      // O id do prédio é o id opaco do dono (protocolo): sem `buildingId` no `welcome` (o prédio nasceu da primeira
+      // remessa, depois dele), o meu prédio é o que tem o meu id.
+      this.myBuildingId = snap.me.buildingId ?? snap.me.id;
     }
     const pos = readPosition(snap.pos);
     if (pos) this.startPos = { x: pos.x, y: pos.y };

@@ -31,6 +31,12 @@ describe('snapshot do servidor local (WorldSceneSnapshot)', () => {
     expect(s.connected).toBe(false);
   });
 
+  it('sem `buildingId` no welcome (o prédio nasceu depois dele), o meu prédio é o que tem o meu id', () => {
+    const s = new CityState();
+    s.applySnapshot(snap({ chunks: [{ chunk: 'centro:0,0', rev: 1, buildings: [building('p_me', 3, 0), building('a', 4, 0)] }] }), 0);
+    expect(s.myBuilding()?.lot).toMatchObject({ x: 3, y: 0 });
+  });
+
   it('um snapshot novo troca o estado inteiro (reconexão): quem não veio sai', () => {
     const s = new CityState();
     s.applySnapshot(snap({ chunks: [{ chunk: 'c', rev: 1, buildings: [building('a', 3, 0)] }], players: [player('x', 1, 1)] }), 0);
