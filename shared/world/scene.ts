@@ -38,8 +38,9 @@
 // O social leve (Fase 5):
 //   * `city` (a cada minuto e ao abrir a cena) fica guardado e vai no snapshot; `city.fireworks` passa como veio.
 //   * `likes.today`, `away.summary` e `knock` chegam pela conexão do dono (também com a cena fechada: quem guarda para a
-//     interface é server/world/social.ts); com a cena aberta, passam ao navegador e os dois primeiros ficam no estado
-//     até a próxima conexão (`summary.seen` mandado daqui tira o resumo).
+//     interface é server/world/social.ts); os dois primeiros ficam no estado até a próxima conexão, mesmo com a cena
+//     fechada (server/world/viewer.ts), e vão no snapshot da cena que abrir (`summary.seen` mandado daqui tira o
+//     resumo); com a cena aberta, passam ao navegador.
 import { blockAt, chunkId, chunkOf, chunksAround, parseChunkId } from './city';
 import {
   WORLD_SCENE_COMMANDS,

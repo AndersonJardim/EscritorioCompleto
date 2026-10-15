@@ -144,8 +144,10 @@ export class WorldViewer implements CityListener {
   }
 
   message(msg: Record<string, unknown>): void {
-    // Sem a cena aberta, só os avisos interessam (o resto é sobra de antes do `view.off`).
-    if (!this.viewing && msg.t !== 'notice') return;
+    // Sem a cena aberta, só os avisos e o que é do dono interessam (o resto é sobra de antes do `view.off`): os likes
+    // do dia e o "Enquanto você estava fora", que chegam ao conectar, ficam no estado para a cena que abrir depois (o
+    // quadro de carimbos da recepção do meu prédio). Só em memória, só para a página: nada sobe.
+    if (!this.viewing && msg.t !== 'notice' && msg.t !== 'likes.today' && msg.t !== 'away.summary') return;
     const r = this.state.apply(msg);
     if (r.resync) this.link?.sendCity({ t: 'resync', chunk: r.resync });
     if (r.resyncBuilding) this.link?.sendCity({ t: 'resync', building: r.resyncBuilding });

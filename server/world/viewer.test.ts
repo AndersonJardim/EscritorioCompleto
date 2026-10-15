@@ -209,6 +209,17 @@ describe('WorldViewer: mensagens da cidade', () => {
     viewer.message({ t: 'area', chunk: 'centro:0,0', rev: 1, buildings: [] });
     expect(viewer.current().chunks).toEqual([]);
   });
+
+  it('com a cena fechada, os likes do dia e o resumo do dono ficam para a cena que abrir depois (o knock, não)', () => {
+    const { viewer, open } = setup();
+    const summary = { since: '2026-10-15', visits: 1, likes: 1, stamps: [{ stampId: 'coffee', count: 1 }] };
+    viewer.message({ t: 'likes.today', count: 1 });
+    viewer.message({ t: 'away.summary', ...summary });
+    viewer.message({ t: 'knock' });
+    const a = open();
+    expect(a.st.snapshots()[0]).toMatchObject({ likesToday: 1, summary });
+    expect(a.st.world()).toEqual([]);
+  });
 });
 
 describe('WorldViewer: visita (Fase 4)', () => {
