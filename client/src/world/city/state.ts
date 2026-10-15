@@ -54,10 +54,17 @@ export class CityState {
     return this.myBuildingId ? this.buildings.get(this.myBuildingId) : undefined;
   }
 
-  applySnapshot(raw: unknown, now: number): void {
+  /** O `world.snapshot`: troca o estado inteiro (prédios, jogadores, minimapa) pelo do servidor local. */
+  applySnapshot(raw: unknown, now: number): CitySnapshot {
     const snap: CitySnapshot = readCitySnapshot(raw);
+    this.buildings.clear();
+    this.lots.clear();
+    this.chunkIds.clear();
+    this.chunkRev.clear();
+    this.players.clear();
     if (snap.me) this.me = snap.me;
     if (snap.pos) this.startPos = { x: snap.pos.x, y: snap.pos.y };
+    if (snap.me?.buildingId) this.myBuildingId = snap.me.buildingId;
     if (snap.building) {
       this.myBuildingId = snap.building.id;
       this.putBuilding(snap.building, '');
@@ -66,6 +73,7 @@ export class CityState {
     for (const p of snap.players) this.join(p, now);
     if (snap.minimap) this.setMinimap(snap.minimap);
     this.version++;
+    return snap;
   }
 
   /** Uma mensagem do servidor do mundo; devolve o efeito para a cena, se houver. */
@@ -73,8 +81,13 @@ export class CityState {
     if (!isObject(msg) || typeof msg.t !== 'string') return null;
     switch (msg.t) {
       case 'welcome': {
-        const me = isObject(msg.me) ? msg.me : null;
-        if (me && typeof me.id === 'string') this.applySnapshot({ me, building: msg.building }, now);
+        const snap = readCitySnapshot({ me: msg.me, building: msg.building });
+        if (snap.me) this.me = snap.me;
+        if (snap.building) {
+          this.myBuildingId = snap.building.id;
+          this.putBuilding(snap.building, '');
+          this.version++;
+        }
         return null;
       }
       case 'area':

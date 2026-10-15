@@ -241,8 +241,12 @@ export function createCityScene(o: CitySceneOptions): CityScene {
     s.on('world.snapshot', (snap) => {
       if (stream !== s) return;
       try {
-        state.applySnapshot(snap, performance.now());
+        const read = state.applySnapshot(snap, performance.now());
         placeMe();
+        // sem conexão com o servidor do mundo, nada desce: diz isso em vez de "Entrando na cidade…"
+        loading.textContent = read.connected === false ? tr('Sem conexão com o Habblaud World agora; o Habblaud tenta de novo sozinho.') : tr('Entrando na cidade…');
+        if (read.connected === false) loading.hidden = false;
+        if (read.afk) onEffect({ type: 'afk' });
       } catch (err) {
         console.error('[cidade] snapshot inválido ignorado', err);
       }

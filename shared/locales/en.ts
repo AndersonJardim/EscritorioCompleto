@@ -3006,4 +3006,5 @@ export const EN: Readonly<Record<string, string>> = {
   "O mundo corrigiu a sua posição.": "The world corrected your position.",
   "Aviso do Habblaud World.": "Notice from Habblaud World.",
   "Minimapa: clique para levar a câmera até lá": "Minimap: click to move the camera there",
+  "Sem conexão com o Habblaud World agora; o Habblaud tenta de novo sozinho.": "No connection to Habblaud World right now; Habblaud tries again on its own.",
 };

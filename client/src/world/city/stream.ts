@@ -31,6 +31,8 @@ export interface CitySelf {
   traits: TraitId[];
   intro?: IntroId;
   country?: string;
+  /** O meu prédio (o id do prédio é o id do dono), se tenho um. */
+  buildingId?: string;
 }
 
 export interface CityArea {
@@ -40,6 +42,10 @@ export interface CityArea {
 }
 
 export interface CitySnapshot {
+  /** O servidor local está ligado ao servidor do mundo (sem isso, nada desce; ausente = sim). */
+  connected?: boolean;
+  /** O servidor já mandou `afk` e ninguém mexeu desde então. */
+  afk?: boolean;
   me?: CitySelf;
   /** Minha posição validada (tiles). */
   pos?: { x: number; y: number; dir?: Direction };
@@ -81,6 +87,7 @@ function readSelf(v: unknown): CitySelf | undefined {
     traits: Array.isArray(v.traits) ? (v.traits.filter((t) => typeof t === 'string') as TraitId[]) : [],
     ...(typeof v.intro === 'string' ? { intro: v.intro as IntroId } : {}),
     ...(typeof v.country === 'string' ? { country: v.country } : {}),
+    ...(typeof v.buildingId === 'string' ? { buildingId: v.buildingId } : {}),
   };
 }
 
@@ -94,6 +101,8 @@ function readPos(v: unknown): CitySnapshot['pos'] {
 export function readCitySnapshot(raw: unknown): CitySnapshot {
   const out: CitySnapshot = { areas: [], players: [] };
   if (!isObject(raw)) return out;
+  if (typeof raw.connected === 'boolean') out.connected = raw.connected;
+  if (raw.afk === true) out.afk = true;
   const welcome = isObject(raw.welcome) ? raw.welcome : undefined;
   const me = readSelf(raw.me ?? welcome?.me);
   if (me) out.me = me;
@@ -126,4 +135,27 @@ export function readCitySnapshot(raw: unknown): CitySnapshot {
 /** Stream que não recebe nada (sem o servidor local da cena; a cidade fica em "Entrando na cidade…"). */
 export function emptyWorldStream(): WorldStream {
   return { on: () => undefined, send: () => undefined, close: () => undefined };
+}
+
+/**
+ * O stream do servidor local na forma de net/world-stream.ts (`on(listener)` com eventos `{type: 'snapshot' |
+ * 'message' | 'status' | 'error'}`) visto como o da cena (`on('world.snapshot' | 'world', fn)`).
+ */
+export interface SceneStreamLike {
+  on(listener: (ev: { type: string; snapshot?: unknown; msg?: unknown }) => void): unknown;
+  send(cmds: never[]): unknown;
+  close(): void;
+}
+
+export function fromSceneStream(s: SceneStreamLike): WorldStream {
+  return {
+    on(ev, fn) {
+      return s.on((e) => {
+        if (ev === 'world.snapshot' && e.type === 'snapshot') fn(e.snapshot);
+        else if (ev === 'world' && e.type === 'message') fn(e.msg);
+      });
+    },
+    send: (cmds) => s.send(cmds as never[]),
+    close: () => s.close(),
+  };
 }

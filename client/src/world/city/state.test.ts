@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import type { WorldBuildingPublic, WorldPlayerPublic } from '../../../../shared/world/protocol';
 import { CityState } from './state';
-import { readCitySnapshot } from './stream';
+import { fromSceneStream, readCitySnapshot } from './stream';
 
 function building(id: string, x: number, y: number, extra: Partial<WorldBuildingPublic> = {}): WorldBuildingPublic {
   return { id, lot: { district: 'centro', x, y }, owner: { id: `o_${id}`, name: `Dono ${id}`, country: 'BR' }, state: 'online', theme: 'none', floors: 3, agents: { total: 3, working: 1, waiting: 1, idle: 1 }, rev: 1, likes: 2, sinceMonth: '2026-10', ...extra };
@@ -33,6 +33,55 @@ describe('readCitySnapshot', () => {
   it('corpo torto vira um snapshot vazio, sem exceção', () => {
     expect(readCitySnapshot(null)).toEqual({ areas: [], players: [] });
     expect(readCitySnapshot({ chunks: 'x', players: 3 })).toEqual({ areas: [], players: [] });
+  });
+});
+
+describe('snapshot do servidor local (WorldSceneSnapshot)', () => {
+  it('lê o formato do viewer: stream, conexão, eu com o id do prédio, posição, afk, chunks e minimapa nulo', () => {
+    const raw = {
+      stream: 's1', connected: true, viewing: true, district: 'centro', afk: true,
+      me: { ...ME, buildingId: 'm' }, pos: { x: 58, y: 24.5, dir: 's', moving: false },
+      chunks: [{ chunk: 'centro:0,0', rev: 4, buildings: [building('m', 4, 1)] }], players: [player('x', 1, 1)], minimap: null,
+    };
+    const snap = readCitySnapshot(raw);
+    expect(snap).toMatchObject({ connected: true, afk: true, pos: { x: 58, y: 24.5, dir: 's' } });
+    expect(snap.me?.buildingId).toBe('m');
+    expect(snap.minimap).toBeUndefined();
+    const s = new CityState();
+    s.applySnapshot(raw, 0);
+    expect(s.myBuilding()?.id).toBe('m');
+    expect(readCitySnapshot({ ...raw, connected: false }).connected).toBe(false);
+  });
+
+  it('um snapshot novo troca o estado inteiro (reconexão): quem não veio sai', () => {
+    const s = new CityState();
+    s.applySnapshot({ me: ME, chunks: [{ chunk: 'c', rev: 1, buildings: [building('a', 3, 0)] }], players: [player('x', 1, 1)] }, 0);
+    s.applySnapshot({ me: ME, chunks: [{ chunk: 'c', rev: 7, buildings: [building('b', 4, 0)] }], players: [] }, 10);
+    expect([...s.buildings.keys()]).toEqual(['b']);
+    expect(s.buildingAt({ x: 3, y: 0 })).toBeUndefined();
+    expect(s.players.size).toBe(0);
+    expect(s.chunkRev.get('c')).toBe(7);
+  });
+
+  it('o stream do servidor local (on(listener) com {type}) vira o da cena', () => {
+    const listeners: ((ev: { type: string; snapshot?: unknown; msg?: unknown }) => void)[] = [];
+    const emit = (ev: { type: string; snapshot?: unknown; msg?: unknown }) => listeners.forEach((l) => l(ev));
+    const sent: unknown[] = [];
+    let closed = false;
+    const ws = fromSceneStream({ on: (l) => listeners.push(l), send: (c) => sent.push(...c), close: () => (closed = true) });
+    const snaps: unknown[] = [];
+    const msgs: unknown[] = [];
+    ws.on('world.snapshot', (d) => snaps.push(d));
+    ws.on('world', (d) => msgs.push(d));
+    emit({ type: 'snapshot', snapshot: { stream: 's' } });
+    emit({ type: 'message', msg: { t: 'afk' } });
+    emit({ type: 'status' });
+    expect(snaps).toEqual([{ stream: 's' }]);
+    expect(msgs).toEqual([{ t: 'afk' }]);
+    ws.send([{ t: 'profile', playerId: 'x' }]);
+    expect(sent).toEqual([{ t: 'profile', playerId: 'x' }]);
+    ws.close();
+    expect(closed).toBe(true);
   });
 });
 
