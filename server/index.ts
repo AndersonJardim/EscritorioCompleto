@@ -161,6 +161,7 @@ const worldUplink =
         canAct: () => config.terminal,
         agents: () => office.list(),
         subscribe: (cb) => office.onChange(cb),
+        booting: () => office.isBooting(),
         tokens: () => worldTokens.read(),
         lastFile: join(config.dataDir, 'world-last-uplink.json'),
         onGoodbye: (reason) => world.goodbye(reason),

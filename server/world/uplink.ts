@@ -20,6 +20,9 @@
 // - Depois, ao mudar o escritório (Office.onChange) ou a cada `refreshMs`: projeta (shared/world/projection.ts, a única
 //   fonte do pacote) e manda se o pacote mudou, com espera de 3 s desde a primeira mudança e no máximo uma remessa a
 //   cada 5 s (o servidor aceita 12 por minuto). `ping` a cada 30 s (conta como sinal de vida do prédio).
+// - Tarefas concluídas e compactações (signals.ts) são observadas pelo mesmo gancho (Office.onChange, no máximo uma vez
+//   por `observeMs`), com ou sem conexão: o que acontece com o prédio pausado, reconectando ou parado também conta, e
+//   a remessa seguinte leva. Durante o boot do escritório (sessões sendo relidas) nada é observado nem enviado.
 // - Caiu: reconecta com espera crescente e sorteio (2 s → 60 s). `goodbye` do servidor: `deploy` reconecta; os outros
 //   param (veja WorldBuildingStatus.stopped) e avisam a conta (`onGoodbye`).
 // - Guarda a última remessa ({at, bytes, uplink, ack}) em memória e em <dataDir>/world-last-uplink.json (modo 600)
@@ -67,6 +70,8 @@ export interface UplinkTiming {
   welcomeTimeoutMs: number;
   /** Quanto a pausa espera o fechamento da conexão antes de responder. */
   closeWaitMs: number;
+  /** Tarefas e compactações: no máximo uma observação a cada `observeMs` depois de uma mudança do escritório. */
+  observeMs: number;
 }
 
 export const UPLINK_TIMING: Readonly<UplinkTiming> = {
@@ -78,6 +83,7 @@ export const UPLINK_TIMING: Readonly<UplinkTiming> = {
   backoffMaxMs: 60_000,
   welcomeTimeoutMs: 15_000,
   closeWaitMs: 1_500,
+  observeMs: 1_000,
 };
 
 /** Espera da tentativa `attempt` (0, 1, 2...): dobra a partir de `min` até `max`, com ±25 % de sorteio, nunca acima de `max`. */
@@ -113,6 +119,8 @@ export interface BuildingUplinkOptions {
   agents: () => readonly AgentInfo[];
   /** Avisa a cada mudança do escritório (Office.onChange). */
   subscribe?: (cb: () => void) => () => void;
+  /** O escritório ainda está relendo as sessões abertas (Office.isBooting): espera terminar para observar e enviar. */
+  booting?: () => boolean;
   /** Tokens do prédio (server/world/tokens.ts). */
   tokens?: () => { day: number; week: number } | undefined;
   ids?: WorldIds;
@@ -166,6 +174,7 @@ export class BuildingUplink {
   private welcomeTimer?: ReturnType<typeof setTimeout>;
   private pingTimer?: ReturnType<typeof setInterval>;
   private refreshTimer?: ReturnType<typeof setInterval>;
+  private observeTimer?: ReturnType<typeof setTimeout>;
   private unsubscribe?: () => void;
   private lastSentAt = -Infinity;
   private lastJson?: string;
@@ -191,9 +200,10 @@ export class BuildingUplink {
     if (this.started) return;
     this.started = true;
     this.loadLast();
-    this.unsubscribe = this.o.subscribe?.(() => this.schedule());
+    this.unsubscribe = this.o.subscribe?.(() => this.noteChange());
     this.refreshTimer = setInterval(() => {
       this.sync();
+      this.observeSignals();
       this.schedule();
     }, this.t.refreshMs);
     this.refreshTimer.unref?.();
@@ -207,6 +217,8 @@ export class BuildingUplink {
     this.unsubscribe = undefined;
     if (this.refreshTimer) clearInterval(this.refreshTimer);
     this.refreshTimer = undefined;
+    if (this.observeTimer) clearTimeout(this.observeTimer);
+    this.observeTimer = undefined;
     this.clearReconnect();
     void this.closeSocket();
   }
@@ -493,6 +505,32 @@ export class BuildingUplink {
 
   // ------------------------------------------------------------------------------------------------ remessas
 
+  /** O escritório mudou: observa tarefas e compactações (no máximo uma vez por `observeMs`) e agenda a remessa. */
+  private noteChange(): void {
+    this.schedule();
+    if (this.observeTimer || this.stopped) return;
+    this.observeTimer = setTimeout(() => {
+      this.observeTimer = undefined;
+      this.observeSignals();
+    }, this.t.observeMs);
+    this.observeTimer.unref?.();
+  }
+
+  /**
+   * Conta tarefas e compactações (signals.ts) com ou sem conexão, enquanto houver prédio (conta aprovada e personagem):
+   * pausado, reconectando ou parado, nada sai, mas a contagem continua e vai na remessa seguinte. Fora do boot.
+   */
+  private observeSignals(): void {
+    const s = this.o.store.get();
+    if (!s || s.access !== 'approved' || !s.player || this.o.booting?.()) return;
+    this.signals.observe(this.realAgents(), this.now());
+  }
+
+  /** Os agentes do escritório que podem subir (os do modo demonstração nunca). */
+  private realAgents(): AgentInfo[] {
+    return this.o.agents().filter((a) => !isDemoId(a.id));
+  }
+
   /** Mudou algo: projeta depois de `debounceMs` desde a primeira mudança (sem reiniciar a espera), respeitando `minGapMs`. */
   private schedule(): void {
     if (!this.welcomed || this.sendTimer) return;
@@ -518,8 +556,10 @@ export class BuildingUplink {
     if (!this.welcomed || !s) return;
     const now = this.now();
     if (now < this.lastSentAt + this.t.minGapMs) return this.armSend(this.lastSentAt + this.t.minGapMs - now);
+    // O escritório ainda está relendo as sessões: um pacote pela metade não sai (o fim do boot avisa a mudança).
+    if (this.o.booting?.()) return this.armSend(this.t.debounceMs);
     const visibility = s.player?.visibility ?? VISIBILITY_DEFAULTS;
-    const agents = this.o.agents().filter((a) => !isDemoId(a.id));
+    const agents = this.realAgents();
     const rooms = [...new Set(agents.map((a) => a.roomId))].map((id) => ({ id }));
     const signals = this.signals.observe(agents, now);
     const r = projectWithReport(

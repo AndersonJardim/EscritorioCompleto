@@ -6,7 +6,8 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { hash32 } from '../../shared/hash';
-import type { AgentInfo } from '../../shared/types';
+import { SPECIAL } from '../../shared/activity';
+import type { Activity, AgentInfo } from '../../shared/types';
 import { VISIBILITY_DEFAULTS, type GoodbyeReason, type Player, type WorldUplink } from '../../shared/world/protocol';
 import schemaJson from '../../shared/world/schema.json';
 import { compileValidator } from '../../shared/world/schema-validator';
@@ -30,6 +31,7 @@ const FAST: Partial<UplinkTiming> = {
   backoffMaxMs: 80,
   welcomeTimeoutMs: 400,
   closeWaitMs: 500,
+  observeMs: 20,
 };
 const PLAYER: Player = {
   name: 'Ana Pixel',
@@ -80,7 +82,9 @@ interface Harness {
   make(): BuildingUplink;
 }
 
-async function start(opts: { session?: 'approved' | 'waiting' | 'no-player' | 'none'; start?: boolean; tokensVisible?: boolean } = {}): Promise<Harness> {
+async function start(
+  opts: { session?: 'approved' | 'waiting' | 'no-player' | 'none'; start?: boolean; tokensVisible?: boolean; compactions?: boolean; booting?: { v: boolean } } = {},
+): Promise<Harness> {
   const world = await startFakeWorld();
   closers.push(world.close);
   const tmp = tempDir();
@@ -92,7 +96,7 @@ async function start(opts: { session?: 'approved' | 'waiting' | 'no-player' | 'n
   const lastFile = join(tmp.dir, 'world-last-uplink.json');
   const store = new WorldSettingsStore(file);
   const mode = opts.session ?? 'approved';
-  const player = { ...PLAYER, visibility: { ...PLAYER.visibility, tokensVisible: opts.tokensVisible ?? true } };
+  const player = { ...PLAYER, visibility: { ...PLAYER.visibility, tokensVisible: opts.tokensVisible ?? true, compactions: opts.compactions ?? false } };
   if (mode !== 'none') {
     store.save({ deviceId: 'dev_1', token, email: EMAIL, access: mode === 'waiting' ? 'waiting' : 'approved', ...(mode === 'no-player' ? {} : { player }) });
   }
@@ -129,6 +133,7 @@ async function start(opts: { session?: 'approved' | 'waiting' | 'no-player' | 'n
         return () => void listeners.delete(cb);
       },
       tokens: () => ({ day: 12_345, week: 678_901 }),
+      ...(opts.booting ? { booting: () => opts.booting!.v } : {}),
       lastFile,
       onGoodbye: (r) => h.goodbyes.push(r),
       onChange: () => {
@@ -312,6 +317,56 @@ describe('BuildingUplink: conexão e remessas', () => {
     expect(h.metas).toContainEqual({ connected: true, paused: false, floors: 7, agents: 12 });
     await waitFor(() => h.uplink.meta().floors === 2, 'remessa');
     expect(h.uplink.meta()).toMatchObject({ floors: 2, agents: 3 });
+  });
+});
+
+describe('BuildingUplink: tarefas e compactações sem conexão', () => {
+  const tasks = (done: number, pending: number) => [
+    ...Array.from({ length: done }, (_, i) => ({ id: `d${i}`, title: 'feito', status: 'completed' as const })),
+    ...Array.from({ length: pending }, (_, i) => ({ id: `p${i}`, title: 'falta', status: 'pending' as const })),
+  ];
+  const compaction: Activity = { id: 'c-1', at: 2, ...SPECIAL.compact() };
+  const claudeMain = (u: WorldUplink) => agentsOf(u).find((a) => a.kind === 'main' && a.provider === 'claude')!;
+
+  it('pausado: o gancho do escritório conta as tarefas (mesmo com a lista trocada) e a compactação que já saiu de recent', async () => {
+    const h = await start({ compactions: true });
+    await waitFor(() => h.world.ws.uplinks.length === 1, 'primeira');
+    expect(claudeMain(h.world.ws.uplinks[0].uplink).tasksDone).toBe(0);
+    h.store.update({ paused: true });
+    await h.uplink.pause();
+    const main = h.agents[0];
+    // Duas concluídas; depois o TodoWrite troca a lista (o que já foi feito some dela).
+    main.tasks = tasks(2, 1);
+    h.change();
+    await sleep(60);
+    main.tasks = tasks(0, 3);
+    h.change();
+    await sleep(60);
+    // Uma compactação que sai de `recent` antes da próxima remessa.
+    main.recent = [compaction];
+    h.change();
+    await sleep(60);
+    main.recent = [];
+    h.change();
+    await sleep(60);
+    expect(h.world.ws.uplinks).toHaveLength(1);
+    h.store.update({ paused: undefined });
+    h.uplink.resume();
+    await waitFor(() => h.world.ws.uplinks.length === 2, 'retomou');
+    const a = claudeMain(h.world.ws.uplinks[1].uplink);
+    expect(a.tasksDone).toBe(1); // faixa 1–2
+    expect(a.compacted).toBe(true);
+  });
+
+  it('durante o boot do escritório nada é observado nem enviado; o fim do boot destrava', async () => {
+    const booting = { v: true };
+    const h = await start({ booting });
+    await waitFor(() => h.world.ws.connections.length === 1 && h.world.ws.hellos.length === 1, 'conectou');
+    await sleep(120);
+    expect(h.world.ws.uplinks).toHaveLength(0);
+    booting.v = false;
+    h.change();
+    await waitFor(() => h.world.ws.uplinks.length === 1, 'primeira depois do boot');
   });
 });
 
