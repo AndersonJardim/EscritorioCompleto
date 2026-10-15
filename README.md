@@ -751,6 +751,10 @@ variables below (in `.env` or in the environment) are for testing against a worl
 | `HABBLAUD_WORLD` | on | `0` hides everything about the World (routes and interface), even with the URL. |
 | `HABBLAUD_WORLD_DEV` | off | `1` accepts a local world server at `http://127.0.0.1:<port>` (`npm run dev` already does). |
 
+With the account approved and the character created, your building goes up to the world on its own (over a WebSocket,
+only the anonymous list on the privacy page: floors, agents, statuses, avatars and rounded tokens); **Pause** turns it
+off right away.
+
 The account stays only on this computer, in `~/.habblaud/world.json` (in Docker, in the `/data` volume), and the section
 only works from this computer. What leaves your computer and what never does (in Portuguese):
 [docs/world/privacidade.md](docs/world/privacidade.md). How the section looks, in demo mode (`?mock=1&world=logged_out`,

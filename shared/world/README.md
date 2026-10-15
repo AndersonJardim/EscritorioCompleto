@@ -21,8 +21,9 @@ navegador ──/api/world/*──▶ servidor local do Habblaud ──HTTPS /v1
   token é o servidor local (`<dataDir>/world.json`, só no cabeçalho `Authorization: Bearer`, nunca na URL nem em log).
 - As rotas locais só existem na porta local com `Host` local, nunca na porta do celular (nem com login), e o que age
   pela conta só funciona com a trava do terminal (bind local), como o terminal e as mensagens.
-- Nas próximas fases, o prédio sobe por WebSocket (`/v1/socket`), com a primeira mensagem `hello` levando o token e o
-  carimbo do build (`dist/build.json`: commit e se a cópia está modificada).
+- O prédio sobe por WebSocket (`/v1/socket`, `server/world/uplink.ts`), com a primeira mensagem `hello` levando o
+  token e o carimbo do build (`dist/build.json`: commit e se a cópia está modificada). O pacote (`WorldUplink`) sai
+  **só** de `projection.ts`; o navegador vê o pacote exato em `GET /api/world/last-uplink` ("Ver o que foi enviado").
 
 ## Os arquivos
 
@@ -33,7 +34,11 @@ navegador ──/api/world/*──▶ servidor local do Habblaud ──HTTPS /v1
 | `api.ts` | Tipos e códigos de erro das rotas locais `/api/world/*` (o que a interface usa). |
 | `traits.ts`, `intro.ts` | Rótulos traduzidos (`tr()`) dos traços de personalidade e das frases de apresentação. |
 | `names-rules.ts` | Regras do nome de jogador (`parsePlayerName`, `playerNameKey`); copiável para o servidor. |
-| `server/world/` | `settings.ts` (world.json), `client.ts` (HTTP do servidor do mundo), `altcha.ts` (desafio anti-robô), `service.ts` (a conta) e `http.ts` (as rotas locais). |
+| `projection.ts` | **O único lugar que monta o pacote do prédio**: `project(input, ids, now)`, pura, recebe das salas só o id. Os testes de chaves (lista tirada do `schema.json`) e de canários ficam em `projection.test.ts`. |
+| `appearance-flat.ts` | O sorteio da aparência (`appearanceFromSeed`, o mesmo do escritório) e `flattenAppearance` (as 13 peças, sem a semente). |
+| `floor-names.ts`, `floor-labels.ts` | Os 60 nomes fictícios de andar (`ipe`, `jade`, `aurora`...; o servidor guarda a cópia exata) e os rótulos `tr()` ("Projeto Ipê"). |
+| `schema-validator.ts` | Validador mínimo do `schema.json` e a lista de chaves dele, para os testes (o servidor usa o Ajv). |
+| `server/world/` | `settings.ts` (world.json), `client.ts` (HTTP do servidor do mundo), `altcha.ts` (desafio anti-robô), `service.ts` (a conta), `http.ts` (as rotas locais), `uplink.ts` (o WebSocket do prédio), `ids.ts` (ids aleatórios do mundo), `tokens.ts`, `theme.ts` e `signals.ts`. |
 
 ## Regras para mudar
 
@@ -41,8 +46,10 @@ navegador ──/api/world/*──▶ servidor local do Habblaud ──HTTPS /v1
    mensagens) sobe, e o servidor do mundo precisa aceitar as duas versões por um tempo.
 2. **Nada de texto livre** no que sobe: só ids, números, enumerações e cores. Texto para pessoas é traduzido de cada
    lado a partir do id (aqui, com `tr()`).
-3. **Campo novo no pacote** = `protocol.ts` + `schema.json` + `docs/world/privacidade.md` + os testes de chaves, tudo no
-   mesmo PR, explicando no PR o que muda no que sai do computador.
+3. **Campo novo no pacote** = `protocol.ts` + `schema.json` + `projection.ts` + `docs/world/privacidade.md` + os testes
+   de chaves, tudo no mesmo PR, explicando no PR o que muda no que sai do computador (um teste confere que todo campo
+   do `schema.json` está citado em `privacidade.md`). O servidor do mundo guarda cópias exatas de `protocol.ts`,
+   `schema.json`, `floor-names.ts` e `shared/names.ts`, com o SHA-256 conferido em teste: mudou um deles, avise.
 4. **Nunca mande ao World** caminho, nome de pasta ou de sala, título de sessão, branch, modelo, custo, e-mail da
    conta do Claude, nome editado do personagem nem nada que não esteja na lista de `docs/world/privacidade.md`.
 5. **O token fica no servidor local.** Não o coloque em resposta de rota, no snapshot, em log, em URL nem no navegador.

@@ -39,8 +39,24 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
   regras do nome de jogador, os 14 traços, as 20 frases de apresentação e os 10 cumprimentos ficam em `shared/world/`.
 - **Aviso sobre dados verdadeiros** para pessoas e agentes de IA (`CLAUDE.md`, `AGENTS.md`, `shared/world/README.md` e
   nos arquivos do World), e a regra de revisão de PRs que mexem nele no `CONTRIBUTING.md`.
-- O build grava `dist/build.json` com o commit e se a cópia estava modificada (vai junto na conexão com o World, nas
-  próximas fases). O `docker-compose.yml` repassa `HABBLAUD_WORLD`, `HABBLAUD_WORLD_URL` e `HABBLAUD_WORLD_DEV`.
+- O build grava `dist/build.json` com o commit e se a cópia estava modificada (vai na primeira mensagem da conexão do
+  prédio). O `docker-compose.yml` repassa `HABBLAUD_WORLD`, `HABBLAUD_WORLD_URL` e `HABBLAUD_WORLD_DEV`.
+- **O prédio sobe ao mundo:** com a conta liberada e o personagem criado, o Habblaud abre uma conexão (WebSocket) com o
+  servidor do mundo e manda o prédio ao vivo: um andar por sala com alguém presente e, por agente, só um id aleatório,
+  principal ou subagente, a ferramenta, o status, um nome sorteado e a aparência; mais o tema, as tarefas concluídas no
+  dia em faixa, os tokens do prédio arredondados (desligável) e, se você ligar, as compactações. Os ids dos andares e
+  dos agentes são aleatórios e trocam a cada 24 h (±6 h); caminhos, nomes de sala, títulos, atividades, modelo, branch,
+  conta e nomes editados nunca saem. Manda ao mudar (no máximo uma vez a cada 5 s), reconecta sozinho e para quando o
+  servidor pede (conta suspensa, versão antiga, conectada em outro lugar). Agentes do modo demonstração nunca sobem.
+- **Pausar e retomar o prédio** (`POST /api/world/pause` e `/resume`): pausar fecha a conexão antes de responder e
+  apaga o prédio na hora para todos. **Ver o que foi enviado** (`GET /api/world/last-uplink`): o pacote exato da
+  última remessa, a hora, o tamanho e a resposta do servidor, guardado em `~/.habblaud/world-last-uplink.json`
+  (permissão 600). O tema de Aparência vai para o prédio (`PUT /api/world/theme`; o automático vira o tema do dia). O
+  status do World e o snapshot (`meta.world.building`) ganham o resumo do prédio: conectado, pausado, andares,
+  agentes e a última remessa.
+- **Transparência:** `docs/world/privacidade.md` lista cada campo do pacote e da conexão, com um teste que confere a
+  página contra o `schema.json`; os testes da projeção conferem cada chave e que nenhum texto do escritório aparece no
+  pacote. Os 60 nomes fictícios de andar ("Projeto Ipê", "Projeto Jade"...) ficam em `shared/world/`, traduzidos.
 
 ## [0.11.0] - 2026-10-13
 

@@ -788,6 +788,10 @@ Les variables ci-dessous (dans le `.env` ou dans l'environnement) servent à tes
 | `HABBLAUD_WORLD` | activé | `0` masque tout le World (routes et interface), même avec l'URL. |
 | `HABBLAUD_WORLD_DEV` | désactivé | `1` accepte un serveur du monde local sur `http://127.0.0.1:<port>` (`npm run dev` l'accepte déjà). |
 
+Avec le compte validé et le personnage créé, votre immeuble monte tout seul dans le monde (par WebSocket, uniquement la
+liste anonyme de la page de confidentialité : étages, agents, statuts, avatars et tokens arrondis) ; **Mettre en pause**
+l'éteint aussitôt.
+
 Le compte reste uniquement sur cet ordinateur, dans `~/.habblaud/world.json` (dans Docker, dans le volume `/data`), et la
 section ne fonctionne que depuis l'ordinateur lui-même. Ce qui sort de l'ordinateur et ce qui n'en sort jamais (en
 portugais) : [docs/world/privacidade.md](docs/world/privacidade.md). L'aspect de la section, en mode démonstration

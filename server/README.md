@@ -361,9 +361,10 @@ Em desenvolvimento e desligado por padrão (o que sai do computador: `docs/world
 `shared/world/README.md`). O protocolo com o servidor do mundo é `shared/world/protocol.ts` (fonte da verdade, com
 `schema.json`). Do lado daqui, `world/`:
 
-- `settings.ts`: `<dataDir>/world.json` `{deviceId, token, email, access, player?, updatedAt}`, modo 600 e gravação
-  atômica. O token do dispositivo só sai daqui no cabeçalho `Authorization: Bearer` das chamadas ao servidor do mundo:
-  nunca no navegador, no snapshot, no log ou na URL.
+- `settings.ts`: `<dataDir>/world.json` `{deviceId, token, email, access, player?, paused?, updatedAt, theme?}`, modo 600
+  e gravação atômica. O token do dispositivo só sai daqui no cabeçalho `Authorization: Bearer` das chamadas ao servidor
+  do mundo e no `hello` do WebSocket: nunca no navegador, no snapshot, no log ou na URL. `theme` (a escolha de
+  Aparência, `auto` por padrão) fica mesmo sem sessão (o arquivo vira só `{theme}`); `paused` é da sessão.
 - `client.ts`: as rotas `/v1/*` com o `fetch` nativo (prazo de 15 s, sem seguir redirecionamento, resposta de até
   256 KB copiada campo a campo). Erro do servidor do mundo volta como `{status, code}`; rede, prazo e resposta fora do
   formato ganham `world_unreachable`, `world_timeout` e `world_bad_response`.
@@ -375,15 +376,38 @@ Em desenvolvimento e desligado por padrão (o que sai do computador: `docs/world
   session_expired`); entrar de novo revoga o dispositivo anterior; sair apaga o `world.json` mesmo sem resposta do
   servidor. O `lastError` leva só códigos conhecidos (`worldLastError` em `shared/world/api.ts`): rede e prazo viram
   `network`, o resto que a interface não conhece vira `unknown`.
+- `uplink.ts`: o prédio no mundo, por WebSocket (o `WebSocket` global do Node) em `<HABBLAUD_WORLD_URL>/v1/socket`
+  (`wss://`; `ws://127.0.0.1` só no modo dev). Conecta só com a conta aprovada, o personagem criado, a trava do
+  terminal e sem pausa. Manda o `hello` (`{v, version, build: {commit, dirty}, locale, token}`) e, a cada `welcome`, o
+  pacote inteiro; depois, a cada mudança do escritório (`Office.onChange`) ou a cada minuto, projeta
+  (`shared/world/projection.ts`) e manda se mudou: 3 s desde a primeira mudança, no máximo uma remessa a cada 5 s.
+  `{t: 'ping'}` a cada 30 s (sem resposta por 75 s, reconecta). Reconexão de 2 s a 60 s (dobra, ±25 %). `goodbye`:
+  `deploy` reconecta; `banned`, `suspended`, `update` e `other-device` param até retomar (ou reabrir); `waiting`,
+  `no_player` e `unauthorized` param até a sessão mudar e avisam a conta (`service.goodbye`). A última remessa
+  `{at, bytes, uplink, ack}` fica em memória e em `<dataDir>/world-last-uplink.json` (modo 600; só da mesma sessão,
+  apagado ao sair). Avisa o snapshot (`markDirty`) ao conectar, cair, pausar, retomar e a cada ack.
+- `ids.ts`: os ids do mundo, só em memória (`f_` + 10 hex por sala, `a_` + 8 hex por agente, `crypto.randomBytes`),
+  cada um com vida de 24 h ± 6 h sorteada por id; quem some e volta (ou o Habblaud reiniciado) ganha id novo.
+- `tokens.ts`: tokens do prédio (entrada + saída) de hoje e dos 7 dias corridos, do "Meu dia" com a fonte `real` (o
+  demo nunca entra), arredondados a 2 algarismos; os dias passados ficam guardados, o de hoje é relido a cada 15 s.
+- `theme.ts`: o tema escolhido resolvido para o pacote (o automático segue o calendário do escritório, pela data local
+  do servidor: no Docker, UTC). `signals.ts`: tarefas concluídas no dia por agente e compactações novas (o `/clear`
+  não conta).
 - `http.ts`: as rotas `/api/world/*` (lista e formatos em `shared/world/api.ts`). `http/app.ts` só as entrega pela
   porta local com `Host` local (a porta do celular recebe 403 `local_only`, nem com login); tudo, menos o `status`, exige
   a trava do terminal (403 `terminal_off`); sem `HABBLAUD_WORLD_URL`, 409 `not_configured`; `HABBLAUD_WORLD=0`, 404.
   Erros: `{error: {code, message?, retryAfter?}}`, com o status e o código do servidor do mundo quando vêm de lá.
+  Do prédio: `PUT /api/world/theme` `{theme}` (com ou sem conta), `POST /api/world/pause` (fecha o uplink antes de
+  responder e avisa `POST /v1/me/building/pause`), `POST /api/world/resume` (avisa `/resume` e reconecta) e
+  `GET /api/world/last-uplink` (`{at, bytes, uplink, ack?}` ou `{}`, sem a trava do terminal, como o status). O
+  `GET /api/world/status` ganha `building` (conta aprovada com personagem) e `theme`; sem `?refresh=1` responde da
+  memória e relê `/v1/me` em segundo plano quando venceu.
 
-O estado vai no snapshot em `meta.world` (`{enabled, configured, state}`, nada da conta) e em `GET /api/access`
-(`world`). O build grava `dist/build.json` (`{commit, dirty, builtAt}`, `scripts/build-info.mjs`; sem git, `unknown`;
-`HABBLAUD_BUILD_COMMIT`/`HABBLAUD_BUILD_DIRTY` substituem o git), lido por `readBuildInfo()` (`build.ts`) para o `hello`
-das próximas fases.
+O estado vai no snapshot em `meta.world` (`{enabled, configured, state, building?}`, nada da conta; `building` =
+`{connected, paused, floors, agents, lastUplinkAt?}`) e em `GET /api/access` (`world`). O build grava
+`dist/build.json` (`{commit, dirty, builtAt}`, `scripts/build-info.mjs`; sem git, `unknown`;
+`HABBLAUD_BUILD_COMMIT`/`HABBLAUD_BUILD_DIRTY` substituem o git), lido por `readBuildInfo()` (`build.ts`) a cada conexão
+do uplink: o `hello` leva só `{commit, dirty}`.
 
 ## Variáveis de ambiente
 
@@ -407,7 +431,7 @@ das próximas fases.
 | `HABBLAUD_ACCOUNTS` | — | JSON com metadados das contas vindos do host (Docker): `[{id, configDir, mountDir, short, name, email, organization, plan, color, cachedUsage}]`, casados por `id`, `mountDir` ou `configDir` |
 | `HABBLAUD_USAGE_DIR` | `~/.habblaud/usage` (Docker: `/usage`) | pasta do uso capturado pelo tap de statusline ou pelo mod do Claude Code, relida a cada 5 s |
 | `HABBLAUD_ALLOWED_HOSTS` | — | nomes extras aceitos no `Host`/`Origin` (vírgula); `localhost`, `*.localhost` e IPs sempre valem |
-| `HABBLAUD_WORLD_URL` | — (desligado) | servidor do Habblaud World: só `https://` ou `wss://`, sem caminho; `http://127.0.0.1:*` só no modo dev |
+| `HABBLAUD_WORLD_URL` | — (desligado) | servidor do Habblaud World: só `https://` ou `wss://`, sem caminho; `http://127.0.0.1:*` só no modo dev. O prédio sobe pelo WebSocket na mesma origem (`/v1/socket`) |
 | `HABBLAUD_WORLD` | ligado | `0` (`false`, `off`, `no`) esconde o Habblaud World: rotas 404 e nada na interface |
 | `HABBLAUD_WORLD_DEV` | desligado (`--dev` liga) | `1` aceita o servidor do mundo em `http://127.0.0.1` ou `ws://127.0.0.1` |
 
@@ -460,7 +484,7 @@ O repositório é também um marketplace de plugins do Claude Code (`.claude-plu
 - `permissions/` — responder pelo escritório (permissões e perguntas): registro dos pedidos (`registry.ts`), rotas (`http.ts`) e a busca da chamada no transcript (`transcript.ts`).
 - `messages/` — mensagens pelo escritório: fila, presença das sessões e prazos (`registry.ts`) e rotas (`http.ts`).
 - `updates/` — verificação de versão nova nas releases do GitHub (`checker.ts`).
-- `world/` — Habblaud World: sessão em `world.json` (`settings.ts`), cliente do servidor do mundo (`client.ts`), ALTCHA (`altcha.ts`), a conta (`service.ts`) e as rotas `/api/world/*` (`http.ts`).
+- `world/` — Habblaud World: sessão em `world.json` (`settings.ts`), cliente do servidor do mundo (`client.ts`), ALTCHA (`altcha.ts`), a conta (`service.ts`), as rotas `/api/world/*` (`http.ts`) e o prédio no mundo (`uplink.ts`, com `ids.ts`, `tokens.ts`, `theme.ts` e `signals.ts`).
 
 Testes: `npx vitest run server shared` (fixtures sintéticas em `server/test/fixtures.ts`; os scripts do host —
 tap de statusline, hook de permissão (rodado como processo contra um servidor de teste), instaladores e

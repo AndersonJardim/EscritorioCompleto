@@ -749,6 +749,9 @@ ou no ambiente) servem para testar com um servidor do mundo:
 | `HABBLAUD_WORLD` | ligado | `0` esconde tudo do World (rotas e interface), mesmo com a URL. |
 | `HABBLAUD_WORLD_DEV` | desligado | `1` aceita um servidor do mundo local em `http://127.0.0.1:<porta>` (o `npm run dev` já aceita). |
 
+Com a conta liberada e o personagem criado, o seu prédio sobe ao mundo sozinho (por WebSocket, só a lista anônima da
+página de privacidade: andares, agentes, status, avatares e tokens arredondados); **Pausar** apaga o prédio na hora.
+
 A conta fica só neste computador, em `~/.habblaud/world.json` (no Docker, no volume `/data`), e a seção só funciona pelo
 próprio computador. O que sai e o que nunca sai do computador: [docs/world/privacidade.md](docs/world/privacidade.md).
 Como a seção fica, no modo demonstração (`?mock=1&world=logged_out`, `waiting` ou `approved`):
