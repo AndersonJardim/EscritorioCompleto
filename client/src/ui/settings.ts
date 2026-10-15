@@ -146,7 +146,11 @@ export class SettingsPopover implements UiComponent {
     this.theme = segmented<UiPrefs['theme']>(
       tr('Tema do escritório'),
       [['auto', tr('Automático')], ['none', tr('Nenhum')], ['christmas', tr('Natal')], ['halloween', tr('Halloween')]],
-      (v) => ctx.updatePrefs({ theme: v }),
+      (v) => {
+        ctx.updatePrefs({ theme: v });
+        // Com o World ligado e a conta aprovada, o tema também vai para o prédio (clicar de novo reenvia).
+        void this.world.onThemePicked(v);
+      },
     );
     this.theme.row.append(h('span', { class: 'ui-set__hint', text: tr('Automático: Halloween em outubro e Natal de 1º de novembro a 26 de dezembro; no resto do ano, o visual original. Nenhum: sempre o original.') }));
     this.soundGroup = new SoundSettingsGroup(ctx, sound);
@@ -187,6 +191,7 @@ export class SettingsPopover implements UiComponent {
     );
 
     this.world = new WorldSettingsGroup(ctx, world);
+    this.theme.row.append(this.world.themeNote);
     this.about = new AboutGroup(ctx);
 
     const close = iconButton(ICONS.close, tr('Fechar configurações'), () => this.hide(), 'ui-icon-btn--sm');

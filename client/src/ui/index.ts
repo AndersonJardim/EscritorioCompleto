@@ -38,6 +38,7 @@ import { UpdateToaster } from './version';
 import { TopBar } from './topbar';
 import { UpdateBanner } from './update';
 import { InviteCard } from './world/invite-card';
+import { WorldChip } from './world/world-chip';
 import { worldSource } from '../net/world';
 import { FreeArea } from './viewport';
 import { tr } from '../../../shared/i18n';
@@ -222,6 +223,9 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi)
   const hw = worldSource(store);
   settings = new SettingsPopover(ctx, notifier, sound, hw);
   const invite = new InviteCard(ctx, hw, { openWorld: () => settings.showWorld(topbar.settingsBtn, 'register'), settingsOpen: () => settings.isOpen });
+  // Chip "🏙️ no mundo" / "⏸ pausado" na barra do topo (conta aprovada; nunca pela porta do celular).
+  const worldChip = new WorldChip(ctx, hw, () => settings.showWorld(topbar.settingsBtn, 'home'));
+  topbar.addStatus(worldChip.el);
   help = new HelpDialog();
   const day = new DayLauncher(ctx, (el) => root.append(el));
   topbar.addPanelButton(day.button);
@@ -247,7 +251,7 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi)
   }));
   drawer.onLayoutChange = () => applyLayout();
 
-  const components: UiComponent[] = [topbar, sidebar, drawer, terminal, pty, history, deliveries, feed, toasts, settings, empty, banner, tip, notifier, splash, timelapse, sound, day, updateToaster, invite];
+  const components: UiComponent[] = [topbar, sidebar, drawer, terminal, pty, history, deliveries, feed, toasts, settings, empty, banner, tip, notifier, splash, timelapse, sound, day, updateToaster, invite, worldChip];
 
   // ---------------------------------------------------------------- renderização agrupada por quadro
   let rafId = 0;
