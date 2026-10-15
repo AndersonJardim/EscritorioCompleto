@@ -74,6 +74,11 @@
   animation: none;
 }
 
+/* na cidade, o resumo espera a volta ao escritório (não cobre a cena) */
+.ui-root.is-city .ui-away--float {
+  display: none;
+}
+
 @keyframes ui-away-in {
   from {
     opacity: 0;
@@ -186,7 +191,8 @@
 }
 
 .ui-away__stat b {
-  font: 800 18px/1.1 var(--font-px);
+  font: 800 18px/1.15 var(--font-ui);
+  font-variant-numeric: tabular-nums;
   color: var(--ui-text);
 }
 
