@@ -10032,3 +10032,410 @@ html.is-replay #world {
     font-size: 11px;
   }
 }
+
+/* ------------------------------------------------------------------ Habblaud World: a cidade (botão Mundo) */
+
+/* Botão Mundo / Escritório, ao lado do Timelapse: com rótulo (é a troca de cena), em azul quando na cidade. */
+.ui-scene-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px 0 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 206, 110, 0.28);
+  background: rgba(255, 206, 110, 0.08);
+  color: #ffe3a0;
+  font: 600 12.5px/1 var(--font-ui);
+  white-space: nowrap;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
+}
+
+.ui-scene-btn:hover {
+  background: rgba(255, 206, 110, 0.16);
+}
+
+.ui-scene-btn.is-city {
+  border-color: rgba(124, 200, 255, 0.35);
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent);
+}
+
+.ui-scene-btn__icon {
+  display: inline-grid;
+  place-items: center;
+}
+
+@media (max-width: 760px) {
+  .ui-scene-btn {
+    padding: 0 7px;
+  }
+
+  .ui-scene-btn__label {
+    display: none;
+  }
+}
+
+/* Na cidade, o que é do escritório sai da frente (Configurações, ajuda e os avisos continuam). */
+.ui-root.is-city > .ui-sidebar,
+.ui-root.is-city > .ui-feed,
+.ui-root.is-city > .ui-drawer,
+.ui-root.is-city > .ui-scrim,
+.ui-root.is-city > .ui-term,
+.ui-root.is-city > .ui-empty,
+.ui-root.is-city > .ui-tip,
+.ui-root.is-city > .ui-world-invite,
+.ui-root.is-city > .ui-lapse,
+.ui-root.is-city > .ui-lapse-vignette,
+.ui-root.is-city .ui-btn-sidebar,
+.ui-root.is-city .ui-btn-feed,
+.ui-root.is-city .ui-btn-timelapse {
+  display: none !important;
+}
+
+.ui-city,
+#ui > .ui-city {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  /* a camada cobre a tela, mas os cliques passam para o canvas da cidade (só o cartão e o minimapa recebem) */
+  pointer-events: none;
+}
+
+.ui-city > * {
+  pointer-events: auto;
+}
+
+.ui-city[hidden] {
+  display: none;
+}
+
+/* Os avisos do escritório continuam na cidade, acima do minimapa. */
+.ui-root.is-city .ui-toasts {
+  right: calc(12px + env(safe-area-inset-right));
+  bottom: calc(150px + env(safe-area-inset-bottom));
+}
+
+/* Cartões do prédio e do jogador */
+.ui-city-card {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 264px;
+  padding: 10px 12px 10px;
+  border-radius: var(--radius);
+  background: var(--ui-bg-solid);
+  border: 1px solid var(--ui-line-strong);
+  box-shadow: 0 12px 30px rgba(5, 7, 12, 0.55);
+  font-size: 12px;
+  will-change: transform;
+  pointer-events: none;
+}
+
+.ui-city-card.is-pinned {
+  pointer-events: auto;
+}
+
+.ui-city-card.is-online {
+  border-color: rgba(255, 206, 110, 0.4);
+}
+
+.ui-city-card[hidden] {
+  display: none;
+}
+
+.ui-city-card.is-docked {
+  left: 8px;
+  right: 8px;
+  top: auto;
+  bottom: calc(132px + env(safe-area-inset-bottom));
+  width: auto;
+  transform: none !important;
+}
+
+.ui-city-card__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.ui-city-card__avatar {
+  flex: none;
+  display: grid;
+  place-items: end center;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #2a3550, #1b2133);
+  border: 1px solid var(--ui-line);
+}
+
+.ui-city-card__avatar[hidden] {
+  display: none;
+}
+
+.ui-city-card__avatar-img {
+  image-rendering: pixelated;
+}
+
+.ui-city-card__names {
+  min-width: 0;
+  flex: 1;
+}
+
+.ui-city-card__line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ui-city-card__flag {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.ui-city-card__title {
+  font: 700 14px/1.25 var(--font-ui);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-city-card__sub {
+  color: var(--ui-muted);
+  font-size: 11.5px;
+  margin-top: 1px;
+}
+
+.ui-city-card__sub:empty {
+  display: none;
+}
+
+.ui-city-card__close {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: -4px -6px 0 0;
+  border-radius: 6px;
+  color: var(--ui-muted);
+  font-size: 16px;
+  line-height: 1;
+  text-align: center;
+}
+
+.ui-city-card__close:hover {
+  background: var(--ui-bg-hover);
+  color: var(--ui-text);
+}
+
+.ui-city-card:not(.is-pinned) .ui-city-card__close {
+  visibility: hidden;
+}
+
+.ui-city-card__body {
+  display: grid;
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.ui-city-card__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ui-city-card__sep {
+  color: var(--ui-faint);
+}
+
+.ui-city-card__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--st-offline);
+}
+
+.ui-city-card__dot.is-on {
+  background: #ffce6e;
+  box-shadow: 0 0 6px rgba(255, 206, 110, 0.7);
+}
+
+.ui-city-card__agents {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.ui-city-card__agent {
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: var(--ui-bg-soft);
+  border: 1px solid var(--ui-line);
+  color: var(--ui-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.ui-city-card__agent b {
+  display: block;
+  font: 700 14px/1.2 var(--font-ui);
+}
+
+.ui-city-card__agent.is-working b {
+  color: var(--st-working);
+}
+
+.ui-city-card__agent.is-waiting b {
+  color: var(--st-waiting);
+}
+
+.ui-city-card__agent.is-idle b {
+  color: var(--st-idle);
+}
+
+.ui-city-card__muted {
+  color: var(--ui-muted);
+  font-size: 11.5px;
+}
+
+.ui-city-card__foot {
+  justify-content: space-between;
+  color: var(--ui-muted);
+}
+
+.ui-city-card__since {
+  font-size: 11px;
+  color: var(--ui-faint);
+}
+
+.ui-city-card__intro {
+  font-style: italic;
+  color: var(--ui-text);
+}
+
+.ui-city-card__traits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ui-city-card__link {
+  color: var(--ui-accent);
+  font-weight: 600;
+  font-size: 11.5px;
+}
+
+.ui-city-card__link:hover {
+  text-decoration: underline;
+}
+
+/* Minimapa */
+.ui-city-minimap {
+  position: fixed;
+  right: calc(12px + env(safe-area-inset-right));
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  padding: 4px;
+  border-radius: var(--radius);
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-line-strong);
+  box-shadow: 0 8px 22px rgba(5, 7, 12, 0.45);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+.ui-city-minimap__canvas {
+  display: block;
+  width: 176px;
+  height: 116px;
+  border-radius: 6px;
+  cursor: crosshair;
+  image-rendering: pixelated;
+}
+
+/* Dica das teclas, aviso rápido e "entrando" */
+.ui-city-help {
+  position: fixed;
+  left: calc(12px + env(safe-area-inset-left));
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  max-width: calc(100vw - 230px);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-line);
+  color: var(--ui-muted);
+  font-size: 11.5px;
+  pointer-events: none !important;
+}
+
+.ui-city-help kbd {
+  display: inline-block;
+  padding: 0 4px;
+  border-radius: 4px;
+  border: 1px solid var(--ui-line-strong);
+  background: var(--ui-bg-soft);
+  color: var(--ui-text);
+  font: 600 10.5px/16px var(--font-ui);
+}
+
+.ui-city-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(150px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  max-width: calc(100vw - 32px);
+  padding: 9px 14px;
+  border-radius: var(--radius);
+  background: var(--ui-bg-solid);
+  border: 1px solid rgba(255, 206, 110, 0.45);
+  box-shadow: 0 10px 26px rgba(5, 7, 12, 0.5);
+  color: #ffe9b8;
+  font-weight: 600;
+  text-align: center;
+}
+
+.ui-city-toast.is-in {
+  animation: ui-city-toast-in 0.18s var(--ease);
+}
+
+@keyframes ui-city-toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+}
+
+.ui-city-toast[hidden],
+.ui-city-loading[hidden] {
+  display: none;
+}
+
+.ui-city-loading {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  background: var(--ui-bg);
+  color: var(--ui-muted);
+  font-weight: 600;
+}
+
+@media (max-width: 600px) {
+  .ui-city-help {
+    display: none;
+  }
+
+  .ui-city-minimap__canvas {
+    width: 132px;
+    height: 88px;
+  }
+}

@@ -2,8 +2,11 @@
 // idioma ativo, porque vários módulos chamam tr() ao carregar.
 import { loadAccess } from './net/access';
 import { OfficeStore } from './net/store';
-import { createWorld } from './world';
+import { createWorld, type WorldApi } from './world';
 import { createUI } from './ui';
+import type { CitySceneHost } from './ui/world/scene-switch';
+import type { CityScene } from './world/city';
+import type { WorldStream } from './world/city/stream';
 import { migrateLegacyKeys, safeLocalStorage } from './ui/prefs';
 import { getLocale, tr } from '../../shared/i18n';
 
@@ -20,8 +23,11 @@ export function start(): void {
 
   const params = new URLSearchParams(location.search);
   const store = new OfficeStore({ mock: params.has('mock') });
-  const world = createWorld(document.getElementById('world') as HTMLCanvasElement, store);
-  createUI(document.getElementById('ui') as HTMLElement, store, world);
+  const worldCanvas = document.getElementById('world') as HTMLCanvasElement;
+  const uiRoot = document.getElementById('ui') as HTMLElement;
+  const world = createWorld(worldCanvas, store);
+  const city = cityHost({ world, worldCanvas, uiRoot, mock: store.mock, params });
+  createUI(uiRoot, store, world, city);
   // O que esta página pode fazer (porta local ou remota com login) chega antes do primeiro snapshot (ou desiste em
   // poucos segundos e fica a regra de antes).
   if (store.mock) store.connect();
@@ -39,5 +45,58 @@ export function start(): void {
   }
 
   // Facilita a depuração pelo console do navegador.
-  Object.assign(window, { habblaud: { store, world } });
+  Object.assign(window, { habblaud: { store, world, city } });
+}
+
+/**
+ * A cena da cidade do Habblaud World (botão Mundo): um segundo canvas por cima do escritório, carregado só na
+ * primeira vez que abre (quem não usa o World não baixa a cidade). Com a cidade na tela, o escritório para de
+ * desenhar e o teclado é da cidade; Esc ou o botão Escritório voltam.
+ */
+function cityHost(o: { world: WorldApi; worldCanvas: HTMLCanvasElement; uiRoot: HTMLElement; mock: boolean; params: URLSearchParams }): CitySceneHost & { scene(): CityScene | null } {
+  let scene: CityScene | null = null;
+  let loading: Promise<CityScene> | null = null;
+  let open = false;
+  const canvas = document.createElement('canvas');
+  canvas.id = 'city';
+  canvas.hidden = true;
+  o.worldCanvas.after(canvas);
+  const load = (): Promise<CityScene> =>
+    (loading ??= Promise.all([import('./world/city'), o.mock ? import('./world/city/fake-stream') : Promise.resolve(null)]).then(([m, fake]) => {
+      const perf = Number(o.params.get('perf'));
+      const openStream = (): WorldStream =>
+        // Modo demonstração: a cidade de mentira. Ao vivo: o stream do servidor local (net/world-stream.ts, na junção
+        // com o lado do servidor; até lá, um stream vazio).
+        fake ? fake.createFakeWorldStream(Number.isFinite(perf) && perf > 0 ? { buildings: perf } : {}) : m.emptyWorldStream();
+      scene = m.createCityScene({
+        canvas,
+        uiRoot: o.uiRoot,
+        openStream,
+        options: () => o.world.getOptions(),
+        topInset: () => o.uiRoot.querySelector('.ui-topbar')?.getBoundingClientRect().bottom ?? 64,
+      });
+      return scene;
+    }));
+  return {
+    get open() {
+      return open;
+    },
+    async show() {
+      const s = await load();
+      open = true;
+      o.world.setSuspended?.(true);
+      o.worldCanvas.hidden = true;
+      s.show();
+    },
+    hide() {
+      open = false;
+      scene?.hide();
+      o.worldCanvas.hidden = false;
+      o.world.setSuspended?.(false);
+    },
+    zoomBy: (f) => scene?.zoomBy(f),
+    recenter: () => scene?.recenter(),
+    escape: () => scene?.escape() ?? false,
+    scene: () => scene,
+  };
 }
