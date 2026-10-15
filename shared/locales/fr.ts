@@ -2666,7 +2666,7 @@ export const FR: Readonly<Record<string, string>> = {
   "Só pelo computador": "Ordinateur uniquement",
   "Sem conta": "Sans compte",
   "Na lista de espera": "Sur liste d'attente",
-  "Liberado": "Accès ouvert",
+  "Liberado": "Validé",
   "A conta do Habblaud World só pode ser mexida no próprio computador, com o Habblaud em acesso local (bind 127.0.0.1) e aberto por http://localhost.": "Le compte Habblaud World ne peut être géré que sur l'ordinateur lui-même, avec Habblaud en accès local (bind 127.0.0.1) et ouvert via http://localhost.",
   "Desligado: nenhum servidor do Habblaud World configurado neste Habblaud. Nada sai deste computador.": "Désactivé : aucun serveur Habblaud World n'est configuré dans ce Habblaud. Rien ne quitte cet ordinateur.",
   "Como o World cuida da privacidade": "Comment World protège la vie privée",

@@ -10,6 +10,21 @@ do meio (0.**3**.0).
 
 ## [Não lançado]
 
+### Habblaud World (em desenvolvimento, desligado por padrão)
+
+- **Interface:** **Configurações › Habblaud World** (depois de Acesso pelo celular) só aparece quando o servidor
+  local liga o World (`meta.world` no snapshot); sem servidor configurado, mostra "Desligado" e o link da
+  privacidade. Sem conta: **Criar conta** (e-mail e senha de 12 caracteres ou mais, o resumo do que sai e do que
+  nunca sai do computador, a linha dos dados verdadeiros e o aceite obrigatório dos Termos de Uso e da Política de
+  Privacidade) ou **Já tenho conta**; código de 6 dígitos com reenvio; **Esqueci a senha**. Na lista de espera, só
+  o aviso, sem posição nem previsão, e já dá para **criar o personagem**: nome de jogador, dica visual, o mesmo
+  editor de aparência da gaveta do agente, 2 ou 3 traços de personalidade (os que não combinam ficam desabilitados)
+  e uma frase de apresentação da lista. Com o acesso liberado, "Seu prédio entra no mundo na próxima versão".
+  Também: visibilidade do prédio (ao vivo ou discreto, fechado a visitas, esconder o país, tokens, placar,
+  compactações), dispositivos (revogar) e sair. Tudo só pelo próprio computador; nada pela porta remota do celular.
+  O cartão **Conheça o Habblaud World** aparece uma vez, para quem ainda não tem conta. No modo demonstração,
+  `?mock=1&world=logged_out` (ou `waiting`, `approved`, `off`) simula o servidor; o código é 123456.
+
 ## [0.11.0] - 2026-10-13
 
 Para atualizar: `git pull` e `npm run docker:up` (ele também atualiza o mod do Habblaud nas contas). O acesso pelo

@@ -2650,7 +2650,7 @@ export const EN: Readonly<Record<string, string>> = {
   "Só pelo computador": "Computer only",
   "Sem conta": "No account",
   "Na lista de espera": "On the waitlist",
-  "Liberado": "Access granted",
+  "Liberado": "Approved",
   "A conta do Habblaud World só pode ser mexida no próprio computador, com o Habblaud em acesso local (bind 127.0.0.1) e aberto por http://localhost.": "The Habblaud World account can only be managed on the computer itself, with Habblaud on local access (bind 127.0.0.1) and opened via http://localhost.",
   "Desligado: nenhum servidor do Habblaud World configurado neste Habblaud. Nada sai deste computador.": "Off: no Habblaud World server is configured in this Habblaud. Nothing leaves this computer.",
   "Como o World cuida da privacidade": "How World handles privacy",
