@@ -43,13 +43,18 @@ export function noticeText(raw: NoticeId | (string & {}), place: NoticePlace = '
       return place === 'inside' ? tr('Você não pode mais ficar neste prédio: voltou para a rua.') : tr('Você não pode entrar neste prédio.');
     case 'full':
       return tr('O prédio está lotado (20 visitantes). Tente daqui a pouco.');
-    // Fase 5 (social): os comandos que trazem estes avisos (like, carimbo, denúncia, bloqueio) ainda não saem daqui.
+    // Fase 5 (social leve). As confirmações (reported, blocked_ok, stamped) quase sempre já foram ditas na hora pelo
+    // social (city/social.ts e visit-social.ts as tiram daqui); chegando tarde, viram este aviso.
     case 'daily_limit':
+      return tr('Limite do dia atingido: amanhã tem mais.');
     case 'already_done':
+      return tr('Você já fez isso hoje.');
     case 'reported':
+      return tr('Denúncia enviada. Obrigado: a moderação vai olhar.');
     case 'blocked_ok':
+      return tr('Bloqueio feito: vocês deixam de se ver.');
     case 'stamped':
-      return null;
+      return tr('Carimbo deixado na portaria.');
     default:
       void (id satisfies never);
       return tr('Aviso do Habblaud World.');

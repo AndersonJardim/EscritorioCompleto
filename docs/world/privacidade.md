@@ -51,7 +51,7 @@ mundo e o seu prédio entra na cidade. Pela conexão sai **só** isto:
 | Pedido de área de novo (`resync`) | Quando chega uma mudança de prédio fora de ordem: só o id do pedaço da cidade (`chunk`) ou, dentro de um prédio que você visita, o id desse prédio (`building`) | Para o seu Habblaud mostrar os prédios certos |
 | Pedido de perfil (`profile`) | Ao clicar em alguém na rua: só o id (`playerId`) que o próprio mundo deu a essa pessoa | Para mostrar o cartão de quem está perto |
 | Entrar e sair de um prédio (`enter` e `leave`) | Ao apertar E na porta (ou em "Ver como os outros veem") e ao sair: só o id do prédio que o mundo deu (`buildingId`). Lá dentro, nenhum passo sai: o seu personagem anda só na sua tela | Para ver o interior do prédio de alguém (salas com nomes fictícios e os agentes no status de agora, sem terminal, mensagens, pedidos de permissão nem nada que age) |
-| Outros comandos do seu personagem (próximas fases) | Like, cumprimento (da lista fixa), bloqueio, denúncia (motivo da lista fixa), sempre com os ids que o mundo deu | São seus no mundo, nunca do escritório |
+| O social leve, quando você aperta (`like`/`unlike`, `greet`, `block`/`unblock`, `report`, `stamp`, `knock`, `teleport`, `summary.seen`) | Só ids e itens de lista: o prédio (`buildingId`) ou a pessoa (`playerId`) que o mundo deu, o cumprimento (`greetingId`), o carimbo (`stampId`) e o motivo da denúncia (`reason`) das listas fixas, e o código do prédio ("HB-XXXX", como você digitou) no "Ir para". Nenhum texto livre | Curtir, cumprimentar, bloquear, denunciar, deixar um carimbo, bater na porta, ir até um prédio e dizer que viu o "Enquanto você estava fora" |
 
 O pacote do prédio tem estes campos e mais nenhum (o formato exato está em
 [`shared/world/schema.json`](../../shared/world/schema.json); um teste confere que cada campo dele está nesta página):
@@ -150,6 +150,10 @@ fazem, nem quem você é: só o nickname e o avatar que você escolheu.**
   discreto, as salas vazias com a luz acesa; pausado, tudo apagado. Você vê só "N visitantes agora", nunca quem. E o
   que você vê lá dentro do prédio dos outros fica na sua tela: nada do interior sobe, nem a posição do seu personagem.
 - **Bloqueio nos dois sentidos:** quem você bloqueia some para você e você some para essa pessoa, inclusive o prédio.
+- **O social leve não conta quem foi:** o dono vê quantas visitas, likes e carimbos recebeu ("Enquanto você estava
+  fora") e quantos likes ganhou hoje, nunca de quem; bater na porta chega sem nome, e só se o dono ligou "Avisar quando
+  baterem na porta". Os agregados da cidade (a meta da semana, o total de tokens em faixa) só aparecem com 10 prédios
+  ou mais.
 
 Dito com clareza: quem observar o mesmo prédio por muito tempo pode notar padrões (mais agentes em dias úteis, por
 exemplo). Quem não quiser nem isso usa o modo discreto ou pausa.
@@ -163,6 +167,10 @@ exemplo). Quem não quiser nem isso usa o modo discreto ou pausa.
 - A última remessa do prédio (o pacote exato, a hora, o tamanho e a resposta do servidor) fica em
   `~/.habblaud/world-last-uplink.json`, também só para o seu usuário, e some ao sair da conta.
 - Os ids aleatórios do mundo vivem só na memória do Habblaud: reiniciar o Habblaud gera ids novos.
+- O que o mundo manda ao dono (os likes de hoje, o "Enquanto você estava fora", as batidas na porta e a lista de quem
+  você bloqueou) fica só na memória do Habblaud; no snapshot (que também vai ao celular) entram só os likes de hoje,
+  quantas batidas houve e se há um resumo não visto. O carimbo que você deixou hoje num prédio fica no navegador
+  (`localStorage`), para o botão saber que já foi.
 - A seção do World só funciona pelo próprio computador (`http://localhost`), nunca pelo celular, e só com o Habblaud
   acessível apenas pelo próprio computador. Como acontece com as mensagens pelo escritório, qualquer programa deste
   computador que alcance o `localhost` consegue agir pela conta.

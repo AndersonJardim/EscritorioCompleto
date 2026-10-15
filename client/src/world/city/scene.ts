@@ -3,6 +3,9 @@
 // redesenha o que brilha: janelas acesas, letreiros, postes) -> passada em espaço de tela (placas com o nome do
 // dono, a bandeira e os likes; nomes sobre as cabeças; destaques).
 //
+// Quem estende a cena (o social leve da Fase 5, city/social.ts) desenha pelos ganchos de `fx` (CityFx): depois de cada
+// fachada, peças com profundidade, por cima da noite e em espaço de tela.
+//
 // Custo: só o que cruza a vista (quarteirões pela conta da grade, nunca a lista inteira de prédios); sprites em
 // cache (célula, jardins, fachadas por chave, árvores e postes do escritório); sem alocação por quadro no caminho
 // quente (entidades reaproveitadas). Abaixo de zoom 0,6 os detalhes pequenos somem; abaixo de 1,1, as placas.
@@ -61,12 +64,48 @@ const enum K {
   Decor,
   Building,
   Char,
+  Fx,
 }
 
 interface Ent {
   k: K;
   y: number;
-  ref: Decor | BuildingVis | CharVis | null;
+  ref: Decor | BuildingVis | CharVis | CityFxProp | null;
+}
+
+/** Retângulo visível (px de mundo). */
+export interface CityView {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+/** Peça com profundidade de quem estende a cena: `y` é a base (px de mundo), que ordena com prédios e personagens. */
+export interface CityFxProp {
+  y: number;
+  draw(ctx: CanvasRenderingContext2D, now: number): void;
+}
+
+/** De px de mundo para px CSS da tela (o espaço das placas e dos nomes). */
+export interface CityScreenMap {
+  sx(wx: number): number;
+  sy(wy: number): number;
+  /** px CSS por px de mundo. */
+  k: number;
+  zoom: number;
+}
+
+/** Ganchos de desenho de quem estende a cena (o social leve, Fase 5: city/social.ts). */
+export interface CityFx {
+  /** Logo depois de cada fachada, na profundidade dela (px de mundo). */
+  building?(ctx: CanvasRenderingContext2D, v: BuildingVis, now: number): void;
+  /** Peças com profundidade (placas, enfeites) que cruzam a vista. */
+  props?(view: CityView, push: (p: CityFxProp) => void): void;
+  /** Por cima de tudo em px de mundo, depois da noite (fogos, corações, confete, brilhos). */
+  world?(ctx: CanvasRenderingContext2D, now: number, view: CityView): void;
+  /** Espaço de tela, depois das placas e dos nomes (balões, textos das placas da praça). */
+  screen?(ctx: CanvasRenderingContext2D, now: number, map: CityScreenMap): void;
 }
 
 /** Prédio visível neste quadro. */
@@ -169,6 +208,8 @@ export class CityRenderer {
   private readonly labelBoxes: number[] = [];
   /** Tempo do último quadro (ms) só do desenho, para a medição de desempenho. */
   lastFrameMs = 0;
+  /** Ganchos de desenho de quem estende a cena (CityFx). */
+  fx: CityFx | null = null;
 
   constructor(
     readonly canvas: HTMLCanvasElement,
@@ -409,12 +450,14 @@ export class CityRenderer {
       else v.visible = false;
     }
     this.charsDrawn.length = this.nc;
+    this.fx?.props?.({ x0: vx0, y0: vy0, x1: vx1, y1: vy1 }, (p) => push(K.Fx, p.y, p));
     ents.sort((a, b) => a.y - b.y || a.k - b.k);
 
     // ---- entidades
     for (const e of ents) {
       if (e.k === K.Decor) this.drawDecor(e.ref as Decor, now);
       else if (e.k === K.Building) this.drawBuilding(e.ref as BuildingVis, now, hl.building === (e.ref as BuildingVis).b.id);
+      else if (e.k === K.Fx) (e.ref as CityFxProp).draw(ctx, now);
       else this.drawChar(e.ref as CharVis, hl.player === (e.ref as CharVis).id);
     }
 
@@ -463,6 +506,7 @@ export class CityRenderer {
     }
     // janelas de quem espera piscam por cima de tudo (também de dia)
     this.drawWaiting(now);
+    this.fx?.world?.(ctx, now, { x0: vx0, y0: vy0, x1: vx1, y1: vy1 });
 
     // ---- espaço de tela: placas, nomes e dicas
     this.overlay(now, opts, hl);
@@ -616,6 +660,7 @@ export class CityRenderer {
       ctx.fillRect(v.x, v.y, FACADE.w, v.m.height);
       ctx.restore();
     }
+    this.fx?.building?.(ctx, v, now);
   }
 
   /** Janelas `waiting` piscando devagar em âmbar. */
@@ -839,6 +884,7 @@ export class CityRenderer {
       ctx.fillStyle = '#ffe3a0';
       ctx.fillText(label, left + 8, top + 10.5);
     }
+    this.fx?.screen?.(ctx, now, { sx, sy, k, zoom });
     void night;
   }
 

@@ -39,6 +39,9 @@ import { TopBar } from './topbar';
 import { UpdateBanner } from './update';
 import { InviteCard } from './world/invite-card';
 import { WorldChip } from './world/world-chip';
+import { WorldSocialNotifier } from './world/away-summary';
+import { worldGate } from './world/settings-world';
+import { worldSectionMode } from './world/world-model';
 import { SceneSwitch, type CitySceneHost } from './world/scene-switch';
 import { worldSource } from '../net/world';
 import { FreeArea } from './viewport';
@@ -235,6 +238,12 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi,
   // Chip "🏙️ no mundo" / "⏸ pausado" na barra do topo (conta aprovada; nunca pela porta do celular).
   const worldChip = new WorldChip(ctx, hw, () => settings.showWorld(topbar.settingsBtn, 'home'), (n) => toasts.push(n));
   topbar.addStatus(worldChip.el);
+  // "Enquanto você estava fora" ao conectar e o aviso de quem bateu na porta (Fase 5; só pelo próprio computador).
+  const worldSocial = new WorldSocialNotifier(ctx, hw, {
+    active: () => worldSectionMode(hw.meta(), worldGate(ctx, hw)) === 'active',
+    toast: (n) => toasts.push(n),
+    openWorld: () => settings.showWorld(topbar.settingsBtn, 'home'),
+  });
   // Botão Mundo: troca o escritório pela cidade (a cena vem de app.ts, carregada sob demanda).
   if (city) {
     scene = new SceneSwitch(ctx, hw, city, () => {
@@ -281,6 +290,8 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi,
 
   const components: UiComponent[] = [topbar, sidebar, drawer, terminal, pty, history, deliveries, feed, toasts, settings, empty, banner, tip, notifier, splash, timelapse, sound, day, updateToaster, invite, worldChip];
   if (scene) components.push(scene);
+  root.append(worldSocial.el);
+  components.push(worldSocial);
 
   // ---------------------------------------------------------------- renderização agrupada por quadro
   let rafId = 0;

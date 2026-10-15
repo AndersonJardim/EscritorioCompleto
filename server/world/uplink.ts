@@ -40,6 +40,8 @@
 // - A cena Mundo (viewer.ts) usa a mesma conexão: recebe o `welcome`, a queda e as mensagens da cidade (`CityListener`)
 //   e manda os comandos do jogador por `sendCity`, só depois do `welcome`; avisa quando passa a querer (ou deixa de
 //   querer) a cidade (`cityChanged`), para a conexão de quem está pausado abrir ou fechar. A lógica da cena fica lá.
+// - O social leve do dono (Fase 5, social.ts): `likes.today`, `away.summary` e `knock` vão para lá com a cena aberta ou
+//   não (e para a cena também); `summary.seen` e `unblock` saem por `sendCity`.
 import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { dayKeyOf, systemTimeZone } from '../../shared/daystats';
@@ -63,6 +65,7 @@ import {
   type WorldUplink,
 } from '../../shared/world/protocol';
 import { log } from '../log';
+import type { OwnerListener } from './social';
 import { WorldIds } from './ids';
 import type { WorldSession, WorldSettingsStore } from './settings';
 import { AgentSignals } from './signals';
@@ -222,6 +225,7 @@ export class BuildingUplink {
   /** O prédio desta conta está marcado como "não verificado" (do `welcome` ou da cidade). */
   private unverified = false;
   private city?: CityListener;
+  private owner?: OwnerListener;
 
   constructor(private readonly o: BuildingUplinkOptions) {
     this.t = { ...UPLINK_TIMING, ...o.timing };
@@ -317,6 +321,11 @@ export class BuildingUplink {
   /** Liga a cena Mundo (viewer.ts) à conexão. */
   attachCity(city: CityListener): void {
     this.city = city;
+  }
+
+  /** Liga o social leve do dono (social.ts): likes do dia, resumo e batidas na porta, com a cena aberta ou não. */
+  attachOwner(owner: OwnerListener): void {
+    this.owner = owner;
   }
 
   /** Manda um comando da cena (só com a conexão aceita); false se não foi. */
@@ -449,6 +458,14 @@ export class BuildingUplink {
       case 'goodbye':
         if (isGoodbye(msg.reason)) this.onGoodbye(msg.reason);
         return;
+      case 'likes.today':
+      case 'away.summary':
+      case 'knock':
+        // Para o dono (Fase 5, social.ts), com a cena aberta ou não; a cena também vê.
+        if (!this.welcomed) return;
+        this.owner?.message(msg);
+        this.city?.message(msg);
+        return;
       case 'ping':
         this.send({ t: 'pong' });
         return;
@@ -493,6 +510,7 @@ export class BuildingUplink {
     if (this.sending()) this.armSend(Math.max(0, this.lastSentAt + this.t.minGapMs - this.now()));
     this.o.onChange?.();
     this.city?.opened(msg);
+    this.owner?.opened();
   }
 
   private onVisitors(msg: Record<string, unknown>): void {

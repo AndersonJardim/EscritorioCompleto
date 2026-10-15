@@ -778,7 +778,8 @@ o Habblaud tenta de novo sozinho.
 
 **Visibilidade.** Ao vivo (andares, contadores e o status de cada personagem) ou **modo discreto** (só aceso ou apagado
 e o número de andares); fechado a visitas; esconder o país; os **tokens** do prédio só em faixas (até 100 mil, 1
-milhão…), nunca o número nem o custo, e dá para desligar; placar e compactações só se você ligar.
+milhão…), nunca o número nem o custo, e dá para desligar; placar e compactações só se você ligar; bater na porta
+(**Avisar quando baterem na porta**) também só se você ligar.
 
 **Cidade.** O botão **Mundo**, na barra do topo, troca o escritório pela cidade: anda-se com setas/WASD ou clicando, o
 cartão de cada prédio mostra andares, agentes e estado, e o minimapa fica no canto; pausado ou fora do mundo, o seu
@@ -791,6 +792,15 @@ nomes fictícios e os agentes no status de agora, só para ver (nada de terminal
 trabalho); prédio fechado a visitas só se vê por fora. No seu, você vê "N visitantes agora" (só a contagem, nunca quem).
 No modo demonstração: [a visita](docs/screenshots/world-visita.png) e
 [o painel da visita](docs/screenshots/world-visita-painel.png).
+
+**Social.** Na cidade, sem nenhum texto livre: **L** curte o prédio perto da porta, **G** abre a roda de cumprimentos
+(frases prontas, traduzidas para quem lê) e **K** bate na porta de quem aceita; o cartão de cada pessoa tem
+Cumprimentar, Bloquear e Denunciar, e o minimapa leva a um prédio pelo código ("Ir para HB-XXXX") ou a um prédio aceso
+qualquer. Dentro de um prédio, **Curtir** e **Deixar um carimbo** na portaria (um por prédio por dia). Na praça, o
+termômetro da meta da semana da cidade e, quando ela bate, fogos. No escritório, o chip "❤️ N hoje" e o cartão "Enquanto
+você estava fora" com as visitas, os likes e os carimbos deixados na portaria (nunca quem); quem você bloqueou fica em
+**Bloqueados**, com **Desbloquear**. No modo demonstração: [a roda de cumprimentos](docs/screenshots/world-social.png) e
+[a praça com os fogos](docs/screenshots/world-praca.png).
 
 **Pausar, sair, excluir.** **Pausar** apaga o prédio na hora e guarda o lote (com 30 dias pausado, ele some do mapa; 30
 dias depois, é retirado). **Sair do mundo** retira o prédio e libera o lote; a conta e o personagem continuam, e voltar

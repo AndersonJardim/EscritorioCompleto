@@ -70,7 +70,9 @@ export type WorldScreen =
   | 'visibility'
   | 'devices'
   // "Conta e dados" (Fase 6): aviso de inatividade, baixar os dados e excluir a conta
-  | 'account';
+  | 'account'
+  // Bloqueados (Fase 5): quem você bloqueou, para desbloquear
+  | 'blocked';
 
 /** Aviso curto no topo da seção depois de uma ação (some na próxima navegação). */
 export type WorldFlash = 'code_sent' | 'code_resent' | 'password_changed' | 'signed_out' | 'character_saved' | 'device_revoked';
@@ -97,7 +99,7 @@ export type WorldUiEvent =
   | { type: 'flash'; flash: WorldFlash };
 
 const SIGNED_OUT: readonly WorldScreen[] = ['welcome', 'register', 'login', 'verify', 'forgot', 'reset'];
-const SIGNED_IN: readonly WorldScreen[] = ['home', 'character', 'visibility', 'devices', 'account'];
+const SIGNED_IN: readonly WorldScreen[] = ['home', 'character', 'visibility', 'devices', 'account', 'blocked'];
 
 /** Telas possíveis em cada estado da conta (a primeira é a de entrada). */
 export function screensFor(state: WorldServerState): readonly WorldScreen[] {
@@ -284,13 +286,14 @@ export const DEFAULT_VISIBILITY: Readonly<WorldVisibility> = {
   tokensVisible: true,
   leaderboard: false,
   compactions: false,
+  knocks: false,
 };
 
 /** Os interruptores da tela de visibilidade (o aviso de inatividade fica em "Conta e dados"). */
 export type VisibilitySwitch = Exclude<keyof WorldVisibility, 'mode' | 'notifyInactivity'>;
 
 /** Ordem dos interruptores na tela. */
-export const VISIBILITY_SWITCHES: readonly VisibilitySwitch[] = ['closed', 'hideCountry', 'tokensVisible', 'leaderboard', 'compactions'];
+export const VISIBILITY_SWITCHES: readonly VisibilitySwitch[] = ['closed', 'hideCountry', 'tokensVisible', 'leaderboard', 'compactions', 'knocks'];
 
 // ------------------------------------------------------------------ conta e dados (Fase 6)
 
@@ -353,7 +356,10 @@ export type WorldAction =
   /** "Excluir conta" (pedir o código ou confirmar). */
   | 'delete'
   /** O aviso de inatividade (PUT /api/world/visibility). */
-  | 'inactivity';
+  | 'inactivity'
+  /** Fase 5: "Enquanto você estava fora" visto e Desbloquear. */
+  | 'summary'
+  | 'unblock';
 
 /**
  * Texto de um erro (o `message` do servidor, em inglês, nunca aparece). O switch cobre todo WorldErrorCode (o
@@ -432,6 +438,7 @@ export function worldErrorText(raw: WorldErrorCode | string, action: WorldAction
     case 'no_stream':
       return tr('A cena Mundo perdeu a conexão com o Habblaud. Abra a cidade de novo.');
     case 'not_connected':
+      if (action === 'unblock') return tr('Sem conexão com o Habblaud World agora: desbloquear precisa do prédio aceso ou da cidade aberta.');
       return tr('Sem conexão com o Habblaud World agora; o Habblaud tenta de novo sozinho.');
     case 'offline':
       return tr('Sem conexão com o Habblaud.');

@@ -781,7 +781,7 @@ maintenance, the card says so, and Habblaud tries again on its own.
 **Visibility.** Live (floors, counters and each character's status) or **discreet mode** (only lit or dark and the
 number of floors); closed to visits; hide the country; the building's **tokens** only in bands (up to 100 thousand, 1
 million…), never the number or the cost, and they can be turned off; leaderboard and compactions only if you turn them
-on.
+on; knocks on the door (**Let me know when someone knocks**) only if you turn it on.
 
 **City.** The **World** button in the top bar swaps the office for the city: walk with the arrows/WASD or by clicking,
 each building's card shows floors, agents and status, and the minimap sits in the corner; paused or out of the world,
@@ -794,6 +794,16 @@ names and the agents in their current status, view only (no terminal, messages o
 work); a building closed to visits can only be seen from outside. On yours, you see "N visitors now" (only the count,
 never who). In demo mode: [the visit](docs/screenshots/world-visita.png) and
 [the visit panel](docs/screenshots/world-visita-painel.png).
+
+**Social.** In the city, with no free text anywhere: **L** likes the building by the door, **G** opens the greeting
+wheel (ready-made phrases, translated for whoever reads them) and **K** knocks on the door of owners who accept it; each
+person's card has Greet, Block and Report, and the minimap takes you to a building by its code ("Go to HB-XXXX") or to
+any lit building. Inside a building, **Like** and **Leave a stamp** at the front desk (one per building per day). In the
+square, the thermometer of the city's weekly goal and, when it's reached, fireworks. In the office, the "❤️ N today"
+chip and the "While you were away" card with the visits, likes and stamps left at the front desk (never who); people you
+blocked are listed in **Blocked**, with **Unblock**. In demo mode:
+[the greeting wheel](docs/screenshots/world-social.png) and
+[the square with the fireworks](docs/screenshots/world-praca.png).
 
 **Pause, leave, delete.** **Pause** turns the building off right away and keeps the lot (after 30 days paused, it
 disappears from the map; 30 days later, it's removed). **Leave the world** removes the building and frees the lot; the

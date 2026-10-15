@@ -18,6 +18,11 @@
 // interior de exemplo (shared/world/visit-sample.ts: ao vivo, discreto ou apagado, conforme o prédio), um
 // `building.patch` a cada 3 s (agentes trocando de status) e a contagem de visitantes; fechado a visitas, `closed`;
 // longe, `too_far`. Lá dentro, nada da rua desce; `leave` responde o `pos` na porta e as áreas de novo.
+// O social leve (Fase 5), com as regras do servidor: like a até 4 passos da porta (nunca no meu), carimbo e bater a até
+// 2 (like e carimbo também de dentro do prédio), um carimbo por prédio por dia (com o `stamped`, como o `blocked_ok` e
+// o `reported` do bloqueio e da denúncia), os bots se cumprimentando (e respondendo a quem os cumprimenta), bloquear tira a
+// pessoa da rua, "Ir para HB-XXXX" e o prédio aleatório, a meta da cidade a 80 % e, com `celebrate()` (o botão de teste
+// de `?fireworks=1`), os fogos.
 import type { WorldSceneCommand, WorldSceneMe, WorldSceneMessage, WorldSceneSnapshot } from '../../../shared/world/api';
 import { WORLD_SCENE_LIMITS, WORLD_SCENE_MESSAGES } from '../../../shared/world/api';
 import { flattenAppearance } from '../../../shared/world/appearance-flat';
@@ -38,6 +43,7 @@ import {
   type CityPoint,
 } from '../../../shared/world/city';
 import type {
+  CityGoal,
   Direction,
   GreetingId,
   WorldBuildingDetail,
@@ -49,6 +55,7 @@ import type {
   WorldPosition,
   WorldTheme,
 } from '../../../shared/world/protocol';
+import { GREETING_IDS } from '../../../shared/world/protocol';
 import { reduceSceneBatch } from '../../../shared/world/scene';
 import { sampleBuildingDetail } from '../../../shared/world/visit-sample';
 import { reconnectDelay, type EventSourceLike } from './store';
@@ -334,6 +341,34 @@ export const FAKE_ME: WorldSceneMe = {
 };
 /** O meu prédio é o 4º lote da espiral: (3,1), com a porta na calçada sul do quarteirão (1,0). */
 const MY_LOT_INDEX = 3;
+/** O código do meu prédio na cidade falsa (o mesmo do FakeWorldApi). */
+export const FAKE_MY_CODE = 'HB-4F2K';
+const CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTVWXYZ';
+
+/** Código fictício e estável de cada lote da cidade falsa ("HB-" + 4 do alfabeto sem confusos). */
+export function fakeBuildingCode(i: number): string {
+  let v = (Math.imul(i + 7, 2654435761) >>> 0) % CODE_ALPHABET.length ** 4;
+  let out = '';
+  for (let k = 0; k < 4; k++) {
+    out = CODE_ALPHABET[v % CODE_ALPHABET.length] + out;
+    v = Math.floor(v / CODE_ALPHABET.length);
+  }
+  const code = `HB-${out}`;
+  return code === FAKE_MY_CODE ? 'HB-7777' : code;
+}
+
+/** O código como alguém digitou, no formato canônico (ou null), como o servidor do mundo faz. */
+function normalizeCode(raw: string): string | null {
+  const s = raw.trim().toUpperCase().replace(/[\s_]+/g, '');
+  const body = s.startsWith('HB-') ? s.slice(3) : s.startsWith('HB') && s.length === 6 ? s.slice(2) : s;
+  return /^[2-9A-HJKMNP-TV-Z]{4}$/.test(body) ? `HB-${body}` : null;
+}
+
+/** Uma resposta que combina com o cumprimento (os bots respondem). */
+const REPLY: Readonly<Record<GreetingId, GreetingId>> = {
+  hello: 'nice_to_meet', wave: 'hello', nice_building: 'thanks', congrats: 'thanks', clap: 'thanks', good_luck: 'thanks',
+  coffee: 'coffee', bye: 'bye', thanks: 'clap', nice_to_meet: 'wave',
+};
 
 /** Donos fictícios (nomes de jogador inventados). */
 const OWNERS: ReadonlyArray<readonly [string, string | undefined]> = [
@@ -402,6 +437,14 @@ export function fakeMyDoor(): CityPoint {
 
 const chunkOfPos = (x: number, y: number) => chunkId(DISTRICT, chunkOf(blockAt(x, y)));
 
+/** A meta da semana da cidade falsa: a primeira (10 mil h de agentes), a 80 %, até a próxima segunda-feira (UTC). */
+export function fakeGoal(now: number): CityGoal {
+  const d = new Date(now);
+  const day = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  const monday = day - ((new Date(day).getUTCDay() + 6) % 7) * 86_400_000;
+  return { id: `${new Date(monday).toISOString().slice(0, 10)}:agent_hours_10k`, label: 'agent_hours_10k', target: 10_000, progress: 8_000, until: monday + 7 * 86_400_000 };
+}
+
 function fakeLots(n: number): CityPoint[] {
   const lots: CityPoint[] = [];
   for (const lot of lotSpiral()) {
@@ -447,6 +490,10 @@ export function fakeCityBuildings(n = 20): WorldBuildingPublic[] {
     if (!discreet) b.agents = { total, working, waiting, idle: total - working - waiting };
     if (i % 4 !== 1) b.tokens = { day: (i % 5) as TokenBand, week: Math.min(5, (i % 5) + 1) as TokenBand };
     if (i % 8 === 6) b.closed = true;
+    // Fase 5: o código do prédio, quem aceita batidas na porta e um prédio "não verificado" (Fase 6)
+    b.code = mine ? FAKE_MY_CODE : fakeBuildingCode(i);
+    if (i % 3 === 1 || i === 4) b.knocks = true;
+    if (i === 10) (b as WorldBuildingPublic & { unverified?: true }).unverified = true;
     return b;
   });
 }
@@ -469,6 +516,18 @@ export class FakeWorldStream implements WorldStream {
   private pending: WorldSceneMessage[] = [];
   /** Dentro de um prédio (visita): o interior e o `rev` dele. */
   private inside: { id: string; rev: number; detail: WorldBuildingDetail; patches: number } | null = null;
+  /** Mensagens para mais tarde (as respostas dos bots aos cumprimentos). */
+  private later: Array<{ at: number; msg: WorldSceneMessage }> = [];
+  /** Sorteios do social (determinísticos, como o resto da cidade falsa). */
+  private readonly social = mulberry32(0x50c1a1);
+  /** Quem eu bloqueei (some da rua). */
+  private readonly hidden = new Set<string>();
+  /** Carimbos de hoje (um por prédio). */
+  private readonly stamped = new Set<string>();
+  /** Quando cada bot me cumprimentou por último. */
+  private readonly greetedMe = new Map<string, number>();
+  /** A meta da semana (horas de agente): começa a 80 % da primeira. */
+  private goal: CityGoal;
 
   constructor(o: FakeWorldStreamOptions = {}) {
     this.now = o.now ?? Date.now;
@@ -479,6 +538,7 @@ export class FakeWorldStream implements WorldStream {
     const mine = this.buildings.find((b) => b.id === FAKE_ME.id);
     const door = mine ? lotDoor(mine.lot).front : spawnPoint();
     this.me = { x: door.x, y: door.y, dir: 's', moving: false };
+    this.goal = fakeGoal(this.start);
     const prng = mulberry32(0x9e1a);
     const player = (k: number, name: string, look: 'f' | 'm', pos: WorldPosition): WorldPlayerPublic => {
       const owns = WALKERS[k]?.owns;
@@ -534,10 +594,28 @@ export class FakeWorldStream implements WorldStream {
       pos: this.me,
       afk: this.afkSent,
       chunks: this.viewing ? [...byChunk.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([chunk, buildings]) => ({ chunk, rev: this.revs.get(chunk) ?? 1, buildings })) : [],
-      players: this.viewing && !this.inside ? this.walkers : [],
+      players: this.viewing && !this.inside ? this.walkers.filter((p) => !this.hidden.has(p.id)) : [],
       minimap: this.viewing ? this.minimap() : null,
       ...(this.inside ? { inside: { id: this.inside.id, rev: this.inside.rev, detail: this.inside.detail } } : {}),
+      ...(this.viewing ? { city: this.cityStatus() } : {}),
+      likesToday: 3,
     });
+  }
+
+  /** A cidade (↓ `city`): os prédios acesos, a meta da semana e a faixa dos tokens. */
+  private cityStatus(): { lit: number; goal: CityGoal; tokensBand: TokenBand } {
+    return { lit: this.buildings.filter((b) => b.state === 'online').length, goal: { ...this.goal }, tokensBand: 4 };
+  }
+
+  /** A cidade bateu a meta (o botão de teste de `?fireworks=1`): fogos e a meta seguinte. */
+  celebrate(): void {
+    if (this.closed) return;
+    const reached = this.goal;
+    this.emit({ t: 'city.fireworks', goalId: reached.id });
+    const next = reached.label === 'agent_hours_10k' ? 'agent_hours_50k' : 'agent_hours_100k';
+    const target = next === 'agent_hours_50k' ? 50_000 : 100_000;
+    this.goal = { id: reached.id.replace(reached.label, next), label: next, target, progress: Math.max(reached.target, reached.progress), until: reached.until };
+    this.emit({ t: 'city', ...this.cityStatus() });
   }
 
   send(cmds: WorldSceneCommand[]): void {
@@ -568,11 +646,17 @@ export class FakeWorldStream implements WorldStream {
       return;
     }
     const now = this.now();
+    const due = this.later.filter((l) => l.at <= now);
+    if (due.length) {
+      this.later = this.later.filter((l) => l.at > now);
+      for (const l of due) this.emit(l.msg);
+    }
     const t = (now - this.start) / 1000;
     const byChunk = new Map<string, Array<{ id: string; pos: WorldPosition }>>();
     WALKERS.forEach((w, i) => {
       const p = this.walkers[i]!;
       p.pos = loopPosition(w.block, w.phase + w.speed * t, w.cw);
+      if (this.hidden.has(p.id)) return;
       const c = chunkOfPos(p.pos.x, p.pos.y);
       if (!byChunk.has(c)) byChunk.set(c, []);
       byChunk.get(c)!.push({ id: p.id, pos: { ...p.pos } });
@@ -580,9 +664,39 @@ export class FakeWorldStream implements WorldStream {
     for (const [chunk, players] of byChunk) this.emit({ t: 'players', chunk, players });
     if (this.ticks % 15 === 0) this.changeBuilding(this.ticks / 15);
     if (this.ticks % 300 === 0) this.emit({ t: 'minimap', blocks: this.minimap() });
+    if (this.ticks % 300 === 0) {
+      // a meta anda um pouco a cada minuto (agentes trabalhando na cidade toda)
+      this.goal = { ...this.goal, progress: Math.min(this.goal.target - 1, this.goal.progress + 7) };
+      this.emit({ t: 'city', ...this.cityStatus() });
+    }
+    if (this.ticks % 25 === 0) this.botsGreet(now);
     if (!this.afkSent && now - this.lastMoveAt >= FAKE_AFK_MS) {
       this.afkSent = true;
       this.emit({ t: 'afk' });
+    }
+  }
+
+  /**
+   * Os bots se cumprimentam (dois que se veem, e o outro responde em 1,6 s) e, às vezes, cumprimentam quem está perto
+   * deles (eu), no máximo uma vez a cada 30 s cada um.
+   */
+  private botsGreet(now: number): void {
+    const bots = this.walkers.filter((p) => !this.hidden.has(p.id));
+    if (bots.length >= 2) {
+      const a = bots[Math.floor(this.social() * bots.length)]!;
+      const others = bots.filter((p) => p !== a).sort((x, y) => Math.hypot(x.pos.x - a.pos.x, x.pos.y - a.pos.y) - Math.hypot(y.pos.x - a.pos.x, y.pos.y - a.pos.y));
+      const b = others[0]!;
+      const g = GREETING_IDS[Math.floor(this.social() * GREETING_IDS.length)]!;
+      this.emit({ t: 'greeting', from: a.id, to: b.id, greetingId: g, until: now + 5_000 });
+      this.later.push({ at: now + 1_600, msg: { t: 'greeting', from: b.id, to: a.id, greetingId: REPLY[g], until: now + 6_600 } });
+    }
+    for (const p of bots) {
+      if (Math.hypot(p.pos.x - this.me.x, p.pos.y - this.me.y) > 7 || now - (this.greetedMe.get(p.id) ?? -Infinity) < 30_000) continue;
+      if (this.social() < 0.5) continue;
+      this.greetedMe.set(p.id, now);
+      const g: GreetingId = this.social() < 0.5 ? 'hello' : 'wave';
+      this.emit({ t: 'greeting', from: p.id, to: FAKE_ME.id, greetingId: g, until: now + 5_000 });
+      break;
     }
   }
 
@@ -590,7 +704,8 @@ export class FakeWorldStream implements WorldStream {
   private changeBuilding(n: number): void {
     const b = this.buildings[(n * 7) % this.buildings.length]!;
     if (!b.agents || b.state !== 'online') return;
-    const working = (b.agents.working + 1) % (b.agents.total + 1);
+    // de vez em quando todos param de uma vez (fim de turno: confete na fachada)
+    const working = n % 4 === 0 && b.agents.working > 0 ? 0 : (b.agents.working + 1) % (b.agents.total + 1);
     const waiting = Math.min(b.agents.total - working, n % 2);
     b.agents = { total: b.agents.total, working, waiting, idle: b.agents.total - working - waiting };
     if (n % 3 === 0) b.likes++;
@@ -625,17 +740,69 @@ export class FakeWorldStream implements WorldStream {
       }
       case 'like':
       case 'unlike': {
-        const b = this.buildings.find((x) => x.id === c.buildingId);
-        if (!b) return;
+        // como o servidor: a até 4 passos da porta, nunca no próprio prédio
+        const b = this.near(c.buildingId, 4);
+        if (typeof b === 'string') return void this.pending.push({ t: 'notice', level: 'warn', text: b });
         const liked = c.t === 'like';
         if (!!b.likedByMe !== liked) b.likes += liked ? 1 : -1;
         b.likedByMe = liked;
         this.pending.push({ t: 'like.update', buildingId: b.id, likes: b.likes, likedByMe: liked });
         return;
       }
-      case 'greet':
-        this.pending.push({ t: 'greeting', from: FAKE_ME.id, to: c.playerId, greetingId: c.greetingId as GreetingId, until: this.now() + 5_000 });
+      case 'greet': {
+        const to = this.walkers.find((p) => p.id === c.playerId && !this.hidden.has(p.id));
+        if (!to) return void this.pending.push({ t: 'notice', level: 'info', text: 'not_found' });
+        const now = this.now();
+        this.pending.push({ t: 'greeting', from: FAKE_ME.id, to: c.playerId, greetingId: c.greetingId as GreetingId, until: now + 5_000 });
+        // o bot responde
+        this.later.push({ at: now + 1_200, msg: { t: 'greeting', from: c.playerId, to: FAKE_ME.id, greetingId: REPLY[c.greetingId as GreetingId] ?? 'wave', until: now + 6_200 } });
         return;
+      }
+      case 'stamp': {
+        const b = this.near(c.buildingId, 2);
+        if (typeof b === 'string') return void this.pending.push({ t: 'notice', level: 'warn', text: b });
+        if (this.stamped.has(b.id)) return void this.pending.push({ t: 'notice', level: 'info', text: 'already_done' });
+        this.stamped.add(b.id);
+        this.pending.push({ t: 'notice', level: 'info', text: 'stamped' });
+        return;
+      }
+      case 'knock': {
+        // quem bate nunca sabe se o dono está lá: sem resposta, só a recusa de longe
+        const b = this.near(c.buildingId, 2);
+        if (typeof b === 'string') this.pending.push({ t: 'notice', level: 'warn', text: b });
+        return;
+      }
+      case 'teleport': {
+        const code = c.code === undefined ? null : normalizeCode(c.code);
+        let target: WorldBuildingPublic | undefined;
+        if (c.code !== undefined) target = code ? this.buildings.find((b) => b.code === code && !this.hidden.has(b.id)) : undefined;
+        else {
+          const lit = this.buildings.filter((b) => b.state === 'online' && b.id !== FAKE_ME.id && !this.hidden.has(b.id));
+          target = lit[Math.floor(this.social() * lit.length)];
+        }
+        if (!target) return void this.pending.push({ t: 'notice', level: 'info', text: 'not_found' });
+        const d = lotDoor(target.lot);
+        this.me = { x: d.front.x, y: d.front.y, dir: d.side, moving: false };
+        this.lastMoveAt = this.now();
+        this.afkSent = false;
+        this.pending.push({ t: 'pos', x: d.front.x, y: d.front.y });
+        // a área em volta do lugar novo (a cena só guarda os 3×3 chunks em volta de mim)
+        for (const ch of this.snapshot().chunks) this.pending.push({ t: 'area', chunk: ch.chunk, rev: ch.rev, buildings: ch.buildings });
+        return;
+      }
+      case 'block': {
+        const p = this.walkers.find((x) => x.id === c.playerId);
+        if (!p) return void this.pending.push({ t: 'notice', level: 'info', text: 'not_found' });
+        this.hidden.add(p.id);
+        this.pending.push({ t: 'player.leave', id: p.id }, { t: 'notice', level: 'info', text: 'blocked_ok' });
+        return;
+      }
+      case 'unblock': {
+        const p = this.walkers.find((x) => x.id === c.playerId);
+        if (!p || !this.hidden.delete(p.id)) return;
+        this.pending.push({ t: 'player.join', player: structuredClone(p) });
+        return;
+      }
       case 'resync':
         for (const ch of this.snapshot().chunks) {
           if (c.chunk === undefined || ch.chunk === c.chunk) this.pending.push({ t: 'area', chunk: ch.chunk, rev: ch.rev, buildings: ch.buildings });
@@ -665,7 +832,8 @@ export class FakeWorldStream implements WorldStream {
         return;
       }
       default:
-        // block, unblock, report: as próximas fases.
+        // report: o `reported`; summary.seen: nada volta.
+        if (c.t === 'report') this.pending.push({ t: 'notice', level: 'info', text: 'reported' });
         return;
     }
   }
@@ -712,6 +880,19 @@ export class FakeWorldStream implements WorldStream {
     for (const f of ins.detail.floors) for (const a of f.agents) if (next[a.name]) a.status = next[a.name]!;
     ins.rev++;
     this.emit({ t: 'building.patch', rev: ins.rev, floors: structuredClone(ins.detail.floors) });
+  }
+
+  /**
+   * O prédio a até `max` passos da porta (como o servidor confere) ou o prédio em que estou (de dentro vale sem a
+   * distância), ou o aviso: longe, o meu ou nenhum.
+   */
+  private near(id: string, max: number): WorldBuildingPublic | 'too_far' | 'invalid' | 'not_found' {
+    if (id === FAKE_ME.id) return 'invalid';
+    const b = this.buildings.find((x) => x.id === id);
+    if (!b) return 'not_found';
+    if (this.inside?.id === id) return b;
+    const f = lotDoor(b.lot).front;
+    return Math.hypot(f.x - this.me.x, f.y - this.me.y) <= max + 1e-9 ? b : 'too_far';
   }
 
   private emit(msg: WorldSceneMessage): void {

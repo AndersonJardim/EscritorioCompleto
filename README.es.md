@@ -814,7 +814,8 @@ está en mantenimiento, la tarjeta lo dice y Habblaud vuelve a intentarlo solo.
 
 **Visibilidad.** En vivo (pisos, contadores y el estado de cada personaje) o **modo discreto** (solo encendido o apagado
 y el número de pisos); cerrado a visitas; ocultar el país; los **tokens** del edificio solo en franjas (hasta 100 mil, 1
-millón…), nunca el número ni el costo, y se pueden desactivar; clasificación y compactaciones solo si las activas.
+millón…), nunca el número ni el costo, y se pueden desactivar; clasificación y compactaciones solo si las activas; tocar
+a la puerta (**Avisarme cuando toquen a la puerta**) también solo si lo activas.
 
 **Ciudad.** El botón **Mundo**, en la barra superior, cambia la oficina por la ciudad: se camina con flechas/WASD o
 haciendo clic, la tarjeta de cada edificio muestra pisos, agentes y estado, y el minimapa queda en la esquina; en pausa o
@@ -827,6 +828,15 @@ de nombres ficticios y los agentes en su estado de ahora, solo para mirar (sin t
 del trabajo); un edificio cerrado a visitas solo se ve por fuera. En el tuyo ves "N visitantes ahora" (solo el número,
 nunca quién). En el modo demostración: [la visita](docs/screenshots/world-visita.png) y
 [el panel de la visita](docs/screenshots/world-visita-painel.png).
+
+**Social.** En la ciudad, sin ningún texto libre: **L** da me gusta al edificio junto a la puerta, **G** abre la rueda
+de saludos (frases listas, traducidas para quien las lee) y **K** toca a la puerta de quien lo acepta; la tarjeta de
+cada persona tiene Saludar, Bloquear y Denunciar, y el minimapa lleva a un edificio por su código ("Ir a HB-XXXX") o a
+cualquier edificio encendido. Dentro de un edificio, **Me gusta** y **Dejar un sello** en la recepción (uno por edificio
+por día). En la plaza, el termómetro de la meta semanal de la ciudad y, cuando se alcanza, fuegos artificiales. En la
+oficina, el chip "❤️ N hoy" y la tarjeta "Mientras no estabas" con las visitas, los me gusta y los sellos dejados en la
+recepción (nunca quién); a quien bloqueaste lo ves en **Bloqueados**, con **Desbloquear**. En el modo demostración:
+[la rueda de saludos](docs/screenshots/world-social.png) y [la plaza con los fuegos](docs/screenshots/world-praca.png).
 
 **Pausar, salir, eliminar.** **Pausar** apaga el edificio en el acto y guarda el lote (con 30 días en pausa, desaparece
 del mapa; 30 días después, se retira). **Salir del mundo** retira el edificio y libera el lote; la cuenta y el personaje

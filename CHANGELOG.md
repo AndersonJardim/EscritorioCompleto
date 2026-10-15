@@ -35,8 +35,8 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
 - **Personagem:** nome de jogador, dica visual, o mesmo editor de aparência da gaveta do agente, 2 ou 3 traços de
   personalidade (os que não combinam ficam desabilitados) e uma frase de apresentação da lista; dá para criar ainda na
   lista de espera. Se a moderação trocar o nome, a seção pede um nome novo, que entra sem esperar os 30 dias.
-- **Visibilidade do prédio:** ao vivo ou discreto, fechado a visitas, esconder o país, tokens (só em faixas), placar e
-  compactações.
+- **Visibilidade do prédio:** ao vivo ou discreto, fechado a visitas, esconder o país, tokens (só em faixas), placar,
+  compactações e **Avisar quando baterem na porta** (desligado por padrão).
 - **Conta e dados** (nova tela em Configurações › Habblaud World): o interruptor **Avisar por e-mail antes de retirar
   meu prédio por inatividade**; **Baixar meus dados**, que salva `habblaud-world-dados.json` com o que o mundo guarda da
   conta (uma vez por dia); e **Excluir conta** em três etapas: o que some e quando (o prédio e o perfil na hora; a
@@ -94,31 +94,51 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
   do seu personagem (`view`) pela mesma conexão do prédio e repassa ao navegador por `GET /api/world/stream` (SSE: o
   estado inteiro ao abrir, depois cada mudança na ordem); fechada a cena, avisa (`view.off`) e nada mais desce. Prédios
   por chunk com revisão (um salto pede a área de novo), jogadores por perto, minimapa e a sua posição ficam só em
-  memória. Os comandos do personagem (`POST /api/world/cmd`: andar, perfil, entrar e sair de um prédio e, nas
-  próximas fases, like, cumprimento, bloqueio e denúncia) são conferidos campo a campo, no máximo 5 lotes por segundo e
-  só o último passo de cada lote; no máximo 4 abas com a cidade. Só pelo próprio computador e só pela própria página
-  (nunca por outro site). A geometria da cidade (lotes, quarteirões, portas, chunks e o que é caminhável) fica em
-  `shared/world/city.ts`, a mesma do servidor do mundo. O seu personagem entra na rua na posição que o servidor do mundo
-  validou (na calçada da sua porta ou na praça).
-- **Visitar um prédio:** a até 2 tiles da porta de um prédio, **Entrar (E)** leva para dentro: o escritório do dono
-  como ele vê o dele, com o tema dele, as salas com os nomes fictícios do dia ("Projeto Ipê", "Projeto Jade"...) e os
-  agentes no status de agora (digitando, de mão levantada, de olho no terminal ou à toa, com a vida social simulada no
-  seu navegador), mudando na hora a cada pacote do dono. Você entra pelo elevador com o seu personagem e o crachá de
-  **visitante** e anda com o teclado ou clicando (sem sentar nas mesas). A faixa do topo diz de quem é o prédio,
-  quantos andares e agentes e se está em modo discreto (salas vazias, com a luz acesa) ou apagado (pausado: tudo
-  escuro); o painel ao lado lista as salas e os agentes (nome, papel, ferramenta e status; clicar abre um cartão com
-  isso e nada mais). Nada do que vem do mundo tem horário, então lá dentro não existe pipoca, teia, cronômetro nem
-  "espera há X". **Sair** pelo botão, pelo Esc ou pelo elevador da recepção volta para a calçada em frente à porta. O
-  botão **Curtir** está lá, desabilitado ("em breve"). Prédio fechado a visitas, cheio (20 visitantes), bloqueado ou
-  longe demais dá um aviso na tela. Nada que age no escritório existe na visita (nem terminal, gaveta, feed, avisos,
-  pedidos de permissão, mensagens, Meu dia, timelapse, editor ou renomear sala): ela roda num mundo à parte, que só
-  fala com `/api/world/*`, e nenhum passo seu lá dentro sai do computador. As moedinhas da vida social dos agentes
-  visitados ficam numa chave à parte e somem ao sair. **Ver como os outros veem** (no cartão **Seu prédio** e na porta
-  do seu prédio) entra no seu próprio prédio. **Para o dono:** o selo do topo ganha "👀 N" e o cartão **Seu prédio**,
-  "N visitantes agora" (só a contagem, nunca quem); o primeiro visitante de cada conexão dá o aviso "Alguém entrou no
-  seu prédio", desligável em **Configurações › Habblaud World › Avisar quando alguém visitar**. Pelo servidor local, o
+  memória. Os comandos do personagem (`POST /api/world/cmd`: andar, perfil, entrar e sair de um prédio e os do social
+  leve) são conferidos campo a campo, no máximo 5 lotes por segundo e só o último passo de cada lote; no máximo 4 abas
+  com a cidade. Só pelo próprio computador e só pela própria página (nunca por outro site). A geometria da cidade
+  (lotes, quarteirões, portas, chunks e o que é caminhável) fica em `shared/world/city.ts`, a mesma do servidor do
+  mundo. O seu personagem entra na rua na posição que o servidor do mundo validou (na calçada da sua porta ou na praça).
+- **Visitar um prédio:** a até 2 tiles da porta de um prédio, **Entrar (E)** leva para dentro: o escritório do dono como
+  ele vê o dele, com o tema dele, as salas com os nomes fictícios do dia ("Projeto Ipê", "Projeto Jade"...) e os agentes
+  no status de agora (digitando, de mão levantada, de olho no terminal ou à toa, com a vida social simulada no seu
+  navegador), mudando na hora a cada pacote do dono. Você entra pelo elevador com o seu personagem e o crachá de
+  **visitante** e anda com o teclado ou clicando (sem sentar nas mesas). A faixa do topo diz de quem é o prédio, quantos
+  andares e agentes e se está em modo discreto (salas vazias, com a luz acesa) ou apagado (pausado: tudo escuro); o
+  painel ao lado lista as salas e os agentes (nome, papel, ferramenta e status; clicar abre um cartão com isso e nada
+  mais). Nada do que vem do mundo tem horário, então lá dentro não existe pipoca, teia, cronômetro nem "espera há X".
+  **Sair** pelo botão, pelo Esc ou pelo elevador da recepção volta para a calçada em frente à porta. No painel,
+  **Curtir** (com o total; de dentro, sem a distância da porta) e **Deixar um carimbo** (um dos 8 carimbos da portaria,
+  um por prédio por dia); o quadro de cortiça da recepção mostra o carimbo que você deixou hoje e, no seu próprio
+  prédio, os do "Enquanto você estava fora". Prédio fechado a visitas, cheio (20 visitantes), bloqueado ou longe demais
+  dá um aviso na tela. Nada que age no escritório existe na visita (nem terminal, gaveta, feed, avisos, pedidos de
+  permissão, mensagens, Meu dia, timelapse, editor ou renomear sala): ela roda num mundo à parte, que só fala com
+  `/api/world/*`, e nenhum passo seu lá dentro sai do computador. As moedinhas da vida social dos agentes visitados
+  ficam numa chave à parte e somem ao sair. **Ver como os outros veem** (no cartão **Seu prédio** e na porta do seu
+  prédio) entra no seu próprio prédio. **Para o dono:** o selo do topo ganha "👀 N" e o cartão **Seu prédio**, "N
+  visitantes agora" (só a contagem, nunca quem); o primeiro visitante de cada conexão dá o aviso "Alguém entrou no seu
+  prédio", desligável em **Configurações › Habblaud World › Avisar quando alguém visitar**. Pelo servidor local, o
   stream da cena repassa o interior (`building`, `building.patch` com a revisão conferida e `resync {building}` num
   salto) e os visitantes (`visitors`, também em `meta.world.building.visitors`).
+- **O social leve, sem nenhum texto livre:** na cidade, **L** (ou o botão ❤️ que aparece perto da porta, até 4 passos)
+  curte um prédio, e o coração voa até a placa, cujo contador pula; **G** abre a roda com os 10 cumprimentos (teclas 1–9
+  e 0, setas ou toque), para quem acabou de te cumprimentar, quem está no cartão ou quem está mais perto, com balões de
+  5 s sobre as cabeças (um não cobre o outro) e "G para responder" quando alguém te cumprimenta; **K** bate na porta de
+  quem aceita (até 2 passos). O cartão do jogador ganha **Cumprimentar**, **Bloquear** (em dois cliques: vocês deixam de
+  se ver) e **Denunciar** (motivos fixos, "Denúncia enviada"); o do prédio, **Curtir**, **Bater**, o código do prédio e
+  o selo "não verificado". No minimapa, **Ir para HB-XXXX** e **Visitar um prédio aleatório**, com um fade enquanto o
+  personagem vai até a calçada da porta. Na praça, o termômetro da meta coletiva da semana ("10 mil horas de agentes
+  trabalhando") e a placa da prefeitura (os prédios acesos e "a cidade consumiu ≈ X esta semana", só com 10 prédios ou
+  mais); batida a meta, 20 s de fogos (às vezes em forma de coração) e, para todos, bandeirinhas com lampadazinhas e o
+  enfeite da estação. Nas fachadas, o medidor de tokens do dia ao lado da porta, o letreiro com 5 intensidades pela
+  faixa da semana (de apagado a neon com faíscas) e confete quando um prédio termina o turno. No celular, os botões
+  ficam no canto, só com os ícones. **No escritório:** o chip da barra ganha "❤️ N hoje"; ao conectar, o cartão
+  **Enquanto você estava fora** (visitas, likes e os carimbos deixados na portaria, sem quem) aparece no canto e também
+  em **Seu prédio**, com o código do prédio para mandar a um amigo; **Avisar quando baterem na porta** (Visibilidade,
+  desligado por padrão) mostra "Alguém bateu na porta do seu prédio"; **Configurações › Habblaud World › Bloqueados**
+  lista quem você bloqueou, com **Desbloquear**. **Pelo servidor local:** `POST /api/world/summary/seen` e
+  `/api/world/unblock`, e os comandos `like`, `unlike`, `greet`, `block`, `unblock`, `report`, `stamp`, `teleport`,
+  `knock` e `summary.seen` na cena, conferidos campo a campo.
 - **Rotas locais** (`/api/world/*`, só pelo próprio computador): a conta (cadastro, código, entrar, sair, reenviar,
   trocar a senha, personagem, visibilidade com o aviso de inatividade opcional, dispositivos); o prédio
   (`POST /api/world/pause` e `/resume`, que param o envio antes de responder; `/leave`, que só responde depois de o
@@ -142,10 +162,11 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
   tem a regra de revisão de PRs que mexem nele.
 - **Modo demonstração:** `?mock=1&world=logged_out` (ou `waiting`, `approved`) simula o servidor (o código é 123456),
   com o prédio e a remessa de exemplo de `docs/world/privacidade.md`; `?mock=1&world=approved&scene=city` abre uma
-  cidade de mentira (20 prédios, o seu no lote (3,1), 5 pessoas andando e uma sentada num banco da praça; `&perf=N` enche
-  N lotes), com prédios para visitar (ao vivo, discreto e apagado). `npm run shots:world` refaz as capturas
-  `docs/screenshots/world-predio.png`, `world-enviado.png`, `world-cidade.png`, `world-cartao.png`, `world-visita.png`
-  e `world-visita-painel.png`.
+  cidade de mentira (20 prédios, o seu no lote (3,1), 5 pessoas andando e uma sentada num banco da praça; `&perf=N`
+  enche N lotes), com prédios para visitar (ao vivo, discreto e apagado) e o social leve (bots que se cumprimentam e
+  respondem, a meta a 80 % e, com `&fireworks=1`, um botão de teste dos fogos). `npm run shots:world` refaz as capturas
+  `docs/screenshots/world-predio.png`, `world-enviado.png`, `world-cidade.png`, `world-cartao.png`, `world-visita.png`,
+  `world-visita-painel.png`, `world-social.png` e `world-praca.png`.
 
 ## [0.11.0] - 2026-10-13
 

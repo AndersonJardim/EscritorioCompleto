@@ -4,12 +4,14 @@
 // Um clique abre Configurações › Habblaud World, onde estão o cartão "Seu prédio", a pausa e o motivo de uma parada.
 // Com gente visitando o prédio, "👀 N" ao lado; o primeiro visitante de cada conexão ainda dá o aviso "Alguém entrou
 // no seu prédio" (desligável em Configurações › Habblaud World).
+// Fase 5: com o prédio aceso, "❤️ 3 hoje" (os likes que o prédio recebeu hoje), que pula quando chega um novo.
 import type { Notice } from '../../../../shared/types';
 import { tr } from '../../../../shared/i18n';
 import type { WorldSource } from '../../net/world';
 import type { UiComponent, UiContext } from '../context';
-import { h, setAttr, setHidden, setText, setTitle, setVariant } from '../dom';
+import { h, prefersReducedMotion, setAttr, setHidden, setText, setTitle, setVariant } from '../dom';
 import { worldGate } from './settings-world';
+import { likesTodayChip } from './away-summary';
 import { agentsText, floorsText, nextVisitorAlert, VISITOR_ALERT_START, visitorsText, worldChipState, type WorldChipState } from './world-model';
 
 const ICON: Record<WorldChipState, string> = { live: '🏙️', paused: '⏸', reconnecting: '🏙️', stopped: '⚠️' };
@@ -21,6 +23,8 @@ export class WorldChip implements UiComponent {
   private readonly visitors: HTMLElement;
   private alert = VISITOR_ALERT_START;
   private alertSeq = 0;
+  private readonly likes: HTMLElement;
+  private lastLikes: number | null = null;
 
   constructor(
     private readonly ctx: UiContext,
@@ -32,7 +36,8 @@ export class WorldChip implements UiComponent {
     this.icon = h('span', { class: 'ui-world-chip__icon', attrs: { 'aria-hidden': 'true' } });
     this.text = h('span', { class: 'ui-world-chip__text' });
     this.visitors = h('span', { class: 'ui-world-chip__visitors', hidden: true });
-    this.el = h('button', { class: 'ui-world-chip', type: 'button', hidden: true, attrs: { 'aria-haspopup': 'dialog' }, on: { click: open } }, this.icon, this.text, this.visitors);
+    this.likes = h('span', { class: 'ui-world-chip__likes', hidden: true });
+    this.el = h('button', { class: 'ui-world-chip', type: 'button', hidden: true, attrs: { 'aria-haspopup': 'dialog' }, on: { click: open } }, this.icon, this.text, this.visitors, this.likes);
   }
 
   render(): void {
@@ -59,7 +64,19 @@ export class WorldChip implements UiComponent {
     const [text, base] = texts[state];
     const title = count ? `${base} ${visitorsText(count)}.` : base;
     setText(this.text, text);
-    setTitle(this.el, title);
-    setAttr(this.el, 'aria-label', title);
+    const likes = likesTodayChip(state, b?.likesToday);
+    setHidden(this.likes, !likes);
+    setText(this.likes, likes?.text ?? '');
+    const full = likes ? `${title} ${likes.title}` : title;
+    setTitle(this.el, full);
+    setAttr(this.el, 'aria-label', full);
+    // um like novo: o coração pula
+    const n = b?.likesToday ?? 0;
+    if (likes && this.lastLikes !== null && n > this.lastLikes && !prefersReducedMotion()) {
+      this.likes.classList.remove('is-bump');
+      void this.likes.offsetWidth;
+      this.likes.classList.add('is-bump');
+    }
+    this.lastLikes = n;
   }
 }

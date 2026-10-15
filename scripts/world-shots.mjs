@@ -5,7 +5,9 @@
 // cartão de um prédio (world-cartao.png) e a visita ao prédio do vizinho (o interior de exemplo de
 // shared/world/visit-sample.ts): o escritório por dentro (world-visita.png) e o painel com o cartão de um agente
 // (world-visita-painel.png). Durante a visita, nenhuma requisição a /api sai da página (o modo demonstração não tem
-// servidor; ao vivo, a cena só fala com /api/world/*). Sobe o Vite sozinho (ou usa --url de um Habblaud já rodando) e fotografa com o Chromium
+// servidor; ao vivo, a cena só fala com /api/world/*). O social leve (Fase 5): a roda de cumprimentos com os balões
+// (world-social.png) e a praça de noite com o termômetro da meta e os fogos (world-praca.png, pelo botão de teste de
+// &fireworks=1). Sobe o Vite sozinho (ou usa --url de um Habblaud já rodando) e fotografa com o Chromium
 // headless do Playwright, sem tocar no navegador de quem roda.
 //
 // Uso: npm run shots:world [-- --url http://localhost:4747] [--out docs/screenshots] [--chromium /caminho/do/chrome]
@@ -62,8 +64,8 @@ try {
   console.log('salvo:', join(out, 'world-enviado.png'));
 
   // A cidade (botão Mundo): hora fixa, câmera parada entre a praça e o meu prédio, sem os avisos do escritório.
-  const city = async (hora) => {
-    await page.goto(`${base}/?mock=1&world=approved&scene=city&hora=${hora}`, { waitUntil: 'load', timeout: 60_000 });
+  const city = async (hora, extra = '') => {
+    await page.goto(`${base}/?mock=1&world=approved&scene=city&hora=${hora}${extra}`, { waitUntil: 'load', timeout: 60_000 });
     await page.waitForFunction(() => window.habblaud?.city?.scene()?.me(), null, { timeout: 20_000 });
     await page.addStyleTag({ content: '.ui-toasts { display: none !important; }' });
     await page.mouse.move(2, 400);
@@ -129,6 +131,36 @@ try {
   page.off('request', onRequest);
   const outside = apiDuringVisit.filter((u) => !new URL(u).pathname.startsWith('/api/world/'));
   if (outside.length) problems.push(`[visita] rotas fora de /api/world/: ${outside.join(', ')}`);
+
+  // A roda de cumprimentos (G) quando um dos bots passa perto da minha porta, com os balões de quem se cumprimenta.
+  await city('15:30');
+  await page.waitForFunction(
+    () => {
+      const s = window.habblaud.city.scene();
+      const me = s.me();
+      return [...s.state.players.values()].some((p) => Math.abs(p.info.pos.y - me.y) < 2 && Math.abs(p.info.pos.x - me.x - 5) < 1.5);
+    },
+    null,
+    { timeout: 60_000, polling: 50 },
+  );
+  await page.keyboard.press('g');
+  await page.locator('.ui-city-wheel').waitFor({ state: 'visible', timeout: 5_000 });
+  await page.waitForTimeout(700);
+  const wheel = await page.evaluate(() => {
+    const el = document.querySelector('.ui-city-wheel');
+    return { x: parseFloat(el.style.getPropertyValue('--cx')), y: parseFloat(el.style.getPropertyValue('--cy')) };
+  });
+  await page.screenshot({ path: join(out, 'world-social.png'), clip: { x: Math.max(0, wheel.x - 380), y: Math.max(0, wheel.y - 230), width: 760, height: 420 } });
+  console.log('salvo:', join(out, 'world-social.png'));
+
+  // A praça de noite: o termômetro da meta da semana (cheio, durante os fogos), a prefeitura, as bandeirinhas e os fogos.
+  await city('20:40', '&fireworks=1');
+  await page.evaluate(() => window.habblaud.city.scene().lookAt(21, 6, 2));
+  await page.locator('.ui-city-testfw').click();
+  await page.addStyleTag({ content: '.ui-city-testfw, .ui-city-toast { display: none !important; }' });
+  await page.waitForTimeout(1250);
+  await page.screenshot({ path: join(out, 'world-praca.png'), clip: { x: 260, y: 130, width: 880, height: 640 } });
+  console.log('salvo:', join(out, 'world-praca.png'));
 } finally {
   await browser.close();
   await vite?.close();

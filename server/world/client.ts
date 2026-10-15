@@ -48,6 +48,7 @@ import {
 } from '../../shared/world/protocol';
 import { isTraitId } from '../../shared/world/traits';
 import { parseAltchaChallenge } from './altcha';
+import { parseBlocked, parseMeBuilding } from './social';
 import { DEVICE_ID_RE, TOKEN_RE } from './settings';
 
 export type WorldResult<T> =
@@ -96,15 +97,16 @@ export function isWorldLocale(v: unknown): v is WorldLocale {
 
 /**
  * Visibilidade completa e no formato (corpo do PUT e resposta do servidor); undefined se faltar algo. O aviso de
- * inatividade (`notifyInactivity`) é opcional: ausente, fica de fora (o servidor do mundo não muda); presente, só
- * booleano.
+ * inatividade (`notifyInactivity`, Fase 6) e o "bater na porta" (`knocks`, Fase 5) são opcionais: ausentes, ficam de
+ * fora (o servidor do mundo não muda); presentes, só booleanos.
  */
 export function parseVisibility(raw: unknown): Visibility | undefined {
   const v = obj(raw);
   if (!v || (v.mode !== 'live' && v.mode !== 'discreet')) return undefined;
   const keys = ['closed', 'hideCountry', 'tokensVisible', 'leaderboard', 'compactions'] as const;
   if (!keys.every((k) => typeof v[k] === 'boolean')) return undefined;
-  if (v.notifyInactivity !== undefined && typeof v.notifyInactivity !== 'boolean') return undefined;
+  const optional = ['notifyInactivity', 'knocks'] as const;
+  if (!optional.every((k) => v[k] === undefined || typeof v[k] === 'boolean')) return undefined;
   const out: Visibility = {
     mode: v.mode,
     closed: v.closed as boolean,
@@ -113,7 +115,7 @@ export function parseVisibility(raw: unknown): Visibility | undefined {
     leaderboard: v.leaderboard as boolean,
     compactions: v.compactions as boolean,
   };
-  if (typeof v.notifyInactivity === 'boolean') out.notifyInactivity = v.notifyInactivity;
+  for (const k of optional) if (typeof v[k] === 'boolean') out[k] = v[k] as boolean;
   return out;
 }
 
@@ -174,6 +176,11 @@ export function parseMe(raw: unknown): MeResponse | undefined {
   if (player) me.player = player;
   // Saiu do mundo (deste ou de outro computador) e ainda não voltou: só o `true` vale.
   if (v.left === true) me.left = true;
+  // O prédio (likes do dia, código e resumo da Fase 5) e quem a conta bloqueou.
+  const building = parseMeBuilding(v.building);
+  if (building) me.building = building;
+  const blocked = parseBlocked(v.blocked);
+  if (blocked) me.blocked = blocked;
   return me;
 }
 

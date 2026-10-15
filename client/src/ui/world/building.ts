@@ -13,6 +13,7 @@ import type { WorldBuildingStatus, WorldClient, WorldLastUplink } from '../../ne
 import { copyText, h, iconButton, setAttr, setHidden, setText, setVariant } from '../dom';
 import { formatClock, relativeTime } from '../format';
 import { ICONS } from '../icons';
+import { BuildingSocial } from './away-summary';
 import { extLink, WORLD_PRIVACY_URL } from './links';
 import { ackView, appealMailto, buildingView, bytesText, leaveHint, prettyUplink, worldErrorText } from './world-model';
 
@@ -53,6 +54,8 @@ export class BuildingCard {
   private readonly appealRow: HTMLElement;
   private readonly appealLink: HTMLAnchorElement;
   private readonly appealHint: HTMLElement;
+  /** Fase 5: o código do prédio e o "Enquanto você estava fora". */
+  private readonly social: BuildingSocial;
   private statsKey = '';
   private busy = false;
   private action: 'pause' | 'resume' | 'join' | null = null;
@@ -85,6 +88,7 @@ export class BuildingCard {
     this.appealLink = h('a', { class: 'ui-btn', attrs: { href: appealMailto() } });
     this.appealHint = h('span', { class: 'ui-set__hint' });
     this.appealRow = h('div', { class: 'ui-world__appeal', hidden: true }, this.appealHint, h('div', { class: 'ui-world__actions' }, this.appealLink));
+    this.social = new BuildingSocial({ client: host.client, building: () => host.building(), refresh: () => host.refresh() });
     this.el = h(
       'section',
       { class: 'ui-world__building', attrs: { 'aria-labelledby': titleId } },
@@ -97,6 +101,7 @@ export class BuildingCard {
       this.desc,
       this.unverified,
       this.stats,
+      this.social.el,
       this.rejected,
       this.appealRow,
       this.actions,
@@ -141,6 +146,7 @@ export class BuildingCard {
       setText(this.appealHint, v.appeal.hint);
       setAttr(this.appealLink, 'href', appealMailto(this.host.accountId?.()));
     }
+    this.social.sync();
   }
 
   private resetLeave(): void {

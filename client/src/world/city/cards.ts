@@ -121,6 +121,11 @@ export interface CardActions {
   topInset(): number;
   /** (Opcional) Entrar no prédio: o meu, de qualquer lugar ("Ver como os outros veem"). */
   enter?(id: string): void;
+  /**
+   * O que mais vai no fim do cartão (Fase 5, city/social.ts: curtir, bater, cumprimentar, bloquear, denunciar): um
+   * elemento que se atualiza sozinho, posto de volta a cada vez que o cartão é refeito.
+   */
+  extras?(kind: 'building' | 'player', id: string): HTMLElement | null;
 }
 
 /** Os dois cartões (um de cada vez), posicionados perto do ponto da tela. */
@@ -201,6 +206,8 @@ export class CityCards {
         const id = b.id;
         rows.push(h('button', { class: 'ui-city-card__link', type: 'button', text: `👁 ${tr('Ver como os outros veem')}`, on: { click: () => enter(id) } }));
       }
+      const extra = this.actions.extras?.('building', b.id);
+      if (extra) rows.push(extra);
       this.body.replaceChildren(...rows);
     }
     this.place(at);
@@ -240,6 +247,8 @@ export class CityCards {
         );
       } else foot.append(h('span', { class: 'ui-city-card__muted', text: m.hasBuilding ? tr('Prédio longe daqui') : tr('Ainda sem prédio') }));
       rows.push(foot);
+      const extra = this.actions.extras?.('player', p.id);
+      if (extra) rows.push(extra);
       this.body.replaceChildren(...rows);
     }
     if (at) this.place(at);

@@ -32,6 +32,7 @@ import { parsePlayerTraits } from '../../shared/world/traits';
 import { HttpError, readJson, sendJson } from '../http/app';
 import { isWorldLocale, parseVisibility, type WorldResult } from './client';
 import type { WorldService } from './service';
+import { socialRoutes, type OwnerSocial } from './social';
 import type { WorldViewer } from './viewer';
 
 /** Corpo máximo das rotas do mundo (o maior é o personagem). */
@@ -138,8 +139,10 @@ export function sameOriginRequest(req: IncomingMessage): boolean {
 }
 
 /** Devolve o handler das rotas /api/world/* (o filtro de porta e Host fica em http/app.ts). */
-export function createWorldRoutes(service: WorldService, viewer?: WorldViewer): (req: IncomingMessage, res: ServerResponse, url: URL) => void {
+export function createWorldRoutes(service: WorldService, viewer?: WorldViewer, social?: OwnerSocial): (req: IncomingMessage, res: ServerResponse, url: URL) => void {
   const routes: Record<string, { method: Method; account: boolean; run: (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<void> }> = {
+    // O social leve (Fase 5, social.ts): resumo visto e desbloquear, pela conexão do prédio.
+    ...(social ? socialRoutes(social) : {}),
     '/api/world/status': {
       method: 'GET',
       account: false,
@@ -212,7 +215,7 @@ export function createWorldRoutes(service: WorldService, viewer?: WorldViewer): 
       account: true,
       run: async (req, res) => {
         const v = parseVisibility(await readBody(req));
-        if (!v) throw new BodyError(422, 'invalid', tr('esperado {mode: "live" ou "discreet", closed, hideCountry, tokensVisible, leaderboard, compactions, notifyInactivity?}'));
+        if (!v) throw new BodyError(422, 'invalid', tr('esperado {mode: "live" ou "discreet", closed, hideCountry, tokensVisible, leaderboard, compactions, notifyInactivity?, knocks?}'));
         sendOutcome(res, await service.setVisibility(v));
       },
     },

@@ -820,7 +820,7 @@ Quand le monde est en maintenance, la carte le dit, et Habblaud réessaie tout s
 **Visibilité.** En direct (étages, compteurs et statut de chaque personnage) ou **mode discret** (seulement allumé ou
 éteint et le nombre d'étages) ; fermé aux visites ; cacher le pays ; les **tokens** de l'immeuble seulement par tranches
 (jusqu'à 100 000, 1 million…), jamais le nombre ni le coût, et désactivables ; classement et compactages seulement si
-vous les activez.
+vous les activez ; frapper à la porte (**Me prévenir quand on frappe à la porte**) aussi seulement si vous l'activez.
 
 **Ville.** Le bouton **Monde**, dans la barre du haut, remplace le bureau par la ville : on marche avec les flèches/WASD
 ou en cliquant, la carte de chaque immeuble montre étages, agents et état, et la minicarte est dans le coin ; en pause
@@ -833,6 +833,16 @@ des salles aux noms fictifs et les agents dans leur statut du moment, en lecture
 permissions, et rien du travail) ; un immeuble fermé aux visites ne se voit que de l'extérieur. Sur le vôtre, vous voyez
 « N visiteurs en ce moment » (seulement le nombre, jamais qui). En mode démonstration :
 [la visite](docs/screenshots/world-visita.png) et [le panneau de la visite](docs/screenshots/world-visita-painel.png).
+
+**Social.** Dans la ville, sans aucun texte libre : **L** aime l'immeuble près de la porte, **G** ouvre la roue des
+salutations (phrases toutes faites, traduites pour qui les lit) et **K** frappe à la porte de ceux qui l'acceptent ; la
+carte de chaque personne propose Saluer, Bloquer et Signaler, et la minicarte mène à un immeuble par son code (« Aller à
+HB-XXXX ») ou à n'importe quel immeuble allumé. À l'intérieur d'un immeuble, **J'aime** et **Laisser un tampon** à
+l'accueil (un par immeuble et par jour). Sur la place, le thermomètre de l'objectif hebdomadaire de la ville et, quand
+il est atteint, un feu d'artifice. Au bureau, la puce « ❤️ N aujourd'hui » et la carte « Pendant votre absence » avec
+les visites, les j'aime et les tampons laissés à l'accueil (jamais qui) ; les personnes bloquées sont dans **Bloqués**,
+avec **Débloquer**. En mode démonstration : [la roue des salutations](docs/screenshots/world-social.png) et
+[la place avec le feu d'artifice](docs/screenshots/world-praca.png).
 
 **Pause, quitter, supprimer.** **Pause** éteint l'immeuble tout de suite et garde le lot (après 30 jours en pause, il
 disparaît de la carte ; 30 jours plus tard, il est retiré). **Quitter le monde** retire l'immeuble et libère le lot ; le
