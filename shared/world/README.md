@@ -37,6 +37,7 @@ navegador ──/api/world/*──▶ servidor local do Habblaud ──HTTPS /v1
 | `projection.ts` | **O único lugar que monta o pacote do prédio**: `project(input, ids, now)`, pura, recebe das salas só o id. Os testes de chaves (lista tirada do `schema.json`) e de canários ficam em `projection.test.ts`. |
 | `appearance-flat.ts` | O sorteio da aparência (`appearanceFromSeed`, o mesmo do escritório) e `flattenAppearance` (as 13 peças, sem a semente). |
 | `floor-names.ts`, `floor-labels.ts` | Os 60 nomes fictícios de andar (`ipe`, `jade`, `aurora`...; o servidor guarda a cópia exata) e os rótulos `tr()` ("Projeto Ipê"). |
+| `office-from-world.ts` | O caminho de volta, só leitura: `officeFromBuilding` transforma o interior de um prédio do mundo (`WorldBuildingDetail`) num `OfficeSnapshot` para o `Sim` desenhar a visita (ids com prefixo `world:`, salas com o rótulo traduzido, nada de tempo, tarefas nem contas reais; discreto ou apagado = salas vazias) e `applyBuildingPatch` aplica cada `building.patch`. Nada daqui sobe. `visit-sample.ts` é um prédio de exemplo para os testes e o modo de demonstração. |
 | `schema-validator.ts` | Validador mínimo do `schema.json` e a lista de chaves dele, para os testes (o servidor usa o Ajv). |
 | `server/world/` | `settings.ts` (world.json), `client.ts` (HTTP do servidor do mundo), `altcha.ts` (desafio anti-robô), `service.ts` (a conta), `http.ts` (as rotas locais), `uplink.ts` (o WebSocket do prédio), `ids.ts` (ids aleatórios do mundo), `tokens.ts`, `theme.ts` e `signals.ts`. |
 
