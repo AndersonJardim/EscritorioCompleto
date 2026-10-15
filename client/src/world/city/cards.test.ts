@@ -32,11 +32,11 @@ describe('cartão do prédio', () => {
 
   it('modelo: estado, agentes (ou modo discreto), likes e "no mundo desde"', () => {
     const m = buildingCardModel(b, 'b1');
-    expect(m).toMatchObject({ owner: 'Ana Pixel', flag: '🇧🇷', online: true, state: 'Aceso', floors: '24+ andares', agents: { working: 2, waiting: 1, idle: 2 }, likes: '12 curtidas', closed: false, mine: true });
+    expect(m).toMatchObject({ owner: 'Ana Pixel', flag: '🇧🇷', online: true, state: 'Luzes acesas', floors: '24+ andares', agents: { working: 2, waiting: 1, idle: 2 }, likes: '12 curtidas', closed: false, mine: true });
     expect(m.since).toMatch(/outubro/);
     const d = buildingCardModel({ ...b, agents: undefined, state: 'away', closed: true }, null);
     expect(d.agents).toBeNull();
-    expect(d.state).toBe('Apagado');
+    expect(d.state).toBe('Luzes apagadas');
     expect(d.closed).toBe(true);
     expect(d.mine).toBe(false);
     expect(likesLabel(1)).toBe('1 curtida');

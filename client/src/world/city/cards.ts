@@ -77,7 +77,7 @@ export function buildingCardModel(b: WorldBuildingPublic, myBuildingId: string |
     flag: flagEmoji(b.owner.country),
     country: countryName(b.owner.country),
     online,
-    state: online ? tr('Aceso') : tr('Apagado'),
+    state: online ? tr('Luzes acesas') : tr('Luzes apagadas'),
     floors: floorsLabel(b.floors),
     agents: b.agents ? { working: b.agents.working, waiting: b.agents.waiting, idle: b.agents.idle } : null,
     likes: likesLabel(b.likes),
