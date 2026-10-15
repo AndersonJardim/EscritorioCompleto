@@ -31,7 +31,7 @@ navegador ──/api/world/*──▶ servidor local do Habblaud ──HTTPS /v1
 | --- | --- |
 | `protocol.ts` | **Fonte da verdade** do protocolo: rotas REST da conta, mensagens do WebSocket, o pacote do prédio (`WorldUplink`) e as listas fixas (traços, frases, cumprimentos, idiomas). Sem imports: o servidor do mundo guarda uma cópia exata. |
 | `city.ts` | **Fonte da verdade** da geometria da cidade (Fase 3): lotes, quarteirões, a espiral, portas, chunks e o que é caminhável, em tiles. Puro e sem imports: o servidor do mundo guarda uma cópia exata (`protocol/city.ts`) e usa as mesmas contas para validar quem anda. |
-| `scene.ts` | A cena Mundo (Fase 3): o estado da cidade que desce (`SceneState`: `rev` por chunk, resync no salto, prédios mesclados ou substituídos, jogadores por id, a minha posição) e os comandos que sobem, refeitos campo a campo (`parseSceneCommand`). Os tipos do stream local estão em `api.ts`. |
+| `scene.ts` | A cena Mundo (Fase 3): o estado da cidade que desce (`SceneState`: `rev` por chunk, resync no salto, prédios mesclados ou substituídos, jogadores por id, a minha posição; na Fase 4, o interior do prédio onde estou, `inside`, com o `rev` dele, e o `pos` lá dentro como a volta à rua) e os comandos que sobem, refeitos campo a campo (`parseSceneCommand`; `enter` e `leave` só com o id do prédio, `resync` com o `chunk` ou o `building`). Os tipos do stream local estão em `api.ts`. |
 | `schema.json` | O JSON Schema do `WorldUplink`, estrito (`additionalProperties: false`). O servidor valida cada pacote com ele. |
 | `api.ts` | Tipos e códigos de erro das rotas locais `/api/world/*` (o que a interface usa). |
 | `traits.ts`, `intro.ts` | Rótulos traduzidos (`tr()`) dos traços de personalidade e das frases de apresentação. |
