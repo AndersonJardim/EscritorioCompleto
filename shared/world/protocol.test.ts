@@ -18,6 +18,8 @@ import {
   NOTICE_IDS,
   PLAYER_NAME_LIMITS,
   REPORT_REASONS,
+  STAMP_IDS,
+  CITY_GOAL_IDS,
   TOP_STYLES,
   TRAIT_CLASHES,
   TRAIT_IDS,
@@ -218,15 +220,27 @@ describe('listas do protocolo', () => {
     expect(PLAYER_NAME_LIMITS).toEqual({ min: 3, max: 20 });
   });
 
-  it('Fases 3 e 4: os ids dos avisos (o `text` do notice) e o `left` do ack, só acrescentados', () => {
+  it('Fases 3 a 5: os ids dos avisos (o `text` do notice) e o `left` do ack, só acrescentados', () => {
     expect([...NOTICE_IDS]).toEqual([
       'ignored', 'invalid', 'rate_limited', 'view_required', 'not_found', 'street_left', 'chunk_full', 'afk', 'server_restart', 'left',
       // Fase 4 (a porta de um prédio): só no fim.
       'too_far', 'closed', 'blocked', 'full',
+      // Fase 5 (social leve): só no fim.
+      'daily_limit', 'already_done', 'reported', 'blocked_ok', 'stamped',
     ]);
     for (const id of NOTICE_IDS) expect(id).toMatch(/^[a-z]+(_[a-z]+)*$/);
     // Os códigos da Fase 2 continuam na mesma ordem; `left` (Fase 3) e `implausible` (Fase 6) entram no fim.
     expect([...UPLINK_ACK_ERRORS]).toEqual(['schema', 'limits', 'name_pool', 'parts', 'ids', 'rate', 'internal', 'left', 'implausible']);
+  });
+
+  it('Fase 5: 8 carimbos, 3 metas da cidade, os 6 motivos de denúncia e "bater na porta" desligado por padrão', () => {
+    const unique = (l: readonly string[]) => new Set(l).size === l.length;
+    expect([...STAMP_IDS]).toEqual(['visited', 'nice_building', 'keep_going', 'coffee', 'wave', 'star', 'heart', 'rocket']);
+    expect([...CITY_GOAL_IDS]).toEqual(['agent_hours_10k', 'agent_hours_50k', 'agent_hours_100k']);
+    expect([...REPORT_REASONS]).toEqual(['offensive_name', 'impersonation', 'harassment', 'greeting_spam', 'fake_building', 'other']);
+    for (const l of [STAMP_IDS, CITY_GOAL_IDS]) expect(unique(l)).toBe(true);
+    for (const id of [...STAMP_IDS, ...CITY_GOAL_IDS]) expect(id).toMatch(/^[a-z0-9]+(_[a-z0-9]+)*$/);
+    expect(VISIBILITY_DEFAULTS.knocks).toBe(false);
   });
 
   it('Fase 6: `deleted` no goodbye, `maintenance` nos erros, `implausible` no ack, o aviso de inatividade e o selo "não verificado", só acrescentados', () => {

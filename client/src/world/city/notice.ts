@@ -43,6 +43,13 @@ export function noticeText(raw: NoticeId | (string & {}), place: NoticePlace = '
       return place === 'inside' ? tr('Você não pode mais ficar neste prédio: voltou para a rua.') : tr('Você não pode entrar neste prédio.');
     case 'full':
       return tr('O prédio está lotado (20 visitantes). Tente daqui a pouco.');
+    // Fase 5 (social): os comandos que trazem estes avisos (like, carimbo, denúncia, bloqueio) ainda não saem daqui.
+    case 'daily_limit':
+    case 'already_done':
+    case 'reported':
+    case 'blocked_ok':
+    case 'stamped':
+      return null;
     default:
       void (id satisfies never);
       return tr('Aviso do Habblaud World.');

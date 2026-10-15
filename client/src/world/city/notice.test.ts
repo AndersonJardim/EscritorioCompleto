@@ -9,7 +9,9 @@ describe('noticeText', () => {
     const generic = noticeText('id_novo');
     expect(generic).toBeTruthy();
     const texts = NOTICE_IDS.map((id) => noticeText(id));
-    expect(texts.filter((t) => t === null)).toHaveLength(3);
+    // Sem texto: `ignored`, `invalid` e `view_required` (só para quem depura) e os 5 da Fase 5 (like, carimbo, denúncia
+    // e bloqueio ainda não saem daqui).
+    expect(texts.filter((t) => t === null)).toHaveLength(3 + 5);
     const shown = texts.filter((t): t is string => t !== null);
     expect(new Set([...shown, generic]).size).toBe(shown.length + 1);
   });

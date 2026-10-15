@@ -106,6 +106,17 @@ export const REPORT_REASONS = [
 ] as const;
 export type ReportReason = (typeof REPORT_REASONS)[number];
 
+/** Carimbos da portaria ("enquanto você estava fora"): só ids, um por visitante por prédio por dia (fase 5). */
+export const STAMP_IDS = ['visited', 'nice_building', 'keep_going', 'coffee', 'wave', 'star', 'heart', 'rocket'] as const;
+export type StampId = (typeof STAMP_IDS)[number];
+
+/**
+ * Metas coletivas da cidade, em horas de agente trabalhando na semana (segunda a domingo, UTC); a meta da semana é a
+ * primeira ainda não batida (fase 5). Só soma: ninguém perde nada.
+ */
+export const CITY_GOAL_IDS = ['agent_hours_10k', 'agent_hours_50k', 'agent_hours_100k'] as const;
+export type CityGoalId = (typeof CITY_GOAL_IDS)[number];
+
 /**
  * Por que o servidor fecha a conexão (`goodbye`). `waiting` = conta na lista de espera; `no_player` = conta aprovada
  * sem personagem; `unauthorized` = token inválido ou revogado; `update` = versão abaixo de `minVersion`; `deleted` = a
@@ -146,6 +157,11 @@ export const NOTICE_IDS = [
   'closed', //         `enter` num prédio fechado a visitas (ou o dono fechou com você dentro: você sai)
   'blocked', //        `enter` num prédio de quem você bloqueou ou que te bloqueou (ou o bloqueio veio com você dentro)
   'full', //           `enter` num prédio com 20 visitantes (lotação)
+  'daily_limit', //    passou do limite do dia (50 likes, 5 denúncias): volta amanhã (UTC; fase 5)
+  'already_done', //   já feito hoje (um carimbo por prédio por dia)
+  'reported', //       denúncia recebida (também a repetida, ainda aberta: não se diz que já havia uma)
+  'blocked_ok', //     bloqueio gravado e aplicado (nos dois sentidos)
+  'stamped', //        carimbo deixado na portaria
 ] as const;
 export type NoticeId = (typeof NOTICE_IDS)[number];
 
@@ -228,6 +244,11 @@ export interface Visibility {
   /** Mostra as compactações de contexto (opt-in). */
   compactions: boolean;
   /**
+   * Aceita "bater na porta" (opt-in, fase 5): quem bate perto da porta faz chegar um `knock {}` sem nome no Habblaud
+   * do dono. Ausente no corpo do PUT = não muda.
+   */
+  knocks?: boolean;
+  /**
    * E-mail "seu prédio sai do mundo em 3 dias" (aviso de inatividade; padrão ligado). É da conta, não do personagem:
    * no corpo do PUT é opcional (ausente = não muda); nas respostas (PUT e `GET /v1/me`, em `player.visibility`) vem
    * sempre.
@@ -242,6 +263,7 @@ export const VISIBILITY_DEFAULTS: Readonly<Visibility> = {
   tokensVisible: true,
   leaderboard: false,
   compactions: false,
+  knocks: false,
 };
 
 /** `PUT /v1/me/player` → `200 Player`; `409 name_taken`; `422 name_invalid | name_blocked | name_cooldown | invalid`. */
@@ -296,7 +318,25 @@ export interface MeBuilding {
   firstOnlineMonth: string;
   /** Visitantes dentro do prédio agora (o dono vendo o próprio prédio não conta). */
   visitors?: number;
+  /** Likes recebidos hoje (dia UTC; fase 5): o chip "❤️ 3 hoje" do Habblaud local. */
+  likesToday?: number;
+  /** O código do prédio ("HB-4F2K"), para mandar a um amigo (fase 5). */
+  code?: string;
+  /** "Enquanto você estava fora": o acumulado desde a última vez que o dono viu (fase 5). */
+  summary?: AwaySummary;
 }
+
+/** O resumo "enquanto você estava fora" (`GET /v1/me` e ↓ `away.summary`), só contagens, sem quem. */
+export interface AwaySummary {
+  /** Dia UTC ("2026-10-14") desde quando conta: o dia em que o dono confirmou o último resumo (`summary.seen`). */
+  since: string;
+  visits: number;
+  likes: number;
+  stamps: Array<{ stampId: StampId; count: number }>;
+}
+
+/** `GET /v1/buildings/:code` (Bearer, 30 por minuto): o prédio do código "HB-XXXX"; `404 not_found` se não há. */
+export interface BuildingCodeResponse { id: string; lot: WorldLot }
 
 /** `GET /v1/me`. */
 export interface MeResponse {
@@ -307,6 +347,8 @@ export interface MeResponse {
   building?: MeBuilding;
   /** A conta saiu do mundo ("Sair do mundo", deste ou de outro computador) e ainda não voltou (`/v1/me/building/join`). */
   left?: boolean;
+  /** Quem esta conta bloqueou (fase 5), para Configurações › World › Bloqueados; desbloquear é o ↑ `unblock`. */
+  blocked?: Array<{ id: string; name: string }>;
 }
 
 /**
@@ -478,9 +520,13 @@ export interface WorldBuildingPublic {
   tokens?: { day: TokenBand; week: TokenBand }; // faixa (0..5), nunca o número; ausente se o dono desligou
   rev: number;                // revisão (sobe a cada mudança publicada)
   likes: number;
+  // `likedByMe` (ausente = não deu like): na rua, vem no `like.update` ao chegar a até 4 tiles da porta; dentro do
+  // prédio, no `building` (ao entrar e no `resync`) e no `building` de cada `building.patch`; nunca ao dono no próprio.
   likedByMe?: boolean;
   unverified?: true;          // "não verificado": dados implausíveis em revisão (selo para quem vê; fora de tudo que compara)
   sinceMonth: string;         // "2026-10": só o mês de entrada no mundo
+  code?: string;              // "HB-" + 4 caracteres (sem 0/O/1/I/L/U), estável; para "Ir para HB-XXXX" (fase 5)
+  knocks?: true;              // o dono aceita "bater na porta" (opt-in, fase 5)
 }
 
 export type Direction = 'n' | 's' | 'e' | 'w';
@@ -556,6 +602,14 @@ export interface GreetMessage { t: 'greet'; playerId: string; greetingId: Greeti
 export interface ProfileRequestMessage { t: 'profile'; playerId: string }
 export interface ReportMessage { t: 'report'; playerId: string; reason: ReportReason }
 export interface BlockMessage { t: 'block' | 'unblock'; playerId: string }
+/** Carimbo na portaria (fase 5): de dentro do prédio, ou a até 2 tiles da porta; um por prédio por dia. */
+export interface StampMessage { t: 'stamp'; buildingId: string; stampId: StampId }
+/** Vai até a calçada da porta do prédio do código; sem `code`, de um prédio aceso qualquer (fase 5). Resposta: `pos`. */
+export interface TeleportMessage { t: 'teleport'; code?: string }
+/** Bate na porta (a até 2 tiles; fase 5). Só chega ao dono que aceita (`knocks`), sem o nome de quem bateu. */
+export interface KnockMessage { t: 'knock'; buildingId: string }
+/** O dono viu o resumo "enquanto você estava fora": zera o acumulado (fase 5). */
+export interface SummarySeenMessage { t: 'summary.seen' }
 export interface PingMessage { t: 'ping' }
 export interface PongMessage { t: 'pong' }
 
@@ -573,6 +627,10 @@ export type ClientMessage =
   | ProfileRequestMessage
   | ReportMessage
   | BlockMessage
+  | StampMessage
+  | TeleportMessage
+  | KnockMessage
+  | SummarySeenMessage
   | PingMessage
   | PongMessage;
 
@@ -642,6 +700,21 @@ export interface PosMessage { t: 'pos'; x: number; y: number }
 export interface LikeUpdateMessage { t: 'like.update'; buildingId: string; likes: number; likedByMe: boolean }
 export interface GreetingMessage { t: 'greeting'; from: string; to: string; greetingId: GreetingId; until: number }
 export interface ProfileMessage { t: 'profile'; player: WorldPlayerPublic }
+/** Likes recebidos hoje (dia UTC), para a conexão do dono: a cada mudança, no máximo 1 por minuto (fase 5). */
+export interface LikesTodayMessage { t: 'likes.today'; count: number }
+/** "Enquanto você estava fora", para a conexão do dono ao conectar (se há algo); confirmado com ↑ `summary.seen`. */
+export interface AwaySummaryMessage extends AwaySummary { t: 'away.summary' }
+/** Alguém bateu na porta do seu prédio (sem nome; só se o dono aceita `knocks`). */
+export interface KnockedMessage { t: 'knock' }
+/** A meta da semana (`id` = "<segunda>:<CityGoalId>"); `target` e `progress` em horas; `until` = fim da semana (ms UTC). */
+export interface CityGoal { id: string; label: CityGoalId; target: number; progress: number; until: number }
+/**
+ * A cidade, a cada minuto (e ao abrir a cena), para quem tem a cena aberta: `lit` = prédios acesos; `goal` e
+ * `tokensBand` (faixa da soma dos tokens da semana dos prédios que mostram tokens) só com 10 prédios ou mais.
+ */
+export interface CityStatusMessage { t: 'city'; goal?: CityGoal; lit: number; tokensBand?: TokenBand }
+/** A meta da semana foi batida: fogos na praça (uma vez por meta, para todos com a cena aberta). */
+export interface CityFireworksMessage { t: 'city.fireworks'; goalId: string }
 /** `text` é um id de NOTICE_IDS (um id desconhecido vira uma mensagem genérica). */
 export interface NoticeMessage { t: 'notice'; level: 'info' | 'warn' | 'error'; text: NoticeId | (string & {}) }
 
@@ -664,5 +737,10 @@ export type ServerMessage =
   | GreetingMessage
   | ProfileMessage
   | NoticeMessage
+  | LikesTodayMessage
+  | AwaySummaryMessage
+  | KnockedMessage
+  | CityStatusMessage
+  | CityFireworksMessage
   | PingMessage
   | PongMessage;
