@@ -121,7 +121,7 @@ export class FakeWorldStream implements WorldStream {
       const working = Math.round(total * rng());
       const waiting = Math.min(total - working, rng() < 0.4 ? 1 + Math.floor(rng() * 2) : 0);
       const away = !mine && (i % 7 === 5 || i % 11 === 9);
-      const discreet = !mine && i % 9 === 4;
+      const discreet = !mine && i % 9 === 7;
       const b: WorldBuildingPublic = {
         id: mine ? 'b_voce' : `b_${i.toString(36).padStart(3, '0')}`,
         lot: { district: DISTRICT, x: lot.x, y: lot.y },

@@ -191,10 +191,28 @@ export function plazaCanvas(art: ArtModule): HTMLCanvasElement {
   const by = T(b.y);
   const bw = T(b.w);
   const bh = T(b.h);
-  // piso de concreto polido com faixas de pedra
-  safe(() => art.drawFloor(ctx, 'concrete', bx, by, bw, bh, { seed: 21 }));
-  ctx.fillStyle = 'rgba(120,112,98,0.35)';
-  for (let x = bx + T(3); x < bx + bw; x += T(6)) ctx.fillRect(x, by, 2, bh);
+  // piso de pedra (o da calçada, num tom mais quente), com uma faixa escura em volta e placas grandes no meio
+  safe(() => art.drawFloor(ctx, 'sidewalk', bx, by, bw, bh, { seed: 23 }));
+  ctx.fillStyle = 'rgba(196,150,96,0.10)';
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.fillStyle = '#9a8f80';
+  ctx.fillRect(bx + T(1), by + T(1), bw - T(2), 3);
+  ctx.fillRect(bx + T(1), by + bh - T(1) - 3, bw - T(2), 3);
+  ctx.fillRect(bx + T(1), by + T(1), 3, bh - T(2));
+  ctx.fillRect(bx + bw - T(1) - 3, by + T(1), 3, bh - T(2));
+  ctx.fillStyle = 'rgba(255,248,232,0.5)';
+  ctx.fillRect(bx + T(1), by + T(1), bw - T(2), 1);
+  // caminhos de pedra clara ligando as quatro calçadas ao anel da fonte
+  const fcx = bx + T(FOUNTAIN.x + FOUNTAIN.w / 2);
+  const fcy = by + T(FOUNTAIN.y + FOUNTAIN.h / 2);
+  ctx.fillStyle = 'rgba(236,226,206,0.55)';
+  ctx.fillRect(fcx - T(1.5), by + T(1) + 3, T(3), bh - T(2) - 6);
+  ctx.fillRect(bx + T(1) + 3, fcy - T(1.5), bw - T(2) - 6, T(3));
+  ctx.fillStyle = 'rgba(140,128,110,0.45)';
+  for (const d of [-1, 1]) {
+    ctx.fillRect(fcx + d * T(1.5) - (d > 0 ? 1 : 0), by + T(1) + 3, 1, bh - T(2) - 6);
+    ctx.fillRect(bx + T(1) + 3, fcy + d * T(1.5) - (d > 0 ? 1 : 0), bw - T(2) - 6, 1);
+  }
   // canteiros de grama nos quatro cantos (cantos arredondados, borda de pedra)
   const beds: [number, number, number, number][] = [
     [2, 2, 10, 6],
@@ -222,11 +240,19 @@ export function plazaCanvas(art: ArtModule): HTMLCanvasElement {
   ctx.clip();
   safe(() => art.drawFloor(ctx, 'marble', cx - T(8), cy - T(6), T(16), T(12), { seed: 41 }));
   ctx.restore();
-  ctx.strokeStyle = '#a69f92';
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#8f8676';
+  ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.ellipse(cx, cy, T(7) - 1, T(5.2) - 1, 0, 0, Math.PI * 2);
   ctx.stroke();
+  // mosaico em volta da bacia
+  ctx.strokeStyle = 'rgba(63,127,216,0.35)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + 4, T(4.8), T(3.4), 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
   ctx.strokeStyle = 'rgba(255,255,255,0.5)';
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -338,61 +364,94 @@ export function gardenCanvas(art: ArtModule, kind: GardenKind, north: boolean, s
   return c;
 }
 
-/** Fonte da praça (4 × 3 tiles): bacia de pedra, água e o chafariz no meio. A água que pula é desenhada por quadro. */
-export function fountainCanvas(): { canvas: HTMLCanvasElement; ax: number; ay: number } {
-  const w = T(FOUNTAIN.w) + 8;
-  const h = T(FOUNTAIN.h) + 26;
+/**
+ * Fonte da praça (bloqueia 4 × 3 tiles; o desenho passa um pouco para os lados): bacia octogonal de pedra com a
+ * mureta à mostra, água, e o chafariz de duas taças no meio. A água que pula e as ondinhas são desenhadas por quadro
+ * (scene.ts), a partir de `water` (centro da bacia) e `jet` (topo da taça de cima).
+ */
+export function fountainCanvas(): { canvas: HTMLCanvasElement; ax: number; ay: number; water: { x: number; y: number; rx: number; ry: number }; jet: { x: number; y: number } } {
+  const w = T(6);
+  const h = T(5);
   const [c, ctx] = canvas(w, h);
   const cx = w / 2;
-  const by = h - 3;
-  const rx = T(FOUNTAIN.w) / 2 + 2;
-  const ry = T(FOUNTAIN.h) / 2;
-  const cy = by - ry;
-  // sombra
+  const base = h - 2;
+  const rx = T(2.9);
+  const ry = T(1.75);
+  const wall = 7;
+  const cy = base - wall - ry;
+  const oct = (ox: number, oy: number, ax: number, ay: number) => {
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = Math.PI / 8 + (i * Math.PI) / 4;
+      const x = ox + Math.cos(a) * ax;
+      const y = oy + Math.sin(a) * ay;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  };
+  // sombra no chão
   ctx.fillStyle = 'rgba(28,36,52,0.22)';
-  ctx.beginPath();
-  ctx.ellipse(cx + 3, cy + 4, rx + 1, ry, 0, 0, Math.PI * 2);
+  oct(cx + 4, cy + wall + 3, rx + 2, ry + 1);
   ctx.fill();
-  // borda externa (pedra) e face da mureta
-  ctx.fillStyle = '#7d7a73';
-  ctx.beginPath();
-  ctx.ellipse(cx, cy + 3, rx, ry, 0, 0, Math.PI * 2);
+  // mureta (face) e tampa
+  ctx.fillStyle = '#6f6a62';
+  oct(cx, cy + wall, rx, ry);
   ctx.fill();
-  ctx.fillStyle = '#b9b5aa';
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fillRect(cx - rx * 0.92, cy, rx * 1.84, wall);
+  ctx.fillStyle = '#9a948a';
+  ctx.fillRect(cx - rx * 0.92, cy + 1, rx * 1.84, wall - 3);
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  for (let x = Math.round(cx - rx * 0.9); x < cx + rx * 0.9; x += 9) ctx.fillRect(x, cy + 2, 1, wall - 4);
+  ctx.fillStyle = '#c9c3b6';
+  oct(cx, cy, rx, ry);
   ctx.fill();
-  ctx.fillStyle = '#d8d4ca';
-  ctx.beginPath();
-  ctx.ellipse(cx, cy - 1, rx - 1, ry - 1, 0, Math.PI, Math.PI * 2);
+  ctx.fillStyle = '#e4dfd4';
+  oct(cx, cy - 1, rx - 2, ry - 1.5);
   ctx.fill();
   // água
-  ctx.fillStyle = '#3f86b8';
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, rx - 4, ry - 4, 0, 0, Math.PI * 2);
+  ctx.fillStyle = '#2f75a8';
+  oct(cx, cy + 1, rx - 6, ry - 5);
   ctx.fill();
-  ctx.fillStyle = '#5ea8d6';
-  ctx.beginPath();
-  ctx.ellipse(cx - 4, cy - 3, rx - 12, ry - 9, 0, 0, Math.PI * 2);
+  ctx.fillStyle = '#3f8bc2';
+  oct(cx, cy, rx - 8, ry - 7);
   ctx.fill();
-  // pedestal e taça de cima
-  ctx.fillStyle = '#8d8a82';
-  ctx.fillRect(cx - 3, cy - 18, 6, 18);
-  ctx.fillStyle = '#c9c5bb';
-  ctx.fillRect(cx - 3, cy - 18, 2, 18);
-  ctx.fillStyle = '#7d7a73';
+  ctx.fillStyle = 'rgba(160,214,245,0.55)';
   ctx.beginPath();
-  ctx.ellipse(cx, cy - 17, 11, 4, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx - rx * 0.35, cy - ry * 0.3, rx * 0.32, ry * 0.18, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = '#d8d4ca';
-  ctx.beginPath();
-  ctx.ellipse(cx, cy - 18, 11, 3.5, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#5ea8d6';
-  ctx.beginPath();
-  ctx.ellipse(cx, cy - 18, 8, 2.2, 0, 0, Math.PI * 2);
-  ctx.fill();
-  return { canvas: c, ax: Math.round(cx), ay: by };
+  // pedestal, taça de baixo, coluna e taça de cima
+  const p1 = cy - 3;
+  ctx.fillStyle = '#7d776d';
+  ctx.fillRect(cx - 4, p1 - 10, 8, 12);
+  ctx.fillStyle = '#c9c3b6';
+  ctx.fillRect(cx - 4, p1 - 10, 3, 12);
+  const bowl = (y: number, r: number) => {
+    ctx.fillStyle = '#6f6a62';
+    ctx.beginPath();
+    ctx.ellipse(cx, y + 2, r, r * 0.34, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#d8d2c6';
+    ctx.beginPath();
+    ctx.ellipse(cx, y, r, r * 0.32, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#4b9ad0';
+    ctx.beginPath();
+    ctx.ellipse(cx, y, r - 3, r * 0.32 - 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  bowl(p1 - 11, 15);
+  ctx.fillStyle = '#7d776d';
+  ctx.fillRect(cx - 2, p1 - 24, 4, 13);
+  ctx.fillStyle = '#c9c3b6';
+  ctx.fillRect(cx - 2, p1 - 24, 2, 13);
+  bowl(p1 - 25, 8);
+  // pinha no topo
+  ctx.fillStyle = '#d8d2c6';
+  ctx.fillRect(cx - 1, p1 - 30, 3, 5);
+  ctx.fillStyle = '#f2a33a';
+  ctx.fillRect(cx, p1 - 32, 1, 2);
+  return { canvas: c, ax: Math.round(cx), ay: base, water: { x: cx, y: cy, rx: rx - 8, ry: ry - 7 }, jet: { x: cx, y: p1 - 31 } };
 }
 
 /** Floreira de pedra com flores. */

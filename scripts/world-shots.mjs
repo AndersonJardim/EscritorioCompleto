@@ -1,7 +1,9 @@
 // Capturas da seção do Habblaud World no modo demonstração (?mock=1&world=approved: só dados fictícios do
-// FakeWorldApi, nada do escritório de verdade): o cartão "Seu prédio" (docs/screenshots/world-predio.png) e a janela
-// "Ver o que foi enviado" (docs/screenshots/world-enviado.png). Sobe o Vite sozinho (ou usa --url de um Habblaud já
-// rodando) e fotografa com o Chromium headless do Playwright, sem tocar no navegador de quem roda.
+// FakeWorldApi, nada do escritório de verdade): o cartão "Seu prédio" (docs/screenshots/world-predio.png), a janela
+// "Ver o que foi enviado" (docs/screenshots/world-enviado.png) e a cidade de mentira (&scene=city: só prédios e
+// jogadores fictícios de client/src/world/city/fake-stream.ts) no fim da tarde (world-cidade.png) e o cartão de um
+// prédio (world-cartao.png). Sobe o Vite sozinho (ou usa --url de um Habblaud já rodando) e fotografa com o Chromium
+// headless do Playwright, sem tocar no navegador de quem roda.
 //
 // Uso: npm run shots:world [-- --url http://localhost:4747] [--out docs/screenshots] [--chromium /caminho/do/chrome]
 // Sem o Chromium headless da versão do playwright-core do projeto: npx playwright-core install chromium-headless-shell,
@@ -55,6 +57,39 @@ try {
   await page.waitForTimeout(500);
   await page.locator('.ui-world-sent').screenshot({ path: join(out, 'world-enviado.png'), animations: 'disabled' });
   console.log('salvo:', join(out, 'world-enviado.png'));
+
+  // A cidade (botão Mundo): hora fixa, câmera parada entre a praça e o meu prédio, sem os avisos do escritório.
+  const city = async (hora) => {
+    await page.goto(`${base}/?mock=1&world=approved&scene=city&hora=${hora}`, { waitUntil: 'load', timeout: 60_000 });
+    await page.waitForFunction(() => window.habblaud?.city?.scene()?.me(), null, { timeout: 20_000 });
+    await page.addStyleTag({ content: '.ui-toasts { display: none !important; }' });
+    await page.mouse.move(2, 400);
+  };
+  await city('19:10');
+  await page.evaluate(() => window.habblaud.city.scene().lookAt(47, 20.5, 1.5));
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: join(out, 'world-cidade.png') });
+  console.log('salvo:', join(out, 'world-cidade.png'));
+
+  // O cartão do prédio do vizinho ao passar o mouse (lote 4,1: a fachada da frente, com a porta na calçada sul).
+  await city('14');
+  await page.evaluate(() => window.habblaud.city.scene().lookAt(70, 17, 2));
+  await page.waitForTimeout(900);
+  const lot = await page.evaluate(() => {
+    const s = window.habblaud.city.scene();
+    return { a: s.toScreen(65.5, 12), b: s.toScreen(78.5, 25), c: s.toScreen(72, 17) };
+  });
+  await page.mouse.move(lot.c.x, lot.c.y);
+  const hover = page.locator('.ui-city-card');
+  await hover.waitFor({ state: 'visible', timeout: 10_000 });
+  await page.waitForTimeout(500);
+  const box = await hover.boundingBox();
+  const x0 = Math.max(0, Math.min(lot.a.x, box.x) - 16);
+  const y0 = Math.max(0, Math.min(lot.a.y, box.y) - 16);
+  const x1 = Math.min(1400, Math.max(lot.b.x, box.x + box.width) + 16);
+  const y1 = Math.min(900, Math.max(lot.b.y, box.y + box.height) + 16);
+  await page.screenshot({ path: join(out, 'world-cartao.png'), clip: { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } });
+  console.log('salvo:', join(out, 'world-cartao.png'));
 } finally {
   await browser.close();
   await vite?.close();

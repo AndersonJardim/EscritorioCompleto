@@ -58,6 +58,8 @@ export interface CityScene {
   zoomBy(factor: number): void;
   /** Câmera de volta no jogador. */
   recenter(): void;
+  /** Câmera parada num ponto (tiles), sem seguir o jogador até ele andar (capturas, depuração). */
+  lookAt(x: number, y: number, zoom?: number): void;
   /** Esc: fecha o cartão aberto (true) ou não havia nada para fechar (false). */
   escape(): boolean;
   destroy(): void;
@@ -455,6 +457,14 @@ export function createCityScene(o: CitySceneOptions): CityScene {
       camera.zoomAt(camera.stepZoom(factor > 1 ? 1 : -1), camera.viewW / 2, camera.viewH / 2, Date.now(), true);
     },
     recenter,
+    lookAt(x, y, zoom = camera.zoom) {
+      following = false;
+      camera.stop();
+      camera.zoom = Math.max(CITY_MIN_ZOOM, Math.min(6, zoom));
+      const c = camera.centerFor(x * TILE, y * TILE, camera.zoom);
+      camera.x = c.x;
+      camera.y = c.y;
+    },
     escape() {
       if (cards.open) {
         cards.hide();

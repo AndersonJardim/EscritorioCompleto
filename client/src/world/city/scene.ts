@@ -32,6 +32,8 @@ const SIGN_ZOOM = 1.05;
 /** Nomes sobre as cabeças a partir deste zoom. */
 const NAME_ZOOM = 0.85;
 const FADE_MS = 1_200;
+/** Quanto (px) o personagem sentado sobe para ficar no assento do banco. */
+const SEAT_LIFT = 6;
 /** Pixels de tela por pixel do mapa de luz da noite (meia resolução: as bordas suaves viram brilho). */
 const LIGHT_MAP_SCALE = 2;
 
@@ -144,7 +146,7 @@ export class CityRenderer {
   private readonly facades = new Map<string, BuildingCache>();
   private readonly appearances = new Map<string, { key: string; a: Appearance }>();
   private readonly anims = new Map<string, AnimState>();
-  private fountain: { canvas: HTMLCanvasElement; ax: number; ay: number } | null = null;
+  private fountain: ReturnType<typeof fountainCanvas> | null = null;
   private readonly planters = new Map<number, { canvas: HTMLCanvasElement; ax: number; ay: number }>();
   private readonly req = { appearance: null as unknown as Appearance, dir: 'down' as Dir, pose: 'stand' as Pose, frame: 0, held: 'none' as const, seated: false } as CharacterFrameRequest;
   private readonly lamps: number[] = [];
@@ -519,7 +521,7 @@ export class CityRenderer {
       const x = Math.round(d.x - f.ax);
       const y = Math.round(d.y - f.ay);
       ctx.drawImage(f.canvas, x, y);
-      this.drawFountainWater(d.x, d.y - f.ay + f.canvas.height - 3 - 24, now);
+      this.drawFountainWater(x, y, f, now);
       return;
     }
     if (d.kind === 'planter') {
@@ -532,26 +534,53 @@ export class CityRenderer {
     ctx.drawImage(s.canvas, Math.round(d.x - s.ax), Math.round(d.y - s.ay));
   }
 
-  /** Água da fonte: o jato que sobe da taça e cai em gotas, e brilhos na bacia. */
-  private drawFountainWater(cx: number, cy: number, now: number): void {
+  /** Água da fonte: o jato no topo, a cortina que cai das taças, ondinhas na bacia e brilhos. */
+  private drawFountainWater(ox: number, oy: number, f: ReturnType<typeof fountainCanvas>, now: number): void {
     const { ctx } = this;
     const t = now / 1000;
-    ctx.fillStyle = 'rgba(214,238,255,0.9)';
-    const top = cy - 18;
-    for (let i = 0; i < 9; i++) {
-      const ph = (t * 1.6 + i / 9) % 1;
+    const jx = ox + f.jet.x;
+    const jy = oy + f.jet.y;
+    // jato: gotas subindo e caindo em arco para os dois lados
+    ctx.fillStyle = 'rgba(220,240,255,0.95)';
+    ctx.fillRect(Math.round(jx), Math.round(jy - 8), 1, 8);
+    for (let i = 0; i < 14; i++) {
+      const ph = (t * 1.3 + i / 14) % 1;
       const side = i % 2 ? 1 : -1;
-      const x = cx + side * ph * 9;
-      const y = top - Math.sin(ph * Math.PI) * 9 + ph * 4;
-      ctx.fillRect(Math.round(x), Math.round(y), 1, 2);
+      const x = jx + side * ph * (6 + (i % 3) * 2);
+      const y = jy - 8 - Math.sin(ph * Math.PI) * 6 + ph * ph * 12;
+      ctx.fillRect(Math.round(x), Math.round(y), 1, 1 + (i % 2));
     }
-    ctx.fillRect(Math.round(cx), Math.round(top - 9), 1, 9);
-    ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    for (let i = 0; i < 6; i++) {
-      const a = i * 1.05 + t * 0.7;
-      const x = cx + Math.cos(a) * 20;
-      const y = cy + 6 + Math.sin(a) * 9;
-      if ((Math.floor(t * 4) + i) % 3 === 0) ctx.fillRect(Math.round(x), Math.round(y), 2, 1);
+    // cortinas caindo das bordas das taças
+    ctx.fillStyle = 'rgba(200,232,252,0.7)';
+    for (const [r, top, len] of [
+      [8, f.jet.y + 7, 12],
+      [15, f.jet.y + 20, 14],
+    ] as const) {
+      for (let k = -1; k <= 1; k += 2) {
+        const x = ox + f.jet.x + k * r;
+        for (let i = 0; i < 3; i++) {
+          const off = (t * 22 + i * 5) % len;
+          ctx.fillRect(Math.round(x + k * (off * 0.15)), Math.round(oy + top + off), 1, 2);
+        }
+      }
+    }
+    // ondinhas na bacia
+    const w = f.water;
+    ctx.strokeStyle = 'rgba(214,238,255,0.55)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 2; i++) {
+      const ph = (t * 0.45 + i * 0.5) % 1;
+      ctx.globalAlpha = 1 - ph;
+      ctx.beginPath();
+      ctx.ellipse(ox + w.x, oy + w.y + 2, 10 + ph * (w.rx - 10), 3 + ph * (w.ry - 3), 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    for (let i = 0; i < 7; i++) {
+      if ((Math.floor(t * 3) + i * 2) % 5 !== 0) continue;
+      const a = i * 0.9 + 0.3;
+      ctx.fillRect(Math.round(ox + w.x + Math.cos(a) * w.rx * 0.8), Math.round(oy + w.y + Math.sin(a) * w.ry * 0.7), 2, 1);
     }
   }
 
@@ -593,7 +622,8 @@ export class CityRenderer {
   private drawChar(v: CharVis, hovered: boolean): void {
     const { ctx } = this;
     const x = Math.round(v.x);
-    const y = Math.round(v.y);
+    // sentado no banco: o corpo sobe até o assento (a profundidade continua a do pé, na frente do banco)
+    const y = Math.round(v.y) - (v.pose === 'sit' ? SEAT_LIFT : 0);
     if (v.pose !== 'sit') {
       const sh = shadowSprite();
       ctx.drawImage(sh.canvas, x - sh.ax, y - sh.ay);
