@@ -31,7 +31,7 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
   pelo próprio Habblaud), confirmar o e-mail, entrar, sair, reenviar o código, trocar a senha, salvar o personagem
   (nome, aparência, 2 ou 3 traços e a frase de apresentação) e a visibilidade, e ver ou desconectar dispositivos. Só
   pelo próprio computador: nunca pela porta do celular, e o que age pela conta só com o acesso local (a trava do
-  terminal).
+  terminal). Na lista de espera, o Habblaud aberto confere sozinho a cada 30 minutos se o acesso foi liberado.
 - **O token do dispositivo fica neste computador**, em `~/.habblaud/world.json` (permissão 600; no Docker, no volume
   `/data`): nunca vai ao navegador, ao snapshot, aos logs nem à URL.
 - **Protocolo aberto:** `shared/world/protocol.ts` e `schema.json` definem tudo o que o Habblaud troca com o World; as

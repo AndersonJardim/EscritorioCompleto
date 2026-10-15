@@ -17,6 +17,8 @@
 // do mundo (client.ts). As rotas locais (http.ts) só chamam isto depois das travas (porta e Host locais, bind local).
 // - Uma operação da conta por vez (fila): duas abas clicando "Entrar" não criam dois dispositivos.
 // - O estado (/v1/me) fica em memória e é relido no máximo a cada `meTtlMs` (ou quando a página pede `refresh`).
+// - Na lista de espera, /v1/me também é relido sozinho a cada `waitingPollMs` (30 min): aprovada a conta, o snapshot
+//   muda (meta.world) e a interface mostra "Liberado" sem ninguém clicar. Para ao sair, ao ser aprovado ou sem a trava.
 // - Qualquer 401 do servidor do mundo numa rota com token = token revogado ou vencido: a sessão daqui é apagada.
 // - Entrar de novo (outra conta ou a mesma) troca a sessão e revoga o dispositivo anterior no servidor.
 import { getLocale } from '../../shared/i18n';
@@ -52,7 +54,12 @@ export interface WorldServiceOptions {
   now?: () => number;
   /** Intervalo mínimo entre duas leituras de /v1/me (padrão 30 s). */
   meTtlMs?: number;
+  /** Na lista de espera, intervalo da releitura automática de /v1/me (padrão 30 min). */
+  waitingPollMs?: number;
 }
+
+/** Releitura automática de /v1/me enquanto a conta está na lista de espera. */
+export const WAITING_POLL_MS = 30 * 60_000;
 
 /** "marcio@exemplo.com" -> "m***@exemplo.com" (só quando o servidor do mundo não respondeu com o dele). */
 export function maskEmail(email: string): string {
@@ -74,10 +81,22 @@ export class WorldService {
   /** Só códigos conhecidos (worldLastError): a interface traduz cada um. */
   private lastError?: WorldKnownErrorCode;
   private queue: Promise<unknown> = Promise.resolve();
+  private readonly pollMs: number;
+  private pollTimer?: ReturnType<typeof setTimeout>;
+  private stopped = false;
 
   constructor(private readonly o: WorldServiceOptions) {
     this.now = o.now ?? Date.now;
     this.ttl = o.meTtlMs ?? 30_000;
+    this.pollMs = o.waitingPollMs ?? WAITING_POLL_MS;
+    // Quem já estava na lista de espera ao abrir o Habblaud (world.json lido antes) também é relido sozinho.
+    this.schedulePoll();
+  }
+
+  /** Para a releitura automática (fim do processo e testes). */
+  stop(): void {
+    this.stopped = true;
+    this.stopPoll();
   }
 
   get configured(): boolean {
@@ -269,12 +288,14 @@ export class WorldService {
     this.o.onChange?.();
     await this.refreshMe();
     if (!saved) this.lastError = 'storage_failed';
+    this.schedulePoll();
     return { ok: true, status: 200, data: this.compose() };
   }
 
   /** Apaga a sessão daqui (sair, token recusado). `error` fica em lastError. */
   private drop(error: string | undefined): void {
     const had = !!this.o.store.get();
+    this.stopPoll();
     this.o.store.clear();
     this.me = undefined;
     this.meToken = undefined;
@@ -320,6 +341,29 @@ export class WorldService {
       this.o.store.update({ access, player: me.player });
       if (s.access !== access) this.o.onChange?.();
     }
+    this.schedulePoll();
+  }
+
+  /**
+   * Arma a releitura de /v1/me para daqui a `pollMs` se a conta está na lista de espera (e há servidor e trava do
+   * terminal); senão, desarma. Um timer só, que não segura o processo aberto.
+   */
+  private schedulePoll(): void {
+    const s = this.o.store.get();
+    if (this.stopped || !this.o.client || !this.o.terminal || s?.access !== 'waiting') return this.stopPoll();
+    if (this.pollTimer) return;
+    this.pollTimer = setTimeout(() => {
+      this.pollTimer = undefined;
+      void this.refreshMe()
+        .catch(() => undefined)
+        .then(() => this.schedulePoll());
+    }, this.pollMs);
+    this.pollTimer.unref?.();
+  }
+
+  private stopPoll(): void {
+    if (this.pollTimer) clearTimeout(this.pollTimer);
+    this.pollTimer = undefined;
   }
 
   private compose(): WorldStatus {

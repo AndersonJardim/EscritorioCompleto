@@ -27,6 +27,9 @@ por HTTPS, para o servidor do mundo:
 | Qual dispositivo desconectar | Ao desconectar um | Só o id que o próprio servidor deu ao dispositivo |
 | Versão do Habblaud | Em toda chamada, no cabeçalho `User-Agent` (`Habblaud/0.11.0`) | Compatibilidade e diagnóstico |
 
+Enquanto a conta está na lista de espera, o Habblaud aberto pergunta ao servidor do mundo, a cada 30 minutos, se o
+acesso já foi liberado (`GET /v1/me`, só com o token do dispositivo, sem mais nada). Liberado ou fora da conta, para.
+
 O servidor do mundo vê o IP da conexão (como qualquer site) e guarda só o **país**, que dá para esconder.
 
 ## A lista fechada (quando o prédio subir)

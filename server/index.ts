@@ -509,6 +509,7 @@ function shutdown(signal: string): void {
   messages?.stop();
   ptys?.stopAll();
   updates.stop();
+  world?.stop();
   names.flush();
   void closeVite?.();
   remoteListener?.close();
