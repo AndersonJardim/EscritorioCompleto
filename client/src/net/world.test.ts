@@ -519,3 +519,60 @@ describe('FakeWorldApi: prédio', () => {
     expect(api.meta()).toEqual({ enabled: true, configured: true, state: 'logged_out' });
   });
 });
+
+describe('conta e dados (Fase 6)', () => {
+  it('excluir a conta e baixar os dados vão para as rotas do contrato; o JSON vem formatado para salvar', async () => {
+    const { calls, api } = recorder(200, { account: { email: 'a@b.co' }, likesGiven: [] });
+    expect(await api.requestAccountDeletion()).toEqual({ ok: true, data: null });
+    expect(await api.confirmAccountDeletion({ code: '123456' })).toEqual({ ok: true, data: null });
+    const exp = await api.exportData();
+    expect(exp).toEqual({ ok: true, data: '{\n  "account": {\n    "email": "a@b.co"\n  },\n  "likesGiven": []\n}\n' });
+    expect(calls.map((c) => `${c.init?.method} ${c.url} ${c.init?.body ?? ''}`)).toEqual([
+      'POST /api/world/delete-account {}',
+      'POST /api/world/delete-account/confirm {"code":"123456"}',
+      'GET /api/world/export ',
+    ]);
+    expect((await recorder(200, [1]).api.exportData()).ok).toBe(false);
+    expect(await recorder(429, { error: { code: 'rate_limited', retryAfter: 86400 } }).api.exportData()).toMatchObject({ ok: false, code: 'rate_limited', status: 429 });
+    expect(await recorder(503, { error: { code: 'maintenance' } }).api.status()).toMatchObject({ ok: false, code: 'maintenance', status: 503 });
+  });
+
+  it('status: o id da conta (só um id limpo) e o selo "não verificado" do prédio', () => {
+    const base = { available: true, configured: true, state: 'approved' };
+    expect(parseWorldStatus({ ...base, account: { emailMasked: 'a***@b.co', access: 'approved', id: 'acc_1' } })?.account).toEqual({ emailMasked: 'a***@b.co', access: 'approved', id: 'acc_1' });
+    expect(parseWorldStatus({ ...base, account: { emailMasked: 'a***@b.co', access: 'approved', id: '<x>' } })?.account).toEqual({ emailMasked: 'a***@b.co', access: 'approved' });
+    expect(parseBuilding({ connected: true, paused: false, floors: 1, agents: 1, unverified: true })?.unverified).toBe(true);
+    expect(parseBuilding({ connected: true, paused: false, floors: 1, agents: 1, unverified: 'sim' })?.unverified).toBeUndefined();
+    expect(parseWorldStatus({ ...base, player: { name: 'P', look: 'f', parts: {}, traits: [], intro: 'hello', visibility: { notifyInactivity: false } } })?.player?.visibility.notifyInactivity).toBe(false);
+  });
+
+  it('FakeWorldApi: excluir a conta pede o código; o certo tira a conta e deixa o aviso; exportar uma vez por dia', async () => {
+    const api = new FakeWorldApi({ delayMs: 0, state: 'approved' });
+    await api.setTheme('halloween');
+    const data = await api.exportData();
+    expect(data.ok && JSON.parse(data.data)).toMatchObject({ account: { email: FAKE_EMAIL }, player: { name: 'Pixel Dev' } });
+    expect(await api.exportData()).toMatchObject({ ok: false, code: 'rate_limited' });
+    expect(await api.confirmAccountDeletion({ code: FAKE_CODE })).toMatchObject({ ok: false, code: 'invalid_code' });
+    expect((await api.requestAccountDeletion()).ok).toBe(true);
+    expect(await api.confirmAccountDeletion({ code: '000000' })).toMatchObject({ ok: false, code: 'invalid_code' });
+    expect((await api.confirmAccountDeletion({ code: FAKE_CODE })).ok).toBe(true);
+    const st = await api.status();
+    expect(st.ok && st.data).toEqual({ available: true, configured: true, state: 'logged_out', lastError: 'account_deleted' });
+    expect(api.meta()).toEqual({ enabled: true, configured: true, state: 'logged_out' });
+    expect(await api.login({ email: FAKE_EMAIL, password: FAKE_PASSWORD })).toMatchObject({ ok: false, code: 'invalid_credentials' });
+  });
+
+  it('FakeWorldApi: o "mundo" marca o prédio como não verificado e o aviso de inatividade fica na visibilidade', async () => {
+    const api = new FakeWorldApi({ delayMs: 0, state: 'approved' });
+    api.markUnverified(true);
+    let st = await api.status();
+    expect(st.ok && st.data.building?.unverified).toBe(true);
+    api.markUnverified(false);
+    st = await api.status();
+    expect(st.ok && st.data.building?.unverified).toBeUndefined();
+    const vis = st.ok ? st.data.player!.visibility : undefined;
+    expect((await api.saveVisibility({ ...vis!, notifyInactivity: false })).ok).toBe(true);
+    st = await api.status();
+    expect(st.ok && st.data.player?.visibility.notifyInactivity).toBe(false);
+  });
+});

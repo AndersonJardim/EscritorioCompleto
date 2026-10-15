@@ -2,8 +2,10 @@
 // máquina de estados da seção, as regras de senha, nome de jogador e traços e o texto de cada erro. São conferências
 // de antemão, para responder na hora: quem decide é o servidor (o nome, por exemplo, ainda passa pela lista de
 // palavras bloqueadas, que só ele tem). Também o cartão "Seu prédio" (Fase 2): estado, contagens, motivo de uma
-// remessa recusada, o chip da barra do topo e quando o tema vai para o mundo. A interface fica em settings-world.ts,
-// building.ts, world-chip.ts e invite-card.ts.
+// remessa recusada, o chip da barra do topo e quando o tema vai para o mundo. Fase 6: a tela "Conta e dados" (aviso de
+// inatividade, baixar os dados, excluir a conta), o recurso por e-mail (conta suspensa ou banida, prédio "não
+// verificado") e a manutenção do mundo. A interface fica em settings-world.ts, building.ts, world-chip.ts e
+// invite-card.ts.
 import { PART_KEYS, type AppearanceParts } from '../../../../shared/appearance';
 import type { Appearance } from '../../art/api';
 import { appearanceFromSeed } from '../../art/character/appearance';
@@ -66,7 +68,9 @@ export type WorldScreen =
   | 'home'
   | 'character'
   | 'visibility'
-  | 'devices';
+  | 'devices'
+  // "Conta e dados" (Fase 6): aviso de inatividade, baixar os dados e excluir a conta
+  | 'account';
 
 /** Aviso curto no topo da seção depois de uma ação (some na próxima navegação). */
 export type WorldFlash = 'code_sent' | 'code_resent' | 'password_changed' | 'signed_out' | 'character_saved' | 'device_revoked';
@@ -93,7 +97,7 @@ export type WorldUiEvent =
   | { type: 'flash'; flash: WorldFlash };
 
 const SIGNED_OUT: readonly WorldScreen[] = ['welcome', 'register', 'login', 'verify', 'forgot', 'reset'];
-const SIGNED_IN: readonly WorldScreen[] = ['home', 'character', 'visibility', 'devices'];
+const SIGNED_IN: readonly WorldScreen[] = ['home', 'character', 'visibility', 'devices', 'account'];
 
 /** Telas possíveis em cada estado da conta (a primeira é a de entrada). */
 export function screensFor(state: WorldServerState): readonly WorldScreen[] {
@@ -282,10 +286,43 @@ export const DEFAULT_VISIBILITY: Readonly<WorldVisibility> = {
   compactions: false,
 };
 
-export type VisibilitySwitch = Exclude<keyof WorldVisibility, 'mode'>;
+/** Os interruptores da tela de visibilidade (o aviso de inatividade fica em "Conta e dados"). */
+export type VisibilitySwitch = Exclude<keyof WorldVisibility, 'mode' | 'notifyInactivity'>;
 
 /** Ordem dos interruptores na tela. */
 export const VISIBILITY_SWITCHES: readonly VisibilitySwitch[] = ['closed', 'hideCountry', 'tokensVisible', 'leaderboard', 'compactions'];
+
+// ------------------------------------------------------------------ conta e dados (Fase 6)
+
+/** O aviso por e-mail antes de retirar o prédio por inatividade está ligado? Sem a informação, o padrão da conta: sim. */
+export function notifyInactivityOn(v: Pick<WorldVisibility, 'notifyInactivity'> | undefined): boolean {
+  return v?.notifyInactivity !== false;
+}
+
+/** Nome do arquivo de "Baixar meus dados" (o mesmo do anexo de GET /api/world/export). */
+export const EXPORT_FILENAME = 'habblaud-world-dados.json';
+
+/** Para onde vão os recursos (conta suspensa ou banida, prédio "não verificado") e os pedidos sobre os dados. */
+export const APPEAL_EMAIL = 'privacidade@habblaud.com';
+
+/** Assunto fixo do recurso (em português: é o filtro da caixa de quem atende), com o id da conta quando se sabe. */
+export const APPEAL_SUBJECT = 'Recurso Habblaud World';
+
+/** O link "Recorrer por e-mail": mailto para APPEAL_EMAIL com o assunto e, se houver, o id da conta. */
+export function appealMailto(accountId?: string): string {
+  const id = accountId && /^[A-Za-z0-9_-]{1,64}$/.test(accountId) ? accountId : '';
+  return `mailto:${APPEAL_EMAIL}?subject=${encodeURIComponent(id ? `${APPEAL_SUBJECT} ${id}` : APPEAL_SUBJECT)}`;
+}
+
+/** O selo de um prédio marcado como "não verificado" (WorldBuildingPublic.unverified), para o cartão da cidade. */
+export function unverifiedLabel(): string {
+  return tr('Não verificado');
+}
+
+/** O que o selo quer dizer, para quem vê o prédio na cidade (dica do selo no cartão). */
+export function unverifiedHint(): string {
+  return tr('Os números deste prédio pareceram fora do normal e estão em revisão; enquanto isso, ele fica fora de placares e destaques.');
+}
 
 // ------------------------------------------------------------------ erros
 
@@ -310,7 +347,13 @@ export type WorldAction =
   | 'sent'
   | 'theme'
   /** Um comando da cena Mundo (POST /api/world/cmd) recusado pelo servidor local. */
-  | 'scene';
+  | 'scene'
+  /** "Baixar meus dados" (GET /api/world/export). */
+  | 'export'
+  /** "Excluir conta" (pedir o código ou confirmar). */
+  | 'delete'
+  /** O aviso de inatividade (PUT /api/world/visibility). */
+  | 'inactivity';
 
 /**
  * Texto de um erro (o `message` do servidor, em inglês, nunca aparece). O switch cobre todo WorldErrorCode (o
@@ -371,7 +414,9 @@ export function worldErrorText(raw: WorldErrorCode | string, action: WorldAction
     case 'not_configured':
       return tr('O Habblaud World não está ligado neste Habblaud (falta HABBLAUD_WORLD_URL).');
     case 'rate_limited':
-      return tr('Muitas tentativas seguidas. Espere alguns minutos e tente de novo.');
+      return action === 'export'
+        ? tr('Dá para baixar os dados uma vez por dia. Tente de novo amanhã.')
+        : tr('Muitas tentativas seguidas. Espere alguns minutos e tente de novo.');
     case 'network':
     case 'world_unreachable':
     case 'world_timeout':
@@ -403,6 +448,7 @@ export function worldErrorText(raw: WorldErrorCode | string, action: WorldAction
         case 'character':
           return tr('O servidor recusou o personagem. Confira o nome, os traços (2 ou 3) e a frase de apresentação.');
         case 'visibility':
+        case 'inactivity':
           return tr('O servidor recusou as opções de visibilidade.');
         default:
           return tr('O servidor recusou o pedido. Confira os dados e tente de novo.');
@@ -506,6 +552,22 @@ export interface BuildingView {
   toggle: { action: 'pause' | 'resume' | 'join'; text: string; hint: string } | null;
   /** Mostra "Sair do mundo" (há um prédio no mundo para retirar). */
   leave: boolean;
+  /** O prédio está marcado como "não verificado" (o que isso quer dizer, para o dono), ou null. */
+  unverified: string | null;
+  /** "Recorrer por e-mail" (conta suspensa ou banida) ou "Contestar por e-mail" (não verificado), ou null. */
+  appeal: { text: string; hint: string } | null;
+}
+
+/** O que o cartão sabe além do prédio: a manutenção do mundo (o último /v1/me respondeu 503 `maintenance`). */
+export interface BuildingViewOptions {
+  maintenance?: boolean;
+}
+
+/** "Recorrer por e-mail", com a explicação ao lado. */
+function appealFor(kind: 'appeal' | 'contest'): { text: string; hint: string } {
+  return kind === 'appeal'
+    ? { text: tr('Recorrer por e-mail'), hint: tr('Abre um e-mail para {0}: conte o que aconteceu, e uma pessoa revê o caso.', [APPEAL_EMAIL]) }
+    : { text: tr('Contestar por e-mail'), hint: tr('Abre um e-mail para {0}: se for engano, uma pessoa revê os números e tira o selo.', [APPEAL_EMAIL]) };
 }
 
 /** "1 byte", "1.174 bytes". */
@@ -524,8 +586,23 @@ export function agentsText(n: number): string {
 }
 
 /** Tudo o que o cartão "Seu prédio" mostra, sem DOM. */
-export function buildingView(b: WorldBuildingStatus | undefined, hasPlayer: boolean, now: number): BuildingView {
+export function buildingView(b: WorldBuildingStatus | undefined, hasPlayer: boolean, now: number, opts: BuildingViewOptions = {}): BuildingView {
+  const v = buildingViewBase(b, hasPlayer, now, opts);
+  // Suspensa ou banida: o recurso por e-mail. Não verificado (e o prédio ainda no mundo): o selo e a contestação.
+  if (v.state === 'stopped' && (b?.stopped === 'banned' || b?.stopped === 'suspended')) return { ...v, appeal: appealFor('appeal') };
+  if (b?.unverified && v.state !== 'stopped' && v.state !== 'left' && v.state !== 'no_player') {
+    return {
+      ...v,
+      unverified: tr('O mundo marcou o seu prédio como "não verificado": os números pareceram fora do normal e estão em revisão. Ele continua no mundo, mas fora de placares e destaques.'),
+      appeal: appealFor('contest'),
+    };
+  }
+  return v;
+}
+
+function buildingViewBase(b: WorldBuildingStatus | undefined, hasPlayer: boolean, now: number, opts: BuildingViewOptions): BuildingView {
   const state = buildingState(b, hasPlayer);
+  const extra = { unverified: null, appeal: null };
   const floors = b?.floors ?? 0;
   const agents = b?.agents ?? 0;
   const stats =
@@ -541,7 +618,7 @@ export function buildingView(b: WorldBuildingStatus | undefined, hasPlayer: bool
   const later = tr('Pausado por 30 dias, o prédio some do mapa e, 30 dias depois, é retirado; retomar antes disso traz de volta, no mesmo lote.');
   switch (state) {
     case 'no_player':
-      return { state, label: tr('Sem personagem'), desc: tr('Crie o seu personagem: o prédio entra no mundo junto com ele.'), stats, rejected, toggle: null, leave: false };
+      return { state, label: tr('Sem personagem'), desc: tr('Crie o seu personagem: o prédio entra no mundo junto com ele.'), stats, rejected, toggle: null, leave: false, ...extra };
     case 'left':
       return {
         state,
@@ -551,11 +628,12 @@ export function buildingView(b: WorldBuildingStatus | undefined, hasPlayer: bool
         rejected: null,
         toggle: { action: 'join', text: tr('Voltar ao mundo'), hint: tr('Voltar cria um prédio novo, em outro lote; a conta e o personagem são os mesmos.') },
         leave: false,
+        ...extra,
       };
     case 'stopped': {
       const reason = b!.stopped!;
       const v = buildingStopView(reason);
-      return { state, ...v, stats, rejected, leave: reason === 'update' || reason === 'other-device' || reason === 'suspended' };
+      return { state, ...v, stats, rejected, leave: reason === 'update' || reason === 'other-device' || reason === 'suspended', ...extra };
     }
     case 'paused':
       return {
@@ -566,23 +644,29 @@ export function buildingView(b: WorldBuildingStatus | undefined, hasPlayer: bool
         rejected,
         toggle: { action: 'resume', text: tr('Retomar'), hint: `${tr('Retomar volta a enviar e acende o prédio.')} ${later}` },
         leave: true,
+        ...extra,
       };
     case 'connected':
     case 'reconnecting': {
       const connected = state === 'connected';
       const first = !b?.lastUplinkAt;
+      // Sem conexão e o mundo em manutenção (503 `maintenance`): o Habblaud tenta de novo com espera.
+      const maintenance = !connected && !!opts.maintenance;
       return {
         state,
-        label: connected ? tr('Conectado') : first ? tr('Conectando…') : tr('Reconectando…'),
+        label: connected ? tr('Conectado') : maintenance ? tr('Em manutenção') : first ? tr('Conectando…') : tr('Reconectando…'),
         desc: connected
           ? tr('Aceso no mundo: um andar por sala aberta e cada personagem no status de agora. Os tokens, se você deixar, aparecem só em faixas, no medidor da fachada.')
-          : first
-            ? tr('O prédio acende com a primeira remessa.')
-            : tr('Sem conexão com o mundo agora: o Habblaud tenta de novo sozinho. Com 2 minutos sem notícias, o prédio apaga.'),
+          : maintenance
+            ? tr('O mundo está em manutenção; tentamos de novo em instantes.')
+            : first
+              ? tr('O prédio acende com a primeira remessa.')
+              : tr('Sem conexão com o mundo agora: o Habblaud tenta de novo sozinho. Com 2 minutos sem notícias, o prédio apaga.'),
         stats,
         rejected,
         toggle: { action: 'pause', text: tr('Pausar'), hint: `${tr('Pausar interrompe o envio na hora e apaga o prédio no mundo.')} ${later}` },
         leave: true,
+        ...extra,
       };
     }
   }

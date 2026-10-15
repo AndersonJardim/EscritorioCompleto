@@ -3,6 +3,13 @@ import { PART_KEYS } from '../../../../shared/appearance';
 import { TRAIT_IDS } from '../../../../shared/world/traits';
 import { FAKE_UPLINK, WORLD_UI_ERROR_CODES, type WorldBuildingStatus, type WorldBuildingStop, type WorldMeta } from '../../net/world';
 import {
+  APPEAL_EMAIL,
+  appealMailto,
+  EXPORT_FILENAME,
+  notifyInactivityOn,
+  unverifiedHint,
+  unverifiedLabel,
+  worldErrorText,
   ackView,
   agentsText,
   buildingState,
@@ -30,7 +37,6 @@ import {
   toggleTrait,
   traitBlock,
   traitsValid,
-  worldErrorText,
   worldReduce,
   worldSectionMode,
   type WorldGate,
@@ -314,7 +320,7 @@ describe('cartão "Seu prédio"', () => {
     expect(stopped('suspended').toggle).toMatchObject({ action: 'resume', text: 'Tentar de novo' });
     expect(stopped('banned')).toMatchObject({ label: 'Conta banida', toggle: null, leave: false });
     for (const r of ['waiting', 'no_player', 'unauthorized'] as const) expect(stopped(r)).toMatchObject({ toggle: null, leave: false });
-    const reasons: WorldBuildingStop[] = ['banned', 'suspended', 'update', 'other-device', 'waiting', 'no_player', 'unauthorized'];
+    const reasons: WorldBuildingStop[] = ['banned', 'suspended', 'update', 'other-device', 'waiting', 'no_player', 'unauthorized', 'deleted'];
     const descs = reasons.map((r) => buildingStopView(r).desc);
     expect(new Set(descs).size).toBe(reasons.length);
     // As contagens da última remessa continuam.
@@ -392,5 +398,62 @@ describe('tema e chip do topo', () => {
     expect(worldChipState(meta('waiting', { building }), LOCAL)).toBeNull();
     // Aberto por outro endereço (sem a trava), o chip informa; a seção explica que a conta só mexe pelo computador.
     expect(worldChipState(meta('approved', { building }), { ...LOCAL, local: false })).toBe('live');
+  });
+});
+
+describe('conta e dados (Fase 6)', () => {
+  const NOW = 1_760_000_000_000;
+  const live: WorldBuildingStatus = { connected: true, paused: false, floors: 2, agents: 3, lastUplinkAt: NOW - 12_000, lastAck: { ok: true } };
+
+  it('"Conta e dados" é uma tela de quem tem conta', () => {
+    expect(screensFor('approved')).toContain('account');
+    expect(screensFor('waiting')).toContain('account');
+    expect(screensFor('logged_out')).not.toContain('account');
+  });
+
+  it('recurso por e-mail: mailto com o assunto fixo e o id da conta quando se sabe (só um id limpo)', () => {
+    expect(APPEAL_EMAIL).toBe('privacidade@habblaud.com');
+    expect(appealMailto()).toBe('mailto:privacidade@habblaud.com?subject=Recurso%20Habblaud%20World');
+    expect(appealMailto('acc_1')).toBe('mailto:privacidade@habblaud.com?subject=Recurso%20Habblaud%20World%20acc_1');
+    expect(appealMailto('x&cc=a@b.co')).toBe(appealMailto());
+  });
+
+  it('conta suspensa ou banida: "Recorrer por e-mail"; as outras paradas, não', () => {
+    const stopped = (reason: WorldBuildingStop) => buildingView({ ...live, connected: false, stopped: reason }, true, NOW);
+    for (const r of ['banned', 'suspended'] as const) expect(stopped(r).appeal).toMatchObject({ text: 'Recorrer por e-mail', hint: expect.stringContaining(APPEAL_EMAIL) });
+    for (const r of ['update', 'other-device', 'waiting', 'no_player', 'unauthorized', 'deleted'] as const) expect(stopped(r).appeal, r).toBeNull();
+    expect(stopped('deleted')).toMatchObject({ label: 'Conta excluída', toggle: null, leave: false });
+    expect(buildingView(live, true, NOW)).toMatchObject({ appeal: null, unverified: null });
+  });
+
+  it('não verificado: o selo com "Contestar por e-mail" enquanto o prédio está no mundo; o rótulo da cidade', () => {
+    const v = buildingView({ ...live, unverified: true }, true, NOW);
+    expect(v.unverified).toMatch(/não verificado/);
+    expect(v.appeal).toMatchObject({ text: 'Contestar por e-mail' });
+    expect(buildingView({ ...live, unverified: true, paused: true }, true, NOW).appeal?.text).toBe('Contestar por e-mail');
+    expect(buildingView({ ...live, unverified: true, left: true }, true, NOW)).toMatchObject({ unverified: null, appeal: null });
+    // Suspensa vale mais que o selo: o recurso é da suspensão.
+    expect(buildingView({ ...live, connected: false, unverified: true, stopped: 'suspended' }, true, NOW)).toMatchObject({ unverified: null, appeal: { text: 'Recorrer por e-mail' } });
+    expect(unverifiedLabel()).toBe('Não verificado');
+    expect(unverifiedHint()).toMatch(/revisão/);
+  });
+
+  it('manutenção: sem conexão, o cartão diz que o mundo está em manutenção; conectado, não', () => {
+    const down = { ...live, connected: false };
+    expect(buildingView(down, true, NOW, { maintenance: true })).toMatchObject({ state: 'reconnecting', label: 'Em manutenção', desc: 'O mundo está em manutenção; tentamos de novo em instantes.' });
+    expect(buildingView(down, true, NOW).label).toBe('Reconectando…');
+    expect(buildingView(live, true, NOW, { maintenance: true }).label).toBe('Conectado');
+    expect(worldErrorText('maintenance', 'status')).toBe('O mundo está em manutenção; tentamos de novo em instantes.');
+  });
+
+  it('textos: exportar uma vez por dia, conta excluída, aviso de inatividade ligado por padrão', () => {
+    expect(worldErrorText('rate_limited', 'export')).toMatch(/uma vez por dia/);
+    expect(worldErrorText('rate_limited', 'login')).toMatch(/alguns minutos/);
+    expect(worldErrorText('account_deleted', 'status')).toMatch(/7 dias.*30/);
+    expect(worldErrorText('invalid', 'inactivity')).toBe(worldErrorText('invalid', 'visibility'));
+    expect(notifyInactivityOn(undefined)).toBe(true);
+    expect(notifyInactivityOn({})).toBe(true);
+    expect(notifyInactivityOn({ notifyInactivity: false })).toBe(false);
+    expect(EXPORT_FILENAME).toBe('habblaud-world-dados.json');
   });
 });

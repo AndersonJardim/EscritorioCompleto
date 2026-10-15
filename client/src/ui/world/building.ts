@@ -1,7 +1,9 @@
 // Cartão "Seu prédio" (Configurações › Habblaud World, conta aprovada) e a janela "Ver o que foi enviado".
 //
 // O cartão mostra a conexão, a pausa, a parada pedida pelo servidor do mundo (com o motivo) e "Fora do mundo"; o botão
-// "Sair do mundo" pede confirmação em dois cliques, como o "Sair da conta", e explica a diferença para a pausa.
+// "Sair do mundo" pede confirmação em dois cliques, como o "Sair da conta", e explica a diferença para a pausa. Fase 6:
+// conta suspensa ou banida ganha "Recorrer por e-mail" (mailto com o id da conta no assunto, quando se sabe), o prédio
+// "não verificado" mostra o selo com "Contestar por e-mail", e a manutenção do mundo aparece no lugar do "Reconectando".
 // O cartão é atualizado no lugar a cada render (contagens e "última remessa" mudam a cada poucos segundos sem refazer a
 // tela inteira, que perderia o foco). A janela mostra a última remessa exatamente como o servidor local a guardou
 // (GET /api/world/last-uplink): o JSON, o horário, o tamanho em bytes e a resposta do mundo. As regras e os textos
@@ -12,7 +14,7 @@ import { copyText, h, iconButton, setAttr, setHidden, setText, setVariant } from
 import { formatClock, relativeTime } from '../format';
 import { ICONS } from '../icons';
 import { extLink, WORLD_PRIVACY_URL } from './links';
-import { ackView, buildingView, bytesText, leaveHint, prettyUplink, worldErrorText } from './world-model';
+import { ackView, appealMailto, buildingView, bytesText, leaveHint, prettyUplink, worldErrorText } from './world-model';
 
 export interface BuildingHost {
   readonly client: WorldClient | null;
@@ -24,6 +26,10 @@ export interface BuildingHost {
   /** Abre a janela "Ver o que foi enviado". */
   openSent(opener: HTMLElement): void;
   now(): number;
+  /** O id da conta no mundo, se o servidor local já sabe (vai no assunto do recurso). */
+  accountId?(): string | undefined;
+  /** O mundo está em manutenção (o último status veio com `maintenance`). */
+  maintenance?(): boolean;
 }
 
 export class BuildingCard {
@@ -40,6 +46,10 @@ export class BuildingCard {
   private readonly error: HTMLElement;
   private readonly leaveRow: HTMLElement;
   private readonly leaveBtn: HTMLButtonElement;
+  private readonly unverified: HTMLElement;
+  private readonly appealRow: HTMLElement;
+  private readonly appealLink: HTMLAnchorElement;
+  private readonly appealHint: HTMLElement;
   private statsKey = '';
   private busy = false;
   private action: 'pause' | 'resume' | 'join' | null = null;
@@ -60,6 +70,10 @@ export class BuildingCard {
     this.error = h('p', { class: 'ui-world__error', role: 'alert', hidden: true });
     this.leaveBtn = h('button', { class: 'ui-btn', type: 'button', text: tr('Sair do mundo'), on: { click: () => void this.leave() } });
     this.leaveRow = h('div', { class: 'ui-world__leave' }, h('p', { class: 'ui-set__hint', text: leaveHint() }), h('div', { class: 'ui-world__actions' }, this.leaveBtn));
+    this.unverified = h('p', { class: 'ui-world__unverified', role: 'status', hidden: true });
+    this.appealLink = h('a', { class: 'ui-btn', attrs: { href: appealMailto() } });
+    this.appealHint = h('span', { class: 'ui-set__hint' });
+    this.appealRow = h('div', { class: 'ui-world__appeal', hidden: true }, this.appealHint, h('div', { class: 'ui-world__actions' }, this.appealLink));
     this.el = h(
       'section',
       { class: 'ui-world__building', attrs: { 'aria-labelledby': titleId } },
@@ -70,8 +84,10 @@ export class BuildingCard {
         h('div', { class: 'ui-world__btitle' }, h('h4', { text: tr('Seu prédio'), attrs: { id: titleId } }), this.badge),
       ),
       this.desc,
+      this.unverified,
       this.stats,
       this.rejected,
+      this.appealRow,
       this.actions,
       this.hint,
       this.leaveRow,
@@ -82,7 +98,7 @@ export class BuildingCard {
 
   /** Atualiza no lugar (barato: só mexe no que mudou). */
   sync(): void {
-    const v = buildingView(this.host.building(), this.host.hasPlayer(), this.host.now());
+    const v = buildingView(this.host.building(), this.host.hasPlayer(), this.host.now(), { maintenance: this.host.maintenance?.() });
     setVariant(this.el, 'is-', v.state);
     setText(this.badge, v.label);
     setText(this.desc, v.desc);
@@ -104,6 +120,14 @@ export class BuildingCard {
     }
     setHidden(this.leaveRow, !v.leave);
     if (!v.leave && this.confirmingLeave) this.resetLeave();
+    setText(this.unverified, v.unverified ?? '');
+    setHidden(this.unverified, !v.unverified);
+    setHidden(this.appealRow, !v.appeal);
+    if (v.appeal) {
+      setText(this.appealLink, v.appeal.text);
+      setText(this.appealHint, v.appeal.hint);
+      setAttr(this.appealLink, 'href', appealMailto(this.host.accountId?.()));
+    }
   }
 
   private resetLeave(): void {
