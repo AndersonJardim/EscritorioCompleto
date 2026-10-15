@@ -533,6 +533,8 @@ export function uplinkRejectText(code: string | undefined): string {
       return tr('Um erro no servidor do mundo. A próxima remessa tenta de novo.');
     case 'left':
       return tr('A conta saiu do mundo (por este ou por outro computador): nada mais sai até você voltar ao mundo.');
+    case 'implausible':
+      return tr('O pacote contradiz o anterior de um jeito que o Habblaud não produz: o mundo o descartou, e o prédio fica com o último aceito. As próximas remessas vão normalmente.');
     default:
       return tr('Um motivo que esta versão do Habblaud não conhece.');
   }

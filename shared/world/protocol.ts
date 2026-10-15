@@ -109,7 +109,8 @@ export type ReportReason = (typeof REPORT_REASONS)[number];
 /**
  * Por que o servidor fecha a conexão (`goodbye`). `waiting` = conta na lista de espera; `no_player` = conta aprovada
  * sem personagem; `unauthorized` = token inválido ou revogado; `update` = versão abaixo de `minVersion`; `deleted` = a
- * conta foi excluída (`POST /v1/me/delete/confirm`, deste ou de outro computador): o Habblaud apaga a sessão daqui.
+ * conta foi excluída (`POST /v1/me/delete/confirm`, deste ou de outro computador): o Habblaud esquece a conta local.
+ * Servidor em manutenção (`MAINTENANCE=1`) despede com `deploy` (o cliente tenta de novo com espera crescente).
  */
 export const GOODBYE_REASONS = [
   'deploy', 'other-device', 'banned', 'suspended', 'waiting', 'update', 'unauthorized', 'no_player', 'deleted',
@@ -119,9 +120,11 @@ export type GoodbyeReason = (typeof GOODBYE_REASONS)[number];
 /**
  * Códigos de recusa do `uplink.ack {error}`: esquema, limites, nome fora do pool, peças, ids, frequência e erro do
  * servidor. `left` = a conta saiu do mundo (`DELETE /v1/me/building`, deste ou de outro computador): o pacote não cria
- * prédio até `POST /v1/me/building/join`, e o Habblaud para de enviar até lá.
+ * prédio até `POST /v1/me/building/join`, e o Habblaud para de enviar até lá. `implausible` = o pacote contradiz o
+ * anterior de um jeito que o Habblaud não produz (o motivo exato fica só no servidor): descartado, o prédio continua
+ * com o último aceito; o Habblaud mostra o código em "Ver o que foi enviado" e segue mandando normalmente.
  */
-export const UPLINK_ACK_ERRORS = ['schema', 'limits', 'name_pool', 'parts', 'ids', 'rate', 'internal', 'left'] as const;
+export const UPLINK_ACK_ERRORS = ['schema', 'limits', 'name_pool', 'parts', 'ids', 'rate', 'internal', 'left', 'implausible'] as const;
 export type UplinkAckError = (typeof UPLINK_ACK_ERRORS)[number];
 
 /**
@@ -221,8 +224,9 @@ export interface Visibility {
   /** Mostra as compactações de contexto (opt-in). */
   compactions: boolean;
   /**
-   * Avisa por e-mail 3 dias antes de retirar o prédio por inatividade (seção 9). Ausente no corpo = não muda; o padrão
-   * da conta é `true`.
+   * E-mail "seu prédio sai do mundo em 3 dias" (aviso de inatividade; padrão ligado). É da conta, não do personagem:
+   * no corpo do PUT é opcional (ausente = não muda); nas respostas (PUT e `GET /v1/me`, em `player.visibility`) vem
+   * sempre.
    */
   notifyInactivity?: boolean;
 }
@@ -276,6 +280,8 @@ export interface MeBuilding {
   state: BuildingState;
   /** O dono pausou (e ainda não retomou). */
   paused: boolean;
+  /** O servidor marcou o prédio como "não verificado" (dados implausíveis; o dono recebeu um e-mail com como contestar). */
+  unverified?: true;
   lot: WorldLot;
   floors: number;
   agents: { total: number; working: number; waiting: number; idle: number };
@@ -312,14 +318,66 @@ export interface BuildingStateResponse { state: BuildingState }
 /** `POST /v1/me/building/join`. */
 export interface BuildingJoinResponse { state: 'joined' }
 
-/*
- * A conta e os dados (Fase 6), com Bearer:
- * - `POST /v1/me/delete` → `2xx {}`: manda um código de 6 dígitos ao e-mail da conta.
- * - `POST /v1/me/delete/confirm {code}` → `2xx`: o prédio e o perfil somem do mundo na hora, as conexões da conta
- *   recebem `goodbye: deleted` e o resto é apagado do banco em 7 dias (e dos backups em até 30); `400 invalid_code`.
- * - `GET /v1/me/export` → `200` com o JSON dos dados da conta (acesso e portabilidade), uma vez por dia
- *   (`429 rate_limited`).
+/**
+ * Excluir a conta (Bearer; vale também para conta suspensa ou banida):
+ * - `POST /v1/me/delete` → `202 {}`: manda um código de 6 dígitos para o e-mail da conta (10 min, 5 tentativas; até 3
+ *   por hora); `429 rate_limited`.
+ * - `POST /v1/me/delete/confirm {code}` → `204`: o prédio e o personagem somem do mundo na hora (lote liberado), todos
+ *   os dispositivos são revogados e a conexão cai com `goodbye: deleted`; o resto (conta, likes dados e recebidos,
+ *   bloqueios, denúncias feitas) é apagado do banco em 7 dias (arrependimento: pedido por e-mail a
+ *   privacidade@habblaud.com) e dos backups em até 30. `400 invalid_code`.
  */
+export interface DeleteConfirmRequest { code: string }
+
+/**
+ * `GET /v1/me/export` (Bearer, 1 por dia; vale também para conta suspensa ou banida) → `200 WorldExport`, o arquivo
+ * "Baixar meus dados" (LGPD); `429 rate_limited` com `retryAfter`. Datas em ISO 8601 (UTC); do prédio, só dias e o mês.
+ */
+export interface WorldExport {
+  format: 'habblaud-world-export';
+  version: 1;
+  exportedAt: string;
+  account: {
+    id: string;
+    email: string;
+    locale: WorldLocale;
+    /** Acesso como o servidor guarda (inclui a suspensão e o banimento). */
+    access: 'waiting' | 'approved' | 'suspended' | 'banned';
+    createdAt: string;
+    emailVerifiedAt: string | null;
+    approvedAt: string | null;
+    suspendedUntil: string | null;
+    bannedAt: string | null;
+    tosVersion: string;
+    tosAcceptedAt: string;
+    notifyInactivity: boolean;
+    /** "Sair do mundo" (e ainda não voltou). */
+    leftWorldAt: string | null;
+  };
+  player: (PlayerInput & { country: string | null; nameChangedAt: string | null; updatedAt: string }) | null;
+  visibility: Visibility | null;
+  /** Rótulos ("Dispositivo N") e datas; nunca o token. */
+  devices: Array<{ label: string; createdAt: string; lastSeenAt: string; revokedAt: string | null }>;
+  building: {
+    lot: WorldLot;
+    state: BuildingState | 'removed';
+    /** "2026-10". */
+    firstOnlineMonth: string | null;
+    /** "2026-10-15": o último dia com sinal de vida. */
+    lastSignalDay: string | null;
+    floors: number;
+    agents: { total: number; working: number; waiting: number; idle: number };
+    tokens: { day: TokenBand; week: TokenBand };
+    likes: number;
+  } | null;
+  /** Prédios (ids) que a conta curtiu. */
+  likesGiven: Array<{ buildingId: string; at: string }>;
+  /** Contas (ids) que a conta bloqueou. */
+  blocks: Array<{ accountId: string }>;
+  reportsMade: Array<{ reason: ReportReason; at: string }>;
+  /** Carimbos recebidos na portaria, somados por tipo (sem quem carimbou). */
+  stampsReceived: Array<{ stampId: string; count: number }>;
+}
 
 /**
  * Erros: `{error: {code, message}}`, com o `message` em inglês (cada cliente traduz pelo `code`). Os códigos abaixo
@@ -349,12 +407,12 @@ export const WORLD_ERROR_CODES = [
   'not_found',
   'no_player', // a ação pede o personagem e a conta ainda não tem
   'unavailable', // servidor do mundo fora do ar para manutenção (503)
+  'maintenance', // servidor em manutenção programada (MAINTENANCE=1; 503 com Retry-After): tente mais tarde
   'invalid_json', // corpo que não é JSON
   'too_large', // corpo grande demais (413)
   'unsupported_media_type', // sem Content-Type: application/json (415)
   'method_not_allowed', // método errado para a rota (405)
   'internal', // erro do próprio servidor do mundo (500)
-  'maintenance', // o mundo está em manutenção (503; `MAINTENANCE=1`): tente de novo em instantes
 ] as const;
 export type WorldErrorCode = (typeof WORLD_ERROR_CODES)[number];
 
@@ -414,8 +472,8 @@ export interface WorldBuildingPublic {
   rev: number;                // revisão (sobe a cada mudança publicada)
   likes: number;
   likedByMe?: boolean;
+  unverified?: true;          // "não verificado": dados implausíveis em revisão (selo para quem vê; fora de tudo que compara)
   sinceMonth: string;         // "2026-10": só o mês de entrada no mundo
-  unverified?: true;          // selo "não verificado" (dados fora do plausível, em revisão; fora de placares e destaques)
 }
 
 export type Direction = 'n' | 's' | 'e' | 'w';

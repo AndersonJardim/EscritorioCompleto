@@ -27,8 +27,11 @@ import {
   WORLD_ERROR_CODES,
   WORLD_LOCALES,
   type AppearanceParts,
+  type DeleteConfirmRequest,
+  type MeBuilding,
   type Visibility,
   type WorldBuildingPublic,
+  type WorldExport,
   type WorldAgentStatus,
   type WorldTheme,
   type WorldUplink,
@@ -220,18 +223,23 @@ describe('listas do protocolo', () => {
       'ignored', 'invalid', 'rate_limited', 'view_required', 'not_found', 'street_left', 'chunk_full', 'afk', 'server_restart', 'left',
     ]);
     for (const id of NOTICE_IDS) expect(id).toMatch(/^[a-z]+(_[a-z]+)*$/);
-    // Os códigos da Fase 2 continuam na mesma ordem; `left` entra no fim.
-    expect([...UPLINK_ACK_ERRORS]).toEqual(['schema', 'limits', 'name_pool', 'parts', 'ids', 'rate', 'internal', 'left']);
+    // Os códigos da Fase 2 continuam na mesma ordem; `left` (Fase 3) e `implausible` (Fase 6) entram no fim.
+    expect([...UPLINK_ACK_ERRORS]).toEqual(['schema', 'limits', 'name_pool', 'parts', 'ids', 'rate', 'internal', 'left', 'implausible']);
   });
 
-  it('Fase 6: `deleted` no goodbye, `maintenance` nos erros, o aviso de inatividade e o selo "não verificado", só acrescentados', () => {
+  it('Fase 6: `deleted` no goodbye, `maintenance` nos erros, `implausible` no ack, o aviso de inatividade e o selo "não verificado", só acrescentados', () => {
     expect([...GOODBYE_REASONS]).toEqual(['deploy', 'other-device', 'banned', 'suspended', 'waiting', 'update', 'unauthorized', 'no_player', 'deleted']);
-    expect(WORLD_ERROR_CODES.at(-1)).toBe('maintenance');
-    expect(WORLD_ERROR_CODES.indexOf('internal')).toBe(WORLD_ERROR_CODES.length - 2);
+    expect(WORLD_ERROR_CODES).toContain('maintenance');
+    expect(UPLINK_ACK_ERRORS.at(-1)).toBe('implausible');
     // Opcionais: um corpo sem eles continua valendo, e o padrão da visibilidade não muda.
     const v: Visibility = { ...VISIBILITY_DEFAULTS };
     expect('notifyInactivity' in v).toBe(false);
-    const b: Pick<WorldBuildingPublic, 'unverified'> = {};
+    const b: Pick<WorldBuildingPublic, 'unverified'> & Pick<MeBuilding, 'unverified'> = {};
     expect(b.unverified).toBeUndefined();
+    // O pedido de exclusão e o arquivo "Baixar meus dados" (WorldExport) também são do protocolo.
+    const del: DeleteConfirmRequest = { code: '123456' };
+    expect(del.code).toHaveLength(6);
+    const exp: Pick<WorldExport, 'format' | 'version'> = { format: 'habblaud-world-export', version: 1 };
+    expect(exp.version).toBe(1);
   });
 });

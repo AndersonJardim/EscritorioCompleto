@@ -281,14 +281,20 @@ export async function startFakeWorld(): Promise<FakeWorld> {
           res.setHeader('Retry-After', '86400');
           return error(res, 429, 'rate_limited');
         }
+        // No formato de WorldExport (protocol.ts), com o que o falso sabe.
         return send(res, 200, {
+          format: 'habblaud-world-export',
+          version: 1,
           exportedAt: '2026-10-15T12:00:00Z',
-          account: { email: a.email, access: a.access, locale: a.locale, createdAt: '2026-10-15T00:00:00Z', notifyInactivity: a.notifyInactivity ?? true },
+          account: { id: 'acc_1', email: a.email, locale: a.locale, access: a.access, createdAt: '2026-10-15T00:00:00Z', notifyInactivity: a.notifyInactivity ?? true },
           player: a.player ?? null,
-          devices: [...devices.values()].filter((d) => d.email === a.email).map((d, i) => ({ label: `Dispositivo ${i + 1}`, createdAt: '2026-10-15T00:00:00Z' })),
+          visibility: a.player?.visibility ?? null,
+          devices: [...devices.values()].filter((d) => d.email === a.email).map((_d, i) => ({ label: `Dispositivo ${i + 1}`, createdAt: '2026-10-15T00:00:00Z', lastSeenAt: '2026-10-15T00:00:00Z', revokedAt: null })),
+          building: null,
           likesGiven: [],
-          blocked: [],
-          reports: [],
+          blocks: [],
+          reportsMade: [],
+          stampsReceived: [],
         });
       }
       if (path.startsWith('/v1/me/building') && options.buildingFailures > 0) {

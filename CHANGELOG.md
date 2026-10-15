@@ -110,8 +110,8 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
   com a espera da reconexão. O status do World e o snapshot (`meta.world.building`) trazem o resumo do prédio:
   conectado, pausado, fora do mundo, parado, andares, agentes e a última remessa.
 - **Protocolo aberto e transparência:** `shared/world/protocol.ts` e `schema.json` definem tudo o que o Habblaud troca
-  com o World (a Fase 6 acrescenta o `goodbye` `deleted`, o erro `maintenance`, o `notifyInactivity` da visibilidade e o
-  selo `unverified` do prédio); as regras do nome de jogador, os 14 traços, as 20 frases de apresentação, os 10
+  com o World (a Fase 6 acrescenta o `goodbye` `deleted`, o erro `maintenance`, a recusa `implausible` do pacote, o
+  `notifyInactivity` da visibilidade, o selo `unverified` do prédio e os formatos da exclusão e da exportação); as regras do nome de jogador, os 14 traços, as 20 frases de apresentação, os 10
   cumprimentos e os 60 nomes fictícios de andar ("Projeto Ipê", "Projeto Jade"...) ficam em `shared/world/`.
   `docs/world/privacidade.md` lista cada campo do pacote e da conexão, com um teste que confere a página contra o
   `schema.json`; os testes da projeção conferem cada chave e que nenhum texto do escritório aparece no pacote. O aviso

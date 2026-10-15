@@ -271,7 +271,7 @@ export class WorldClient {
     return this.call('POST', '/v1/me/delete/confirm', { token, body: { code }, parse: none });
   }
 
-  /** "Baixar meus dados": o JSON da conta como veio (um objeto), até EXPORT_MAX_BYTES. */
+  /** "Baixar meus dados": o JSON da conta (WorldExport no protocolo) como veio, só conferido que é objeto; até EXPORT_MAX_BYTES. */
   exportData(token: string): Promise<WorldResult<Record<string, unknown>>> {
     return this.call('GET', '/v1/me/export', { token, parse: (raw) => obj(raw), maxBytes: EXPORT_MAX_BYTES });
   }

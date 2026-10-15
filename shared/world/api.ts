@@ -35,7 +35,7 @@
 //                                                fecha a conexão do prédio e apaga o world.json inteiro: a sessão
 //                                                some daqui e o status volta sem conta, com lastError
 //                                                `account_deleted`)
-//   GET  /api/world/export                   → 200 JSON da conta como veio de GET /v1/me/export, como anexo
+//   GET  /api/world/export                   → 200 WorldExport (o JSON da conta como veio de GET /v1/me/export), anexo
 //                                                (habblaud-world-dados.json); uma vez por dia (429 rate_limited); só
 //                                                pela própria página, como o stream (gasta a cota do dia)
 //   PUT  /api/world/visibility               aceita também `notifyInactivity` (opcional): o aviso por e-mail antes

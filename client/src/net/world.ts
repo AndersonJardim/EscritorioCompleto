@@ -980,15 +980,20 @@ export class FakeWorldApi implements WorldClient {
       if (!acc) return FakeWorldApi.fail('not_logged_in', 401);
       acc.exports = (acc.exports ?? 0) + 1;
       if (acc.exports > 1) return FakeWorldApi.fail('rate_limited', 429);
+      // O formato de WorldExport (protocol.ts), só com dados de mentira.
       const data = {
+        format: 'habblaud-world-export',
+        version: 1,
         exportedAt: new Date(this.now()).toISOString(),
-        account: { email: acc.email, access: acc.access },
+        account: { email: acc.email, access: acc.access, notifyInactivity: acc.player?.visibility.notifyInactivity !== false },
         player: acc.player ?? null,
-        devices: acc.devices.map((d) => ({ label: d.label, createdAt: d.createdAt, lastSeenAt: d.lastSeenAt })),
+        visibility: acc.player?.visibility ?? null,
+        devices: acc.devices.map((d) => ({ label: d.label, createdAt: d.createdAt, lastSeenAt: d.lastSeenAt, revokedAt: null })),
         building: acc.building ? { floors: acc.building.last?.uplink.floors.length ?? 0, likes: 0 } : null,
         likesGiven: [],
-        blocked: [],
-        reports: [],
+        blocks: [],
+        reportsMade: [],
+        stampsReceived: [],
       };
       return { ok: true, data: `${JSON.stringify(data, null, 2)}\n` };
     }, false);

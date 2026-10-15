@@ -3063,4 +3063,5 @@ export const ES: Readonly<Record<string, string>> = {
   "somem também dos backups.": "también desaparecen de las copias de seguridad.",
   "Tem certeza? O prédio e o perfil saem do mundo assim que você digitar o código.": "¿Seguro? El edificio y el perfil salen del mundo en cuanto escribas el código.",
   "Um arquivo JSON com o que o Habblaud World guarda da sua conta: e-mail, datas, personagem, visibilidade, dispositivos, prédio, likes dados, bloqueios e denúncias feitas. Dá para baixar uma vez por dia.": "Un archivo JSON con lo que Habblaud World guarda de tu cuenta: correo, fechas, personaje, visibilidad, dispositivos, edificio, likes dados, bloqueos y denuncias hechas. Se puede descargar una vez al día.",
+  "O pacote contradiz o anterior de um jeito que o Habblaud não produz: o mundo o descartou, e o prédio fica com o último aceito. As próximas remessas vão normalmente.": "El paquete contradice al anterior de una forma que Habblaud no produce: el mundo lo descartó y el edificio se queda con el último aceptado. Los próximos envíos salen con normalidad.",
 };

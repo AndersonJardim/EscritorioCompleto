@@ -1096,7 +1096,7 @@ describe('a conta e os dados (Fase 6)', () => {
     expect(r.status).toBe(200);
     expect(r.headers['content-disposition']).toBe('attachment; filename="habblaud-world-dados.json"');
     expect(r.headers['cache-control']).toBe('no-store');
-    expect(r.body).toMatchObject({ account: { email: EMAIL }, player: { name: 'Ana Pixel' }, likesGiven: [], blocked: [], reports: [] });
+    expect(r.body).toMatchObject({ format: 'habblaud-world-export', version: 1, account: { email: EMAIL }, player: { name: 'Ana Pixel' }, likesGiven: [], blocks: [], reportsMade: [] });
     expect(w.requests.find((q) => q.path === '/v1/me/export')?.method).toBe('GET');
     // A segunda no mesmo dia: 429, com a espera.
     const again = await call(s.base, 'GET', '/api/world/export');
