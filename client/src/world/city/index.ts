@@ -251,6 +251,7 @@ export function createCityScene(o: CitySceneOptions): CityScene {
           // o nascimento (o servidor decide onde, no primeiro `view`)
           state.startPos = { x: eff.x, y: eff.y };
           placeMe();
+          enterOwnIfPending();
         }
         break;
       case 'afk':
@@ -283,6 +284,13 @@ export function createCityScene(o: CitySceneOptions): CityScene {
     }
     entering = { id, at: Date.now() };
     stream.send([{ t: 'enter', buildingId: id }]);
+  };
+
+  /** "Ver como os outros veem" pedido com a cidade ainda abrindo: entra assim que eu estiver na rua (com o `pos`). */
+  const enterOwnIfPending = () => {
+    if (!pendingOwn || !me || !state.connected || !state.myBuildingId) return;
+    pendingOwn = false;
+    enter(state.myBuildingId);
   };
 
   /** O `building` chegou: a cena Visita abre (ou, já dentro do mesmo prédio, troca o interior inteiro). */
@@ -347,10 +355,7 @@ export function createCityScene(o: CitySceneOptions): CityScene {
         // um stream novo no meio da visita continua dentro; sem o interior, estou na rua
         if (state.inside) startVisit(state.inside);
         else if (visit) endVisit();
-        if (pendingOwn && me && state.connected && state.myBuildingId) {
-          pendingOwn = false;
-          enter(state.myBuildingId);
-        }
+        enterOwnIfPending();
         // sem conexão com o servidor do mundo, nada desce: diz isso em vez de "Entrando na cidade…"
         loading.textContent = state.connected ? tr('Entrando na cidade…') : offline();
         loading.hidden = state.connected && !!me;
