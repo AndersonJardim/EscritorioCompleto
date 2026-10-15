@@ -339,11 +339,12 @@ describe('FakeWorldStream (modo demonstração)', () => {
     t += 200;
     f.tick();
     const types = msgs.map((m) => m.t);
-    expect(types.slice(0, 6)).toEqual(['pos', 'pos', 'profile', 'notice', 'like.update', 'area']);
+    expect(types.slice(0, 6)).toEqual(['pos', 'pos', 'profile', 'notice', 'notice', 'area']);
     expect(msgs[0]).toEqual({ t: 'pos', x: door.x + 1, y: door.y });
     expect(msgs[2].player.id).toBe('p_2');
     expect(msgs[3]).toEqual({ t: 'notice', level: 'info', text: 'not_found' });
-    expect(msgs[4]).toMatchObject({ buildingId: 'b_000', likedByMe: true });
+    // like longe da porta (o b_000 fica do outro lado do quarteirão): como o servidor, recusa
+    expect(msgs[4]).toEqual({ t: 'notice', level: 'warn', text: 'too_far' });
     expect(msgs[5].chunk).toBe('centro:0,0');
   });
 
@@ -372,5 +373,113 @@ describe('FakeWorldStream (modo demonstração)', () => {
     ws.close();
     await Promise.resolve();
     expect(evs).toEqual([{ type: 'status', status: 'closed' }]);
+  });
+
+  describe('social leve (Fase 5)', () => {
+    const start = async (t = { v: 0 }) => {
+      const f = new FakeWorldStream({ autoplay: false, now: () => t.v });
+      const msgs: any[] = [];
+      f.on((e) => e.type === 'message' && msgs.push(e.msg));
+      await Promise.resolve();
+      return { f, msgs, t };
+    };
+    const doorOf = (id: string) => lotDoor(fakeCityBuildings().find((b) => b.id === id)!.lot).front;
+    /** Leva o "eu" do falso até a porta (passos curtos, como o MoveSender). */
+    const walkTo = (f: FakeWorldStream, to: { x: number; y: number }) => {
+      let { x, y } = f.snapshot().pos!;
+      while (Math.hypot(to.x - x, to.y - y) > 0.01) {
+        const d = Math.hypot(to.x - x, to.y - y);
+        const k = Math.min(1, 4 / d);
+        x += (to.x - x) * k;
+        y += (to.y - y) * k;
+        f.send([{ t: 'move', x, y, dir: 'e', moving: true }]);
+      }
+    };
+
+    it('os prédios têm código (o meu é HB-4F2K), uns aceitam batidas e um está "não verificado"; o snapshot traz a meta a 80 %', () => {
+      const b = fakeCityBuildings();
+      expect(b.find((x) => x.id === FAKE_ME.id)?.code).toBe('HB-4F2K');
+      expect(new Set(b.map((x) => x.code)).size).toBe(20);
+      for (const x of b) expect(x.code).toMatch(/^HB-[2-9A-HJKMNP-TV-Z]{4}$/);
+      expect(b.some((x) => x.knocks)).toBe(true);
+      expect(b.filter((x) => (x as { unverified?: boolean }).unverified)).toHaveLength(1);
+      const city = new FakeWorldStream({ autoplay: false, now: () => Date.UTC(2026, 9, 15) }).snapshot().city!;
+      expect(city).toMatchObject({ lit: b.filter((x) => x.state === 'online').length, tokensBand: 4, goal: { label: 'agent_hours_10k', target: 10_000, progress: 8_000, id: '2026-10-12:agent_hours_10k' } });
+    });
+
+    it('like só perto da porta e nunca no meu; carimbo uma vez; bater de longe recusa', async () => {
+      const { f, msgs } = await start();
+      f.send([{ t: 'like', buildingId: FAKE_ME.id }]);
+      walkTo(f, doorOf('b_004'));
+      f.send([{ t: 'like', buildingId: 'b_004' }, { t: 'stamp', buildingId: 'b_004', stampId: 'star' }, { t: 'stamp', buildingId: 'b_004', stampId: 'rocket' }, { t: 'knock', buildingId: 'b_000' }]);
+      f.tick();
+      const out = msgs.filter((m) => m.t !== 'players' && m.t !== 'greeting');
+      expect(out).toEqual([
+        { t: 'notice', level: 'warn', text: 'invalid' },
+        { t: 'like.update', buildingId: 'b_004', likes: expect.any(Number), likedByMe: true },
+        { t: 'notice', level: 'info', text: 'already_done' },
+        { t: 'notice', level: 'warn', text: 'too_far' },
+      ]);
+    });
+
+    it('cumprimentar um bot: o eco e a resposta dele em 1,2 s; bloquear tira da rua e desbloquear devolve', async () => {
+      const { f, msgs, t } = await start();
+      f.send([{ t: 'greet', playerId: 'p_2', greetingId: 'coffee' }]);
+      f.tick();
+      expect(msgs.filter((m) => m.t === 'greeting')[0]).toMatchObject({ from: FAKE_ME.id, to: 'p_2', greetingId: 'coffee' });
+      t.v += 1_300;
+      f.tick();
+      expect(msgs.filter((m) => m.t === 'greeting' && m.from === 'p_2' && m.to === FAKE_ME.id)).toHaveLength(1);
+      f.send([{ t: 'block', playerId: 'p_2' }]);
+      f.tick();
+      expect(msgs).toContainEqual({ t: 'player.leave', id: 'p_2' });
+      expect(f.snapshot().players.map((p) => p.id)).not.toContain('p_2');
+      f.send([{ t: 'greet', playerId: 'p_2', greetingId: 'hello' }, { t: 'unblock', playerId: 'p_2' }]);
+      f.tick();
+      expect(msgs.filter((m) => m.t === 'notice' || m.t === 'player.join').slice(-2)).toMatchObject([{ t: 'notice', text: 'not_found' }, { t: 'player.join', player: { id: 'p_2' } }]);
+    });
+
+    it('os bots se cumprimentam a cada 5 s, e o outro responde', async () => {
+      const { f, msgs, t } = await start();
+      for (let i = 0; i < 25; i++) {
+        t.v += 200;
+        f.tick();
+      }
+      const g = msgs.filter((m) => m.t === 'greeting');
+      expect(g.length).toBeGreaterThanOrEqual(1);
+      t.v += 2_000;
+      f.tick();
+      const replies = msgs.filter((m) => m.t === 'greeting' && m.from === g[0].to && m.to === g[0].from);
+      expect(replies).toHaveLength(1);
+    });
+
+    it('ir para um código: pos na calçada da porta (e o "eu" do falso vai junto); código que não existe: not_found', async () => {
+      const { f, msgs } = await start();
+      const target = fakeCityBuildings()[12]!;
+      f.send([{ t: 'teleport', code: target.code!.toLowerCase().replace('-', ' ') }, { t: 'teleport', code: 'HB-ZZZZ' }]);
+      f.tick();
+      const front = lotDoor(target.lot).front;
+      expect(msgs.find((m) => m.t === 'pos')).toEqual({ t: 'pos', x: front.x, y: front.y });
+      expect(msgs.some((m) => m.t === 'area')).toBe(true);
+      expect(msgs.filter((m) => m.t === 'notice')).toEqual([{ t: 'notice', level: 'info', text: 'not_found' }]);
+      // o próximo passo, perto da porta nova, é aceito (sem `pos` de correção)
+      const n = msgs.length;
+      f.send([{ t: 'move', x: front.x + 1, y: front.y, dir: 'e', moving: true }]);
+      f.tick();
+      expect(msgs.slice(n).filter((m) => m.t === 'pos')).toEqual([]);
+      // aleatório: um prédio aceso que não é o meu
+      f.send([{ t: 'teleport' }]);
+      f.tick();
+      const last = msgs.filter((m) => m.t === 'pos').pop();
+      const lit = fakeCityBuildings().filter((b) => b.state === 'online' && b.id !== FAKE_ME.id).map((b) => lotDoor(b.lot).front);
+      expect(lit).toContainEqual({ x: last.x, y: last.y });
+    });
+
+    it('celebrate: fogos e a meta seguinte (50 mil h)', async () => {
+      const { f, msgs } = await start({ v: Date.UTC(2026, 9, 15) });
+      f.celebrate();
+      expect(msgs[0]).toEqual({ t: 'city.fireworks', goalId: '2026-10-12:agent_hours_10k' });
+      expect(msgs[1]).toMatchObject({ t: 'city', goal: { label: 'agent_hours_50k', target: 50_000, progress: 10_000, id: '2026-10-12:agent_hours_50k' } });
+    });
   });
 });
