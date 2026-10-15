@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { PART_KEYS } from '../../../../shared/appearance';
 import { TRAIT_IDS } from '../../../../shared/world/traits';
-import { WORLD_UI_ERROR_CODES, type WorldMeta } from '../../net/world';
+import { FAKE_UPLINK, WORLD_UI_ERROR_CODES, type WorldBuildingStatus, type WorldMeta } from '../../net/world';
 import {
+  ackView,
+  agentsText,
+  buildingState,
+  buildingView,
+  floorsText,
+  prettyUplink,
+  themeGoesToWorld,
+  UPLINK_REJECT_CODES,
+  uplinkRejectText,
+  worldChipState,
   characterProblem,
   codeLooksValid,
   draftAppearance,
@@ -241,5 +251,99 @@ describe('erros', () => {
   it('"invalid" diz o que foi recusado, conforme a ação', () => {
     const texts = new Set((['register', 'character', 'visibility', 'revoke'] as const).map((a) => worldErrorText('invalid', a)));
     expect(texts.size).toBe(4);
+  });
+});
+
+// ------------------------------------------------------------------ Fase 2: prédio no mundo
+
+describe('cartão "Seu prédio"', () => {
+  const NOW = 1_760_000_000_000;
+  const live: WorldBuildingStatus = { connected: true, paused: false, floors: 2, agents: 3, lastUplinkAt: NOW - 12_000, lastAck: { ok: true } };
+
+  it('estado: sem personagem, pausado (vale mais que a conexão), conectado ou reconectando', () => {
+    expect(buildingState(live, false)).toBe('no_player');
+    expect(buildingState({ ...live, paused: true }, true)).toBe('paused');
+    expect(buildingState({ ...live, paused: true, connected: true }, true)).toBe('paused');
+    expect(buildingState(live, true)).toBe('connected');
+    expect(buildingState({ ...live, connected: false }, true)).toBe('reconnecting');
+    expect(buildingState(undefined, true)).toBe('reconnecting');
+  });
+
+  it('conectado: contagens, última remessa e o botão Pausar com a explicação', () => {
+    const v = buildingView(live, true, NOW);
+    expect(v.label).toBe('Conectado');
+    expect(v.stats).toEqual(['2 andares', '3 agentes', 'Última remessa: há 12 s']);
+    expect(v.rejected).toBeNull();
+    expect(v.toggle?.action).toBe('pause');
+    expect(v.toggle?.text).toBe('Pausar');
+    expect(v.toggle?.hint).toMatch(/^Pausar interrompe o envio na hora e apaga o prédio no mundo\. Pausado por 30 dias/);
+  });
+
+  it('sem conexão: "Conectando…" antes da primeira remessa, "Reconectando…" depois', () => {
+    expect(buildingView({ ...live, connected: false, lastUplinkAt: undefined }, true, NOW)).toMatchObject({ label: 'Conectando…', stats: ['2 andares', '3 agentes', 'Nenhuma remessa ainda'] });
+    expect(buildingView({ ...live, connected: false }, true, NOW).label).toBe('Reconectando…');
+  });
+
+  it('pausado: botão Retomar; sem personagem: nem contagens nem botões', () => {
+    expect(buildingView({ ...live, paused: true, connected: false }, true, NOW).toggle).toMatchObject({ action: 'resume', text: 'Retomar' });
+    expect(buildingView(live, false, NOW)).toMatchObject({ state: 'no_player', label: 'Sem personagem', stats: [], toggle: null, rejected: null });
+  });
+
+  it('singular e plural das contagens', () => {
+    expect([floorsText(1), floorsText(0), agentsText(1), agentsText(1200)]).toEqual(['1 andar', '0 andares', '1 agente', '1.200 agentes']);
+  });
+
+  it('remessa recusada: o motivo traduzido aparece no cartão', () => {
+    expect(buildingView({ ...live, lastAck: { ok: false, error: 'rate' } }, true, NOW).rejected).toBe(uplinkRejectText('rate'));
+  });
+});
+
+describe('motivos de recusa de uma remessa', () => {
+  it('cada motivo tem o seu texto; um código desconhecido leva o genérico', () => {
+    const generic = uplinkRejectText('nao_existe');
+    expect(uplinkRejectText(undefined)).toBe(generic);
+    expect(uplinkRejectText('unknown')).toBe(generic);
+    const texts = UPLINK_REJECT_CODES.map((c) => uplinkRejectText(c));
+    expect(new Set([...texts, generic]).size).toBe(UPLINK_REJECT_CODES.length + 1);
+    expect(UPLINK_REJECT_CODES).toEqual(['schema', 'limits', 'name_pool', 'parts', 'ids', 'rate']);
+  });
+
+  it('janela "Ver o que foi enviado": aceita, recusada com motivo ou sem resposta', () => {
+    expect(ackView({ ok: true, at: 1 })).toEqual({ kind: 'accepted', label: 'Aceita pelo mundo.', reason: null });
+    expect(ackView({ ok: false, error: 'name_pool' })).toEqual({ kind: 'rejected', label: 'Recusada pelo mundo.', reason: uplinkRejectText('name_pool') });
+    expect(ackView(undefined).kind).toBe('pending');
+  });
+
+  it('o JSON da janela é o mesmo objeto, com recuo de 2 espaços', () => {
+    const text = prettyUplink(FAKE_UPLINK);
+    expect(JSON.parse(text)).toEqual(FAKE_UPLINK);
+    expect(text.split('\n')[1]).toBe('  "v": 1,');
+  });
+});
+
+describe('tema e chip do topo', () => {
+  const building = { connected: true, paused: false, floors: 2, agents: 3, lastUplinkAt: 1 };
+
+  it('o tema vai para o prédio só com a conta aprovada e a página que mexe na conta', () => {
+    expect(themeGoesToWorld(meta('approved'), LOCAL)).toBe(true);
+    expect(themeGoesToWorld(meta('waiting'), LOCAL)).toBe(false);
+    expect(themeGoesToWorld(meta('approved', { enabled: false }), LOCAL)).toBe(false);
+    expect(themeGoesToWorld(meta('approved'), { ...LOCAL, terminal: false })).toBe(false);
+    expect(themeGoesToWorld(meta('approved'), { ...LOCAL, remote: true })).toBe(false);
+    expect(themeGoesToWorld(meta('approved'), { remote: false, local: false, terminal: false, fake: true })).toBe(true);
+    expect(themeGoesToWorld(undefined, LOCAL)).toBe(false);
+  });
+
+  it('chip: só com o prédio; pausado, no mundo ou reconectando; nunca pela porta do celular', () => {
+    expect(worldChipState(meta('approved'), LOCAL)).toBeNull();
+    expect(worldChipState(meta('approved', { building }), LOCAL)).toBe('live');
+    expect(worldChipState(meta('approved', { building: { ...building, paused: true, connected: false } }), LOCAL)).toBe('paused');
+    expect(worldChipState(meta('approved', { building: { ...building, connected: false } }), LOCAL)).toBe('reconnecting');
+    // Sem conexão e sem remessa nenhuma, o prédio ainda não está no mundo.
+    expect(worldChipState(meta('approved', { building: { ...building, connected: false, lastUplinkAt: undefined } }), LOCAL)).toBeNull();
+    expect(worldChipState(meta('approved', { building }), { ...LOCAL, remote: true })).toBeNull();
+    expect(worldChipState(meta('waiting', { building }), LOCAL)).toBeNull();
+    // Aberto por outro endereço (sem a trava), o chip informa; a seção explica que a conta só mexe pelo computador.
+    expect(worldChipState(meta('approved', { building }), { ...LOCAL, local: false })).toBe('live');
   });
 });

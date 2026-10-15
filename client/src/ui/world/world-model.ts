@@ -1,13 +1,17 @@
 // Habblaud World na interface, parte pura (sem DOM): quando a seção de Configurações e o cartão de convite aparecem, a
 // máquina de estados da seção, as regras de senha, nome de jogador e traços e o texto de cada erro. São conferências
 // de antemão, para responder na hora: quem decide é o servidor (o nome, por exemplo, ainda passa pela lista de
-// palavras bloqueadas, que só ele tem). A interface fica em settings-world.ts e invite-card.ts.
+// palavras bloqueadas, que só ele tem). Também o cartão "Seu prédio" (Fase 2): estado, contagens, motivo de uma
+// remessa recusada, o chip da barra do topo e quando o tema vai para o mundo. A interface fica em settings-world.ts,
+// building.ts, world-chip.ts e invite-card.ts.
 import { PART_KEYS, type AppearanceParts } from '../../../../shared/appearance';
 import type { Appearance } from '../../art/api';
 import { appearanceFromSeed } from '../../art/character/appearance';
 import { PLAYER_TRAITS } from '../../../../shared/world/protocol';
 import { parsePlayerTraits, traitsClash, type TraitId } from '../../../../shared/world/traits';
-import type { WorldErrorCode, WorldMeta, WorldServerState, WorldVisibility } from '../../net/world';
+import type { WorldBuildingStatus, WorldErrorCode, WorldLastUplink, WorldMeta, WorldServerState, WorldVisibility } from '../../net/world';
+import type { WorldUplink } from '../../../../shared/world/protocol';
+import { formatInt, relativeTime } from '../format';
 import { isWorldKnownErrorCode } from '../../../../shared/world/api';
 import { isIntroId } from '../../../../shared/world/intro';
 import { parsePlayerName, type PlayerNameProblem } from '../../../../shared/world/names-rules';
@@ -298,7 +302,11 @@ export type WorldAction =
   | 'character'
   | 'visibility'
   | 'devices'
-  | 'revoke';
+  | 'revoke'
+  | 'pause'
+  | 'resume'
+  | 'sent'
+  | 'theme';
 
 /**
  * Texto de um erro (o `message` do servidor, em inglês, nunca aparece). O switch cobre todo WorldErrorCode (o
@@ -391,4 +399,148 @@ export function worldErrorText(raw: WorldErrorCode | string, action: WorldAction
     case 'unknown':
       return tr('Algo deu errado. Tente de novo em instantes.');
   }
+}
+
+// ------------------------------------------------------------------ prédio no mundo (Fase 2)
+
+/**
+ * Estado do cartão "Seu prédio" (conta aprovada). Sem personagem o prédio não entra no mundo; pausado vale mais do
+ * que a conexão (pausar fecha o socket); sem conexão aberta, o Habblaud está conectando ou tentando de novo.
+ */
+export type BuildingState = 'connected' | 'reconnecting' | 'paused' | 'no_player';
+
+export function buildingState(b: WorldBuildingStatus | undefined, hasPlayer: boolean): BuildingState {
+  if (!hasPlayer) return 'no_player';
+  if (b?.paused) return 'paused';
+  return b?.connected ? 'connected' : 'reconnecting';
+}
+
+/** Motivos com que o servidor do mundo recusa uma remessa (`uplink.ack {error}`); outro código vira o genérico. */
+export const UPLINK_REJECT_CODES = ['schema', 'limits', 'name_pool', 'parts', 'ids', 'rate'] as const;
+
+/** Por que o mundo recusou a remessa, em uma frase. */
+export function uplinkRejectText(code: string | undefined): string {
+  switch (code) {
+    case 'schema':
+      return tr('O pacote saiu fora do formato do protocolo. Atualize o Habblaud.');
+    case 'limits':
+      return tr('O escritório passou dos limites do mundo (64 andares, 64 agentes por andar, 256 agentes ou 64 KB).');
+    case 'name_pool':
+      return tr('Um nome de personagem não está na lista de nomes do mundo.');
+    case 'parts':
+      return tr('Uma peça de aparência está fora das paletas do editor.');
+    case 'ids':
+      return tr('Um código de andar ou de agente está fora do formato.');
+    case 'rate':
+      return tr('Remessas demais em pouco tempo (o limite é 12 por minuto). A próxima vai normalmente.');
+    default:
+      return tr('Um motivo que esta versão do Habblaud não conhece.');
+  }
+}
+
+export interface BuildingView {
+  state: BuildingState;
+  /** Selo do estado ("Conectado", "Pausado"...). */
+  label: string;
+  /** O que o estado quer dizer, em uma ou duas frases. */
+  desc: string;
+  /** "2 andares", "3 agentes", "Última remessa: há 12 s" (vazio sem personagem). */
+  stats: string[];
+  /** Motivo da recusa da última remessa (null: aceita ou sem resposta ainda). */
+  rejected: string | null;
+  /** Texto do botão de pausa e a explicação dele (null: sem botão). */
+  toggle: { action: 'pause' | 'resume'; text: string; hint: string } | null;
+}
+
+/** "1 andar", "3 andares". */
+export function floorsText(n: number): string {
+  return n === 1 ? tr('1 andar') : tr('{0} andares', [formatInt(n)]);
+}
+
+/** "1 agente", "3 agentes". */
+export function agentsText(n: number): string {
+  return n === 1 ? tr('1 agente') : tr('{0} agentes', [formatInt(n)]);
+}
+
+/** Tudo o que o cartão "Seu prédio" mostra, sem DOM. */
+export function buildingView(b: WorldBuildingStatus | undefined, hasPlayer: boolean, now: number): BuildingView {
+  const state = buildingState(b, hasPlayer);
+  const floors = b?.floors ?? 0;
+  const agents = b?.agents ?? 0;
+  const stats =
+    state === 'no_player'
+      ? []
+      : [
+          floorsText(floors),
+          agentsText(agents),
+          b?.lastUplinkAt ? tr('Última remessa: {0}', [relativeTime(b.lastUplinkAt, now)]) : tr('Nenhuma remessa ainda'),
+        ];
+  const rejected = state !== 'no_player' && b?.lastAck?.ok === false ? uplinkRejectText(b.lastAck.error) : null;
+  const later = tr('Pausado por 30 dias, o prédio some do mapa e, 30 dias depois, é retirado; retomar antes disso traz de volta, no mesmo lote.');
+  switch (state) {
+    case 'no_player':
+      return { state, label: tr('Sem personagem'), desc: tr('Crie o seu personagem: o prédio entra no mundo junto com ele.'), stats, rejected, toggle: null };
+    case 'paused':
+      return {
+        state,
+        label: tr('Pausado'),
+        desc: tr('Nada sai deste computador e o prédio está apagado no mundo.'),
+        stats,
+        rejected,
+        toggle: { action: 'resume', text: tr('Retomar'), hint: `${tr('Retomar volta a enviar e acende o prédio.')} ${later}` },
+      };
+    case 'connected':
+    case 'reconnecting': {
+      const connected = state === 'connected';
+      const first = !b?.lastUplinkAt;
+      return {
+        state,
+        label: connected ? tr('Conectado') : first ? tr('Conectando…') : tr('Reconectando…'),
+        desc: connected
+          ? tr('Aceso no mundo: um andar por sala aberta e cada personagem no status de agora. Os tokens, se você deixar, aparecem só em faixas, no medidor da fachada.')
+          : first
+            ? tr('O prédio acende com a primeira remessa.')
+            : tr('Sem conexão com o mundo agora: o Habblaud tenta de novo sozinho. Com 2 minutos sem notícias, o prédio apaga.'),
+        stats,
+        rejected,
+        toggle: { action: 'pause', text: tr('Pausar'), hint: `${tr('Pausar interrompe o envio na hora e apaga o prédio no mundo.')} ${later}` },
+      };
+    }
+  }
+}
+
+export type AckKind = 'accepted' | 'rejected' | 'pending';
+
+/** A resposta do mundo a uma remessa, para a janela "Ver o que foi enviado". */
+export function ackView(ack: WorldLastUplink['ack']): { kind: AckKind; label: string; reason: string | null } {
+  if (!ack) return { kind: 'pending', label: tr('Sem resposta do mundo ainda.'), reason: null };
+  if (ack.ok) return { kind: 'accepted', label: tr('Aceita pelo mundo.'), reason: null };
+  return { kind: 'rejected', label: tr('Recusada pelo mundo.'), reason: uplinkRejectText(ack.error) };
+}
+
+/** O pacote como a janela mostra: o mesmo objeto que foi para o fio, só com recuo (2 espaços). */
+export function prettyUplink(uplink: WorldUplink): string {
+  return JSON.stringify(uplink, null, 2);
+}
+
+/**
+ * A escolha de Aparência › Tema do escritório também vai para o prédio (PUT /api/world/theme)? Só com o World ligado,
+ * a conta aprovada e a página onde dá para mexer na conta (a rota é só local).
+ */
+export function themeGoesToWorld(meta: WorldMeta | undefined, gate: WorldGate): boolean {
+  return worldSectionMode(meta, gate) === 'active' && meta?.state === 'approved';
+}
+
+export type WorldChipState = 'live' | 'paused' | 'reconnecting';
+
+/**
+ * Chip da barra do topo ("🏙️ no mundo" / "⏸ pausado"): só com `meta.world.building` (conta aprovada) e nunca pela
+ * porta do celular. Sem conexão, só aparece se o prédio já mandou alguma remessa (antes disso não está no mundo).
+ */
+export function worldChipState(meta: WorldMeta | undefined, gate: WorldGate): WorldChipState | null {
+  const b = meta?.building;
+  if (!b || meta.state !== 'approved' || worldSectionMode(meta, gate) === 'hidden') return null;
+  if (b.paused) return 'paused';
+  if (b.connected) return 'live';
+  return b.lastUplinkAt ? 'reconnecting' : null;
 }
