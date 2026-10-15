@@ -107,10 +107,13 @@ export class CitySocial implements CityFx {
   readonly el: HTMLElement;
   private readonly wheel = new GreetingWheel();
   private readonly balloons = new BalloonBook();
-  private readonly greetGate = new RateGate(20, 3_000);
-  private readonly likeGate = new RateGate(10, 400);
-  private readonly teleportGate = new RateGate(10, 1_500);
-  private readonly reportGate = new RateGate(5, 2_000);
+  // Os limites do lado de cá ficam um pouco abaixo dos do servidor do mundo (3 recusas por limite num minuto fecham a
+  // conexão): os comandos saem em lotes a cada 200 ms e podem chegar mais juntos do que saíram.
+  private readonly greetGate = new RateGate(18, 3_300);
+  private readonly likeGate = new RateGate(9, 400);
+  private readonly teleportGate = new RateGate(9, 1_500);
+  /** Denúncias de hoje (dia UTC), no máximo 5 (o servidor também confere). */
+  private reports = { day: '', n: 0 };
   private readonly knocks = new KnockBook();
   private readonly hearts: HeartFlight[] = [];
   private readonly bumps = new Map<string, number>();
@@ -175,6 +178,7 @@ export class CitySocial implements CityFx {
     this.replyTo = null;
     this.city = null;
     this.celebrating = null;
+    this.blocked.clear();
     this.snapCamera = false;
     this.heldPos = null;
     this.fadeEl.hidden = true;
@@ -217,6 +221,10 @@ export class CitySocial implements CityFx {
     switch (msg.t) {
       case 'greeting':
         this.onGreeting(msg, now);
+        return false;
+      case 'player.join':
+        // desbloqueado (em Configurações, por exemplo): a pessoa voltou à rua e à roda
+        if (obj(msg.player) && typeof msg.player.id === 'string') this.blocked.delete(msg.player.id);
         return false;
       case 'like.update': {
         const id = msg.buildingId;
@@ -370,7 +378,7 @@ export class CitySocial implements CityFx {
   toggleLike(b: WorldBuildingPublic, now: number): void {
     const me = this.o.me();
     const state = this.o.state();
-    if (!me || b.id === state.myBuildingId) return;
+    if (!me || b.id === state.myBuildingId || this.fade.busy) return;
     const a = doorActions(b, me, state.myBuildingId);
     if (!a.canLike) {
       this.o.toast(tr('Chegue mais perto da porta para curtir (até 4 passos).'));
@@ -402,7 +410,7 @@ export class CitySocial implements CityFx {
 
   knock(b: WorldBuildingPublic, now: number): void {
     const me = this.o.me();
-    if (!me) return;
+    if (!me || this.fade.busy) return;
     const a = doorActions(b, me, this.o.state().myBuildingId);
     if (!b.knocks) {
       this.o.toast(tr('O dono deste prédio não recebe batidas na porta.'));
@@ -429,7 +437,7 @@ export class CitySocial implements CityFx {
   openWheel(now: number, forceTarget?: string): void {
     const me = this.o.me();
     const state = this.o.state();
-    if (!me) return;
+    if (!me || this.fade.busy) return;
     const near: Array<{ id: string; x: number; y: number }> = [];
     for (const [id, rp] of state.players) if (!this.blocked.has(id) && sameChunk(me, rp.info.pos)) near.push({ id, x: rp.info.pos.x, y: rp.info.pos.y });
     const reply = this.replyTo && now - this.replyTo.at < REPLY_WINDOW_MS ? this.replyTo : null;
@@ -449,6 +457,7 @@ export class CitySocial implements CityFx {
   }
 
   greet(playerId: string, greetingId: GreetingId, now: number): void {
+    if (this.fade.busy) return;
     const wait = this.greetGate.wait(now);
     if (wait > 0) {
       this.o.toast(tr('Devagar: um cumprimento a cada 3 segundos.'));
@@ -478,6 +487,7 @@ export class CitySocial implements CityFx {
   }
 
   private block(playerId: string, name: string, now: number): void {
+    if (this.fade.busy) return;
     this.send({ t: 'block', playerId }, { kind: 'block', at: now, playerId });
     this.blocked.add(playerId);
     this.o.cards.hide();
@@ -485,10 +495,14 @@ export class CitySocial implements CityFx {
   }
 
   private report(playerId: string, reason: ReportReason, now: number): boolean {
-    if (!this.reportGate.take(now)) {
+    if (this.fade.busy) return false;
+    const day = new Date().toISOString().slice(0, 10);
+    if (this.reports.day !== day) this.reports = { day, n: 0 };
+    if (this.reports.n >= 5) {
       this.o.toast(tr('Você já mandou as 5 denúncias de hoje.'));
       return false;
     }
+    this.reports.n++;
     this.send({ t: 'report', playerId, reason }, { kind: 'report', at: now, playerId });
     this.reported.add(playerId);
     this.o.toast(tr('Denúncia enviada. Obrigado: a moderação vai olhar.'));
@@ -508,6 +522,8 @@ export class CitySocial implements CityFx {
     }
     if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
     if (isTyping(e.target) || modalOpen(e.target as HTMLElement | null)) return;
+    // indo para outro prédio (tela escura): nada até chegar
+    if (this.fade.busy) return;
     const now = performance.now();
     switch (e.key) {
       case 'l':

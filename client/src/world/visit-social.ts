@@ -14,6 +14,7 @@ import type { WorldSceneCommand } from '../../../shared/world/api';
 import type { StampId, WorldBuildingPublic } from '../../../shared/world/protocol';
 import { STAMPS, STAMP_IDS, stampIcon, stampLabel } from '../../../shared/world/social-labels';
 import { h, setHidden } from '../ui/dom';
+import { RateGate } from './city/greetings';
 import { safeLocalStorage } from '../ui/prefs';
 import './visit-social.css';
 
@@ -116,6 +117,8 @@ export function mountVisitSocial(container: HTMLElement, api: VisitSocialApi): V
   let liked = false;
   let id = '';
   let pending: { kind: 'like' | 'stamp'; at: number; stampId?: StampId } | null = null;
+  // um pouco abaixo dos 10 por minuto do servidor (os comandos saem em lotes e podem chegar mais juntos)
+  const likeGate = new RateGate(9, 400);
 
   const likeBtn = h('button', { class: 'ui-visit-social__like', type: 'button', on: { click: () => toggleLike() } });
   const stampBtn = h('button', { class: 'ui-visit-social__stamp', type: 'button', attrs: { 'aria-expanded': 'false' }, on: { click: () => togglePicker() } });
@@ -186,6 +189,10 @@ export function mountVisitSocial(container: HTMLElement, api: VisitSocialApi): V
   function toggleLike(): void {
     const b = api.building();
     if (!b || api.mine()) return;
+    if (!likeGate.take(now())) {
+      api.toast(tr('Devagar com os likes: espere um pouquinho.'));
+      return;
+    }
     const on = !liked;
     api.send([{ t: on ? 'like' : 'unlike', buildingId: b.id }]);
     pending = { kind: 'like', at: now() };

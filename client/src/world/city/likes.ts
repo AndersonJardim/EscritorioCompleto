@@ -9,8 +9,11 @@ import { nearestDoor } from './layout';
 export const LIKE_DISTANCE = 4;
 export const KNOCK_DISTANCE = 2;
 export const STAMP_DISTANCE = 2;
-/** Bater na porta: uma vez por minuto por prédio (o servidor recusa antes disso). */
-export const KNOCK_EVERY_MS = 60_000;
+/**
+ * Bater na porta: uma vez por minuto por prédio (o servidor recusa antes disso). Do lado de cá, com folga: os comandos
+ * saem em lotes a cada 200 ms e podem chegar mais juntos do que saíram.
+ */
+export const KNOCK_EVERY_MS = 62_000;
 /** Tempo do coração voando até a placa. */
 export const HEART_MS = 900;
 
