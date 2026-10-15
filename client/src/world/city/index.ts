@@ -8,6 +8,8 @@
 // Visita (Fase 4): a até ENTER_RADIUS tiles da porta de um prédio, "Entrar (E)" manda o `enter`; o `building` que
 // chega abre a cena Visita (world/visit/) por cima, com a cidade parada (sem desenho, teclado nem `move`) e o stream
 // aberto; o `pos` que vem depois é a volta à rua, na porta. Recusas (`notice`) viram aviso na tela.
+// De volta à cidade na mesma página (resume.ts): a câmera e o zoom de quando fechou, a cidade de antes na tela até o
+// snapshot novo, e o `pos` inicial igual ao último não mexe em nada (outro lugar: direto, sem animar).
 import * as artModule from '../../art';
 import type { ArtModule } from '../../art/api';
 import { TILE } from '../../art/api';
@@ -30,6 +32,7 @@ import { noticeText, type NoticePlace } from './notice';
 import { createVisitScene, type VisitScene } from '../visit';
 import { LocalPlayer, MoveSender, pathPoints } from './players';
 import { CityRenderer } from './scene';
+import { resumePlacement, type CityResume } from './resume';
 import { CitySocial } from './social';
 import { CityState, type CityEffect } from './state';
 
@@ -126,6 +129,12 @@ export function createCityScene(o: CitySceneOptions): CityScene {
   let myChunk = '';
   /** Dentro de um prédio: a cena Visita (a cidade fica parada por baixo, com o stream aberto). */
   let visit: VisitScene | null = null;
+  /** Ao esconder: a câmera, o zoom e onde eu estava, para a cidade voltar igual (resume.ts). */
+  let resume: CityResume | null = null;
+  /** Reaberta com o personagem na rua: a cidade de antes fica na tela, parada, até o snapshot do stream novo. */
+  let resuming = false;
+  /** O snapshot da volta veio sem `pos`: o primeiro `pos` decide (o mesmo lugar ou direto para o novo). */
+  let resumeAwaitingPos = false;
   /** O último "Enquanto você estava fora" do stream (os carimbos vão para o quadro da recepção do meu prédio). */
   let awaySummary: AwaySummary | undefined;
   /** O último `enter` mandado (os avisos logo depois são da porta). */
@@ -242,6 +251,38 @@ export function createCityScene(o: CitySceneOptions): CityScene {
     loading.hidden = true;
   };
 
+  /** A câmera direto em mim (sem animar), com o zoom de agora. */
+  const snapCamera = () => {
+    if (!me) return;
+    following = true;
+    const c = camera.centerFor(me.x * TILE, me.y * TILE - 12, camera.zoom);
+    camera.stop();
+    camera.x = c.x;
+    camera.y = c.y;
+  };
+
+  /** O primeiro snapshot depois de reabrir a cena: o `pos` igual ao último deixa tudo como estava. */
+  const resumeFromSnapshot = () => {
+    resuming = false;
+    const pos = state.startPos;
+    if (!pos) {
+      // o `pos` vem depois (o servidor local ainda não tinha): ele decide
+      resumeAwaitingPos = true;
+      return;
+    }
+    const how = resumePlacement(resume, pos);
+    resume = null;
+    if (how === 'keep') {
+      // nem o personagem nem a câmera mudam
+      state.startPos = null;
+      sender?.reset();
+      return;
+    }
+    // outro lugar (ou nada guardado): placeMe põe o personagem direto lá, com a câmera junto e o mesmo zoom
+    me = null;
+    sender = null;
+  };
+
   /** Caminho do A* da minha posição até (x, y) tiles. */
   const walkTo = (x: number, y: number, run: boolean): boolean => {
     if (!me) return false;
@@ -285,7 +326,17 @@ export function createCityScene(o: CitySceneOptions): CityScene {
       case 'pos':
         // dentro de um prédio, `pos` é a calçada em frente à porta: de volta à rua
         if (visit) endVisit();
-        if (me) {
+        if (me && resumeAwaitingPos) {
+          // de volta à cidade, o primeiro `pos`: o mesmo lugar não mexe em nada; outro, personagem e câmera direto
+          resumeAwaitingPos = false;
+          const how = resumePlacement(resume, eff);
+          resume = null;
+          if (how !== 'keep') {
+            me.correct(eff.x, eff.y);
+            snapCamera();
+          }
+          sender?.reset();
+        } else if (me) {
           me.correct(eff.x, eff.y);
           sender?.reset();
         } else {
@@ -395,6 +446,7 @@ export function createCityScene(o: CitySceneOptions): CityScene {
         state.applySnapshot(ev.snapshot, performance.now());
         social?.snapshot(ev.snapshot);
         awaySummary = ev.snapshot.summary;
+        if (resuming) resumeFromSnapshot();
         placeMe();
         if (me) myChunk = '';
         // um stream novo no meio da visita continua dentro; sem o interior, estou na rua
@@ -434,15 +486,21 @@ export function createCityScene(o: CitySceneOptions): CityScene {
   };
 
   const openStream = () => {
-    state = new CityState();
-    renderer = new CityRenderer(o.canvas, art, camera, state);
-    renderer.fx = social;
+    // de volta na mesma página com o personagem na rua: a cidade de antes continua na tela até o snapshot (sem piscar)
+    resuming = !!(resume?.me && me);
+    resumeAwaitingPos = false;
+    if (!resuming) {
+      resume = null;
+      state = new CityState();
+      renderer = new CityRenderer(o.canvas, art, camera, state);
+      renderer.fx = social;
+      me = null;
+      sender = null;
+      loading.textContent = tr('Entrando na cidade…');
+      loading.hidden = false;
+    }
     social?.reset();
-    me = null;
-    sender = null;
     myChunk = '';
-    loading.textContent = tr('Entrando na cidade…');
-    loading.hidden = false;
     cards.hide();
     const s = o.openStream();
     stream = s;
@@ -581,7 +639,7 @@ export function createCityScene(o: CitySceneOptions): CityScene {
       const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
       if (o.canvas.clientWidth !== camera.viewW || o.canvas.clientHeight !== camera.viewH || dpr !== camera.dpr) resize();
       const self = state.me;
-      if (me && self) {
+      if (me && self && !resuming) {
         me.update(dt, input.intent());
         sender?.tick(now, me);
         // o servidor não avisa quando deixa de assinar: ao trocar de chunk, saem os prédios fora dos 3×3
@@ -635,7 +693,14 @@ export function createCityScene(o: CitySceneOptions): CityScene {
       o.canvas.hidden = false;
       layer.hidden = false;
       resize();
-      if (!camera.animating) camera.zoom = camera.viewW < 600 ? 1.5 : 2;
+      if (resume) {
+        // a câmera e o zoom de quando a cena fechou (resume.ts)
+        camera.stop();
+        camera.zoom = resume.zoom;
+        camera.x = resume.camX;
+        camera.y = resume.camY;
+        following = resume.following;
+      } else if (!camera.animating) camera.zoom = camera.viewW < 600 ? 1.5 : 2;
       openStream();
       lastTs = 0;
       raf = requestAnimationFrame(loop);
@@ -651,6 +716,8 @@ export function createCityScene(o: CitySceneOptions): CityScene {
       // a cidade fechou: a visita vai junto (o stream fecha e o servidor local manda `view.off`)
       if (visit) endVisit();
       pendingOwn = false;
+      // para voltar igual: a câmera, o zoom e onde eu estava
+      resume = { camX: camera.x, camY: camera.y, zoom: camera.zoom, following, me: me ? { x: me.x, y: me.y } : null };
       visible = false;
       cancelAnimationFrame(raf);
       o.canvas.hidden = true;

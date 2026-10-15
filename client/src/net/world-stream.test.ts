@@ -200,6 +200,23 @@ describe('FakeWorldStream (modo demonstração)', () => {
     return out;
   };
 
+  it('de volta à cidade: view.off + view e um stream novo da mesma página nascem na última posição (sem memória, na porta)', () => {
+    const memory = {};
+    const a = new FakeWorldStream({ autoplay: false, now: () => 0, memory });
+    const to = { x: door.x + 2, y: door.y };
+    expect(isWalkable(to.x, to.y, () => true)).toBe(true);
+    a.send([{ t: 'view' }, { t: 'move', x: to.x, y: to.y, dir: 'e', moving: false }]);
+    // o mesmo stream: view.off e view de novo
+    a.send([{ t: 'view.off' }, { t: 'view' }]);
+    expect(a.snapshot().pos).toEqual({ x: to.x, y: to.y, dir: 'e', moving: false });
+    // fechou a cena (o stream fecha) e abriu de novo: um stream novo, com a mesma memória
+    a.close();
+    const b = new FakeWorldStream({ autoplay: false, now: () => 0, memory });
+    expect(b.snapshot().pos).toEqual({ x: to.x, y: to.y, dir: 'e', moving: false });
+    // sem a memória (outra página, os testes), nasce na porta, como sempre
+    expect(new FakeWorldStream({ autoplay: false, now: () => 0 }).snapshot().pos).toEqual({ x: door.x, y: door.y, dir: 's', moving: false });
+  });
+
   it('20 prédios nos primeiros lotes da espiral, o meu no (3,1); eu nasço na calçada da minha porta', () => {
     const b = fakeCityBuildings();
     expect(b.map((x) => ({ x: x.lot.x, y: x.lot.y }))).toEqual(first(20));

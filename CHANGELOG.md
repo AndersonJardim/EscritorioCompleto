@@ -74,22 +74,23 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
   desenhados, com placa "+N" acima disso), janelas acesas na proporção dos agentes trabalhando e piscando em âmbar as de
   quem espera, o tema do dono (abóboras, teias e morcegos no Halloween; neve, luzes, festão e árvore no Natal), tudo
   apagado com a tabuleta "Fechado" quando o prédio está fora, cor e acabamento pela semente do lote e a placa com a
-  bandeira, o nome do dono e os ❤️ likes. A fileira de baixo de cada quarteirão mostra a fachada com a vitrine e a porta;
-  a de cima, com a porta virada para o norte, mostra o telhado com a marquise da entrada e os fundos. À noite os postes
-  e as janelas acendem. Anda com setas/WASD (Shift corre) ou clicando (o A* do escritório); a câmera segue, com o zoom
-  de sempre e afastando até ver uns 200 prédios; perto de uma porta aparece **Entrar (E)** (veja "Visitar um
+  bandeira, o nome do dono e os ❤️ likes. A fileira de baixo de cada quarteirão mostra a fachada com a vitrine e a
+  porta; a de cima, com a porta virada para o norte, mostra o telhado com a marquise da entrada e os fundos. À noite os
+  postes e as janelas acendem. Anda com setas/WASD (Shift corre) ou clicando (o A* do escritório); a câmera segue, com o
+  zoom de sempre e afastando até ver uns 200 prédios; perto de uma porta aparece **Entrar (E)** (veja "Visitar um
   prédio", abaixo). Passar o mouse num prédio abre o cartão (dono, país, estado, andares até "24+", agentes trabalhando,
   esperando e à toa ou "modo discreto", likes, "no mundo desde"); clicar num jogador abre o perfil (personagem, país,
   traços, frase, prédio e likes recebidos). Os outros jogadores andam suaves, um pouco atrás, no ritmo em que as
   posições chegam (5 por segundo para os 20 mais perto, 2,5 para os outros), com o nome em cima; quem para em cima de um
   banco aparece sentado (você também), e ausente o seu personagem fica parado onde está. O minimapa no canto mostra os
   quarteirões em volta, mais acesos quanto mais prédios ligados, e leva a câmera até onde você clicar. Esc ou
-  **Escritório** voltam; Configurações continua aberta na cidade, e o escritório para de desenhar enquanto isso. A cena
-  é carregada só quando abre. **Pausado ou fora do mundo, seu prédio fica apagado, mas você pode andar pela cidade**:
-  com a cena aberta, a conexão leva só a primeira mensagem, o sinal de vida e os comandos da cena, nunca o pacote do
-  prédio, e fecha junto com a cena. Conta banida, suspensa ou excluída (ou o prédio parado por versão antiga ou por
-  outro computador): o botão Mundo some; ele também só aparece pela página do próprio computador (nunca pela porta do
-  celular nem sem o acesso só local).
+  **Escritório** voltam, e reabrir a cidade volta exatamente onde você estava (o personagem, a câmera e o zoom, sem
+  piscar); Configurações continua aberta na cidade, e o escritório para de desenhar enquanto isso. A cena é carregada só
+  quando abre. **Pausado ou fora do mundo, seu prédio fica apagado, mas você pode andar pela cidade**: com a cena
+  aberta, a conexão leva só a primeira mensagem, o sinal de vida e os comandos da cena, nunca o pacote do prédio, e
+  fecha junto com a cena. Conta banida, suspensa ou excluída (ou o prédio parado por versão antiga ou por outro
+  computador): o botão Mundo some; ele também só aparece pela página do próprio computador (nunca pela porta do celular
+  nem sem o acesso só local).
 - **A cidade pelo servidor local:** com a cena aberta, o Habblaud pede ao servidor do mundo o pedaço da cidade em volta
   do seu personagem (`view`) pela mesma conexão do prédio e repassa ao navegador por `GET /api/world/stream` (SSE: o
   estado inteiro ao abrir, depois cada mudança na ordem); fechada a cena, avisa (`view.off`) e nada mais desce. Prédios

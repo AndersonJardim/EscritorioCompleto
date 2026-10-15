@@ -66,10 +66,12 @@ function cityHost(o: { world: WorldApi; worldCanvas: HTMLCanvasElement; uiRoot: 
       // local (GET /api/world/stream e POST /api/world/cmd).
       const perf = Number(o.params.get('perf'));
       const buildings = o.mock && Number.isFinite(perf) && perf > 0 ? { buildings: perf } : {};
+      // a cidade falsa lembra onde eu estava entre um stream e o seguinte desta página (como o servidor, por conta)
+      const memory = {};
       scene = m.createCityScene({
         canvas,
         uiRoot: o.uiRoot,
-        openStream: () => ws.createWorldStream({ mock: o.mock, ...buildings }),
+        openStream: () => ws.createWorldStream({ mock: o.mock, ...buildings, memory }),
         options: () => o.world.getOptions(),
         topInset: () => o.uiRoot.querySelector('.ui-topbar')?.getBoundingClientRect().bottom ?? 64,
         version: () => o.version(),

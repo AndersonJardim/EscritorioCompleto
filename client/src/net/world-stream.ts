@@ -307,6 +307,16 @@ export interface FakeWorldStreamOptions {
   autoplay?: boolean;
   /** Quantos prédios, nos primeiros lotes da espiral (padrão 20; `?perf=N` mede com centenas na tela; teto 2000). */
   buildings?: number;
+  /**
+   * A última posição, entre um stream e o seguinte da mesma página (como o servidor guarda por conta no `view.off` ou
+   * na queda): quem fecha a cidade e volta nasce onde estava. Sem ela, nasce na porta do próprio prédio.
+   */
+  memory?: FakeStreamMemory;
+}
+
+/** O que o falso lembra entre streams da mesma página (`FakeWorldStreamOptions.memory`). */
+export interface FakeStreamMemory {
+  pos?: WorldPosition;
 }
 
 const DISTRICT = 'centro';
@@ -521,6 +531,7 @@ export class FakeWorldStream implements WorldStream {
   private later: Array<{ at: number; msg: WorldSceneMessage }> = [];
   /** Sorteios do social (determinísticos, como o resto da cidade falsa). */
   private readonly social = mulberry32(0x50c1a1);
+  private readonly memory?: FakeStreamMemory;
   /** O dono viu o "Enquanto você estava fora" (`summary.seen`): o snapshot não o traz mais. */
   private summarySeen = false;
   /** Quem eu bloqueei (some da rua). */
@@ -540,7 +551,10 @@ export class FakeWorldStream implements WorldStream {
     for (const b of this.buildings) this.revs.set(this.chunkOfBuilding(b), 1);
     const mine = this.buildings.find((b) => b.id === FAKE_ME.id);
     const door = mine ? lotDoor(mine.lot).front : spawnPoint();
-    this.me = { x: door.x, y: door.y, dir: 's', moving: false };
+    this.memory = o.memory;
+    // de volta à cidade: nasce onde estava (a última posição guardada no `view.off` ou no fechamento)
+    const last = o.memory?.pos;
+    this.me = last ? { x: last.x, y: last.y, dir: last.dir, moving: false } : { x: door.x, y: door.y, dir: 's', moving: false };
     this.goal = fakeGoal(this.start);
     const prng = mulberry32(0x9e1a);
     const player = (k: number, name: string, look: 'f' | 'm', pos: WorldPosition): WorldPlayerPublic => {
@@ -630,11 +644,17 @@ export class FakeWorldStream implements WorldStream {
 
   close(): void {
     if (this.closed) return;
+    this.remember();
     this.closed = true;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     this.listeners.emit({ type: 'status', status: 'closed' });
     this.listeners.clear();
+  }
+
+  /** Guarda a última posição (parado) para o próximo `view`, neste stream ou no seguinte da mesma página. */
+  private remember(): void {
+    if (this.memory) this.memory.pos = { x: this.me.x, y: this.me.y, dir: this.me.dir, moving: false };
   }
 
   /** Um passo (200 ms): as respostas pendentes, os 5 andando, a cada 3 s um prédio que muda e o `afk`. */
@@ -820,6 +840,7 @@ export class FakeWorldStream implements WorldStream {
         void Promise.resolve().then(() => !this.closed && this.listeners.emit({ type: 'snapshot', snapshot: this.snapshot() }));
         return;
       case 'view.off':
+        this.remember();
         this.viewing = false;
         this.inside = null;
         return;
