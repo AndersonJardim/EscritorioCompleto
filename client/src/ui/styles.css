@@ -9029,3 +9029,646 @@ html.is-replay #world {
     box-shadow: 0 -12px 24px rgba(5, 7, 12, 0.35);
   }
 }
+
+/* ------------------------------------------------------------------ Habblaud World (ui/world/)
+   Seção em Configurações (conta, lista de espera, personagem, visibilidade, dispositivos) e o cartão de convite.
+   Mesmas cores do resto do painel (tokens do .ui-root); o popover já ocupa a largura do celular com as margens. */
+
+.ui-world {
+  scroll-margin: 8px;
+}
+
+.ui-world.is-highlight {
+  animation: ui-help-flash 1.6s ease-out;
+}
+
+.ui-world h3:focus {
+  outline: none;
+}
+
+.ui-world__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.ui-world__top h3 {
+  margin-bottom: 0;
+}
+
+.ui-world__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--ui-line-strong);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ui-muted);
+  white-space: nowrap;
+}
+
+.ui-world__chip:empty {
+  display: none;
+}
+
+.ui-world__chip::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.ui-world__chip.is-waiting {
+  color: var(--st-waiting);
+  border-color: color-mix(in srgb, var(--st-waiting) 40%, transparent);
+}
+
+.ui-world__chip.is-approved {
+  color: var(--st-working);
+  border-color: color-mix(in srgb, var(--st-working) 40%, transparent);
+}
+
+.ui-world__chip.is-logged_out {
+  color: var(--ui-accent);
+  border-color: rgba(124, 200, 255, 0.35);
+}
+
+.ui-world__body,
+.ui-world__stack,
+.ui-world__form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ui-world__body {
+  padding: 4px 0 2px;
+}
+
+.ui-world__stack > *,
+.ui-world__form > * {
+  min-width: 0;
+}
+
+.ui-world__flash {
+  margin: 2px 0 6px;
+  padding: 6px 9px;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--st-working) 35%, transparent);
+  background: color-mix(in srgb, var(--st-working) 9%, transparent);
+  font-size: 12px;
+  color: color-mix(in srgb, var(--st-working) 60%, #fff);
+}
+
+.ui-world__head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.ui-world__back {
+  font-size: 11.5px;
+  text-decoration: none;
+}
+
+.ui-world__back:hover {
+  text-decoration: underline;
+}
+
+.ui-world__title {
+  margin: 0;
+  font: 700 14px/1.25 var(--font-ui);
+}
+
+.ui-world__lead {
+  font-size: 12.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.ui-world__privacy {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--ui-accent-soft);
+  border: 1px solid rgba(124, 200, 255, 0.25);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ui-world__notice {
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--st-waiting) 38%, transparent);
+  background: color-mix(in srgb, var(--st-waiting) 9%, transparent);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.ui-world:has(.ui-world__chip.is-approved) .ui-world__notice {
+  border-color: color-mix(in srgb, var(--st-working) 38%, transparent);
+  background: color-mix(in srgb, var(--st-working) 9%, transparent);
+}
+
+.ui-world__error {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #ff9a8a;
+}
+
+.ui-world__warn {
+  font-size: 11.5px;
+  color: var(--st-waiting);
+}
+
+.ui-world__demo {
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px dashed var(--ui-line-strong);
+  font: 600 11.5px/1.4 var(--font-mono);
+  color: var(--ui-muted);
+}
+
+.ui-world__email {
+  overflow-wrap: anywhere;
+}
+
+.ui-world__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Campos */
+.ui-world__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ui-world__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ui-text);
+}
+
+.ui-world__input,
+.ui-world__select {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--ui-line-strong);
+  background: rgba(0, 0, 0, 0.25);
+  font: 500 13px/1 var(--font-ui);
+  color: var(--ui-text);
+}
+
+.ui-world__select {
+  padding-right: 4px;
+}
+
+.ui-world__select option {
+  background: #161a23;
+  color: var(--ui-text);
+}
+
+.ui-world__code {
+  max-width: 150px;
+  font: 700 17px/1 var(--font-mono);
+  letter-spacing: 0.3em;
+}
+
+.ui-world__input::placeholder {
+  color: var(--ui-faint);
+  opacity: 0.55;
+}
+
+.ui-root .ui-world__input:focus-visible,
+.ui-root .ui-world__select:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 1px;
+}
+
+.ui-world__peek {
+  align-self: flex-start;
+  font-size: 11.5px;
+}
+
+.ui-world__accept {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.ui-world__checkbox {
+  width: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+  accent-color: #2f7fd1;
+}
+
+/* Resumo de privacidade (tela do cadastro) */
+.ui-world__summary {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 10px 11px;
+  border-radius: 9px;
+  background: var(--ui-bg-soft);
+  border: 1px solid var(--ui-line-strong);
+  box-shadow: inset 3px 0 0 var(--ui-accent);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.ui-world__summary-title {
+  margin: 0;
+  font: 600 12px/1.2 var(--font-ui);
+  color: var(--ui-text);
+}
+
+.ui-world__official {
+  color: var(--ui-text);
+}
+
+.ui-world__key {
+  font-weight: 600;
+  color: var(--ui-text);
+}
+
+.ui-world__list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--ui-muted);
+}
+
+.ui-world__list strong {
+  color: var(--ui-text);
+}
+
+.ui-world__summary > .ui-link-btn {
+  align-self: flex-start;
+}
+
+.ui-world__truth {
+  padding: 7px 10px;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--lv-crit) 35%, transparent);
+  background: color-mix(in srgb, var(--lv-crit) 8%, transparent);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+/* Conta: lote do prédio, personagem, navegação */
+.ui-world__lot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 2px dashed var(--ui-line-strong);
+  background: repeating-linear-gradient(135deg, transparent 0 8px, rgba(255, 255, 255, 0.025) 8px 16px);
+}
+
+.ui-world__lot-art {
+  flex: none;
+  width: 30px;
+  height: 40px;
+  /* Prédio apagado em pixels: corpo, janelas e porta. */
+  background:
+    linear-gradient(var(--ui-faint), var(--ui-faint)) 12px 32px / 6px 8px no-repeat,
+    linear-gradient(rgba(124, 200, 255, 0.35), rgba(124, 200, 255, 0.35)) 6px 8px / 6px 4px no-repeat,
+    linear-gradient(rgba(124, 200, 255, 0.35), rgba(124, 200, 255, 0.35)) 18px 8px / 6px 4px no-repeat,
+    linear-gradient(rgba(124, 200, 255, 0.2), rgba(124, 200, 255, 0.2)) 6px 18px / 6px 4px no-repeat,
+    linear-gradient(rgba(124, 200, 255, 0.2), rgba(124, 200, 255, 0.2)) 18px 18px / 6px 4px no-repeat,
+    linear-gradient(rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.09)) 0 0 / 30px 40px no-repeat;
+  image-rendering: pixelated;
+}
+
+.ui-world__lot-text {
+  font: 600 12.5px/1.35 var(--font-ui);
+  color: var(--ui-muted);
+}
+
+.ui-world__player {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.ui-world__player-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ui-world__player-name {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.ui-world__player-intro {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--ui-muted);
+}
+
+.ui-world__traits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ui-world__trait {
+  padding: 1px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--ui-line);
+  background: var(--ui-bg-soft);
+  font-size: 11px;
+}
+
+.ui-world__nav {
+  display: flex;
+  flex-direction: column;
+  border-radius: 9px;
+  border: 1px solid var(--ui-line);
+  overflow: hidden;
+}
+
+.ui-world__navrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 6px 10px;
+  background: var(--ui-bg-soft);
+}
+
+.ui-world__navrow + .ui-world__navrow {
+  border-top: 1px solid var(--ui-line);
+}
+
+.ui-world__navrow:hover {
+  background: var(--ui-bg-hover);
+}
+
+.ui-world__navval {
+  font-size: 11.5px;
+  color: var(--ui-muted);
+  text-align: right;
+}
+
+.ui-world__chev {
+  font-size: 16px;
+  color: var(--ui-faint);
+}
+
+.ui-world__signout .ui-set {
+  padding: 2px 0;
+}
+
+.ui-world__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+/* Personagem */
+.ui-world__character .ui-char__top {
+  align-items: center;
+}
+
+.ui-world__character .ui-char__groups {
+  margin-top: 0;
+}
+
+.ui-world__traitset legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ui-world__count {
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--ui-faint);
+}
+
+.ui-world__traitopts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ui-world__trait-opt {
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--ui-line-strong);
+  background: var(--ui-bg-soft);
+  font-size: 12px;
+  color: var(--ui-text);
+}
+
+.ui-world__trait-opt:hover {
+  background: var(--ui-bg-hover);
+}
+
+.ui-world__trait-opt[aria-pressed='true'] {
+  border-color: rgba(124, 200, 255, 0.6);
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent);
+  font-weight: 600;
+}
+
+.ui-world__trait-opt[aria-disabled='true'] {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Dispositivos */
+.ui-world__devices {
+  display: flex;
+  flex-direction: column;
+}
+
+.ui-world__device + .ui-world__device {
+  border-top: 1px solid var(--ui-line);
+}
+
+.ui-world__device-name {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ui-world__tag {
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--ui-accent-soft);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--ui-accent);
+}
+
+/* Textos do World com "C" maiúsculo e dígitos ("Criar conta", "Confirmar e-mail"): na Pixelify o "C" parece "O",
+   então os botões principais e o título do cartão usam a fonte do corpo. */
+.ui-world .ui-btn--primary,
+.ui-world-invite .ui-btn--primary {
+  font: 600 13px/1 var(--font-ui);
+  letter-spacing: 0;
+}
+
+/* Botões: confirmação em dois cliques e "enviando" */
+.ui-btn.is-danger {
+  border-color: color-mix(in srgb, var(--lv-crit) 55%, transparent);
+  background: color-mix(in srgb, var(--lv-crit) 14%, transparent);
+  color: color-mix(in srgb, var(--lv-crit) 55%, #fff);
+}
+
+.ui-btn[aria-busy='true'] {
+  cursor: progress;
+  opacity: 0.75;
+}
+
+.ui-btn[aria-busy='true']::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  background: currentColor;
+  animation: ui-blink 0.8s steps(2, jump-none) infinite;
+}
+
+/* Cartão de convite ("Conheça o Habblaud World"): no meio da área livre, uma vez só. */
+.ui-world-invite {
+  position: fixed;
+  z-index: 12;
+  top: calc((var(--free-top) + 100vh - var(--free-bottom)) / 2);
+  left: calc((var(--free-left) + 100vw - var(--free-right)) / 2);
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100vh - var(--free-top) - var(--free-bottom));
+  overflow-y: auto;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 22px 18px;
+  border-radius: 14px;
+  background: var(--ui-bg-solid);
+  border: 1px solid var(--ui-line-strong);
+  box-shadow:
+    0 30px 70px rgba(5, 7, 12, 0.55),
+    inset 0 3px 0 rgba(124, 200, 255, 0.35);
+  animation: ui-empty-in 0.4s var(--ease);
+}
+
+.ui-world-invite__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ui-world-invite__badge {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent);
+}
+
+.ui-world-invite__icon {
+  width: 24px;
+  height: 24px;
+}
+
+.ui-world-invite__title {
+  margin: 0;
+  font: 700 18px/1.25 var(--font-ui);
+}
+
+.ui-world-invite__perks {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ui-world-invite__perks li {
+  position: relative;
+  padding-left: 16px;
+}
+
+.ui-world-invite__perks li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  background: var(--st-working);
+}
+
+.ui-world-invite__privacy {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--ui-accent-soft);
+  border: 1px solid rgba(124, 200, 255, 0.25);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ui-world-invite__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.ui-world-invite__actions .ui-link-btn {
+  margin-left: auto;
+}
+
+@media (max-width: 600px) {
+  .ui-world-invite {
+    padding: 16px 16px 14px;
+  }
+
+  .ui-world-invite__actions .ui-link-btn {
+    margin-left: 0;
+  }
+
+  .ui-world__actions .ui-btn--primary {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
