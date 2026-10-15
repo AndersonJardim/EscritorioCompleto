@@ -18,7 +18,18 @@
 // Erros: {error: {code, message?, retryAfter?}} com o status do servidor do mundo quando vêm de lá (códigos em
 // WORLD_ERROR_CODES do protocolo; um código novo passa como veio) ou com os códigos locais abaixo. A interface traduz
 // pelo `code`; `message` é só para quem lê o log ou usa o curl.
-import { WORLD_ERROR_CODES, type DeviceInfo, type Player, type WorldAccess, type WorldErrorCode } from './protocol';
+import { WORLD_ERROR_CODES, type DeviceInfo, type Player, type WorldAccess, type WorldErrorCode, type WorldTheme } from './protocol';
+
+/**
+ * Tema escolhido em Configurações › Aparência, guardado em world.json (PUT /api/world/theme). O pacote leva o tema já
+ * resolvido: o automático vira o tema do calendário (server/world/theme.ts).
+ */
+export const WORLD_THEME_CHOICES = ['auto', 'none', 'halloween', 'christmas'] as const;
+export type WorldThemeChoice = 'auto' | WorldTheme;
+
+export function isWorldThemeChoice(v: unknown): v is WorldThemeChoice {
+  return typeof v === 'string' && (WORLD_THEME_CHOICES as readonly string[]).includes(v);
+}
 
 /** Estado da conta neste computador. */
 export type WorldState = 'off' | 'logged_out' | 'waiting' | 'approved';
