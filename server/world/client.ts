@@ -18,7 +18,10 @@
 // - Sem seguir redirecionamento: um 3xx vira resposta inválida (o token nunca é reenviado a outro endereço).
 // - Erros do servidor do mundo voltam como {status, code}, com o mesmo status e o `code` dele (o `message`, em inglês,
 //   fica de fora: a interface traduz pelo código). Falhas de rede e respostas fora do formato ganham códigos próprios.
-// - Respostas validadas e copiadas campo a campo: só o que o protocolo define chega ao navegador.
+// - Respostas validadas e copiadas campo a campo: só o que o protocolo define chega ao navegador. A exceção é a
+//   exportação dos dados da conta (GET /v1/me/export): o JSON vai como veio (é o arquivo que a pessoa baixa).
+// - Fase 6: excluir a conta (POST /v1/me/delete e /v1/me/delete/confirm) e exportar os dados; a manutenção do mundo
+//   chega como 503 `maintenance`, com o código passado adiante como os outros.
 import { parseAppearanceParts } from '../../shared/appearance';
 import { isIntroId } from '../../shared/world/intro';
 import {
@@ -75,6 +78,8 @@ export interface WorldClientOptions {
 
 const CODE_RE = /^[a-z][a-z0-9_]{0,63}$/;
 const MAX_BODY = 256 * 1024;
+/** Teto da exportação dos dados da conta (likes dados, carimbos e denúncias podem passar dos 256 KB das outras rotas). */
+export const EXPORT_MAX_BYTES = 8 * 1024 * 1024;
 const ISO_MAX = 40;
 
 const str = (v: unknown, max: number): string | undefined => (typeof v === 'string' && v.length <= max ? v : undefined);
@@ -89,13 +94,18 @@ export function isWorldLocale(v: unknown): v is WorldLocale {
   return typeof v === 'string' && (WORLD_LOCALES as readonly string[]).includes(v);
 }
 
-/** Visibilidade completa e no formato (corpo do PUT e resposta do servidor); undefined se faltar algo. */
+/**
+ * Visibilidade completa e no formato (corpo do PUT e resposta do servidor); undefined se faltar algo. O aviso de
+ * inatividade (`notifyInactivity`) é opcional: ausente, fica de fora (o servidor do mundo não muda); presente, só
+ * booleano.
+ */
 export function parseVisibility(raw: unknown): Visibility | undefined {
   const v = obj(raw);
   if (!v || (v.mode !== 'live' && v.mode !== 'discreet')) return undefined;
   const keys = ['closed', 'hideCountry', 'tokensVisible', 'leaderboard', 'compactions'] as const;
   if (!keys.every((k) => typeof v[k] === 'boolean')) return undefined;
-  return {
+  if (v.notifyInactivity !== undefined && typeof v.notifyInactivity !== 'boolean') return undefined;
+  const out: Visibility = {
     mode: v.mode,
     closed: v.closed as boolean,
     hideCountry: v.hideCountry as boolean,
@@ -103,6 +113,8 @@ export function parseVisibility(raw: unknown): Visibility | undefined {
     leaderboard: v.leaderboard as boolean,
     compactions: v.compactions as boolean,
   };
+  if (typeof v.notifyInactivity === 'boolean') out.notifyInactivity = v.notifyInactivity;
+  return out;
 }
 
 export function parseDeviceAuth(raw: unknown): DeviceAuth | undefined {
@@ -249,6 +261,21 @@ export class WorldClient {
     return this.call('POST', '/v1/me/building/join', { token, parse: (raw) => (obj(raw)?.state === 'joined' ? { state: 'joined' } : undefined) });
   }
 
+  /** "Excluir conta", primeira etapa: o servidor do mundo manda um código de 6 dígitos ao e-mail da conta. */
+  requestDeletion(token: string): Promise<WorldResult<Record<string, never>>> {
+    return this.call('POST', '/v1/me/delete', { token, parse: none });
+  }
+
+  /** "Excluir conta" com o código do e-mail: o prédio e o perfil saem do mundo na hora; o resto, em 7 dias. */
+  confirmDeletion(token: string, code: string): Promise<WorldResult<Record<string, never>>> {
+    return this.call('POST', '/v1/me/delete/confirm', { token, body: { code }, parse: none });
+  }
+
+  /** "Baixar meus dados": o JSON da conta (WorldExport no protocolo) como veio, só conferido que é objeto; até EXPORT_MAX_BYTES. */
+  exportData(token: string): Promise<WorldResult<Record<string, unknown>>> {
+    return this.call('GET', '/v1/me/export', { token, parse: (raw) => obj(raw), maxBytes: EXPORT_MAX_BYTES });
+  }
+
   revokeDevice(token: string, id: string): Promise<WorldResult<Record<string, never>>> {
     if (!DEVICE_ID_RE.test(id)) return Promise.resolve({ ok: false, status: 404, code: 'not_found' });
     return this.call('POST', `/v1/me/devices/${encodeURIComponent(id)}/revoke`, { token, parse: none });
@@ -257,8 +284,9 @@ export class WorldClient {
   private async call<T>(
     method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     path: string,
-    o: { body?: unknown; token?: string; parse: (raw: unknown) => T | undefined; signal?: AbortSignal },
+    o: { body?: unknown; token?: string; parse: (raw: unknown) => T | undefined; signal?: AbortSignal; maxBytes?: number },
   ): Promise<WorldResult<T>> {
+    const max = o.maxBytes ?? MAX_BODY;
     const headers: Record<string, string> = { Accept: 'application/json', 'User-Agent': `Habblaud/${this.opts.version}` };
     if (o.token) headers.Authorization = `Bearer ${o.token}`;
     // POST sem corpo também vai como JSON vazio (o servidor do mundo exige o Content-Type, como o daqui); GET e
@@ -274,7 +302,7 @@ export class WorldClient {
     try {
       res = await this.fetchImpl(`${this.base}${path}`, { method, headers, body, redirect: 'manual', signal });
       const length = Number(res.headers.get('content-length') ?? '0');
-      if (length > MAX_BODY) {
+      if (length > max) {
         await res.body?.cancel().catch(() => undefined);
         return fail(502, CLIENT_ERROR.badResponse);
       }
@@ -283,7 +311,7 @@ export class WorldClient {
       o.signal?.throwIfAborted();
       return (err as Error)?.name === 'TimeoutError' || timeout.aborted ? fail(504, CLIENT_ERROR.timeout) : fail(502, CLIENT_ERROR.unreachable);
     }
-    if (text.length > MAX_BODY) return fail(502, CLIENT_ERROR.badResponse);
+    if (text.length > max) return fail(502, CLIENT_ERROR.badResponse);
     let raw: unknown;
     if (text.trim()) {
       try {

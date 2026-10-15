@@ -739,34 +739,93 @@ Tudo funciona sem configurar nada. Se precisar ajustar, use variáveis de ambien
 
 ## Habblaud World
 
-O Habblaud World vai ser uma cidade online onde cada Habblaud vira um prédio, ao vivo. **Está em desenvolvimento e vem
-desligado:** sem `HABBLAUD_WORLD_URL`, nada aparece na interface e nada sai do computador. As variáveis abaixo (no `.env`
-ou no ambiente) servem para testar com um servidor do mundo:
+O Habblaud World é uma cidade online em pixel art onde cada Habblaud vira um prédio, aceso ao vivo enquanto os agentes
+trabalham, e cada pessoa passeia com um personagem. **Está em desenvolvimento e vem desligado por padrão:** sem
+`HABBLAUD_WORLD_URL`, nada do World aparece na interface e nada sai do computador.
+
+**Como ligar.** As variáveis abaixo (no `.env` ou no ambiente) apontam o Habblaud para um servidor do mundo. A seção
+aparece em **Configurações › Habblaud World** e só funciona pelo próprio computador (nunca pela porta do celular); a
+conta fica só aqui, em `~/.habblaud/world.json` (permissão 600; no Docker, no volume `/data`).
 
 | Variável | Padrão | Para quê |
 | --- | --- | --- |
 | `HABBLAUD_WORLD_URL` | — (desligado) | Endereço do servidor do mundo, só `https://` ou `wss://` (sem caminho). |
 | `HABBLAUD_WORLD` | ligado | `0` esconde tudo do World (rotas e interface), mesmo com a URL. |
-| `HABBLAUD_WORLD_DEV` | desligado | `1` aceita um servidor do mundo local em `http://127.0.0.1:<porta>` (o `npm run dev` já aceita). |
+| `HABBLAUD_WORLD_DEV` | desligado | `1` aceita um servidor do mundo local sem TLS: `http://127.0.0.1:<porta>` (o `npm run dev` já aceita) ou, de dentro do Docker, `http://host.docker.internal:<porta>`. |
 
-Com a conta liberada e o personagem criado, o seu prédio sobe ao mundo sozinho (por WebSocket, só a lista anônima da
-página de privacidade: andares, agentes, status, avatares e tokens arredondados); **Pausar** apaga o prédio na hora e
-guarda o lote; **Sair do mundo** retira o prédio e libera o lote (a conta e o personagem continuam, e voltar cria um
-prédio novo).
+**Privacidade.** Nada do seu trabalho sai do computador. Do prédio saem só o tema, um andar por sala aberta (com um
+código aleatório que muda todo dia) e, de cada agente, se é principal ou subagente, a ferramenta, o status, a
+aparência, um nome sorteado e a faixa de tarefas concluídas no dia. Caminhos, nomes de projeto, títulos, comandos,
+mensagens, código, custo, modelo, branch e a sua conta do Claude nunca saem. A lista completa, campo a campo:
+[docs/world/privacidade.md](docs/world/privacidade.md). **Ver o que foi enviado**, no cartão Seu prédio, mostra o JSON
+exato da última remessa, com o tamanho em bytes e a resposta do mundo.
 
-O botão **Mundo**, na barra do topo, troca o escritório pela cidade: anda-se com setas/WASD ou clicando, o cartão de
-cada prédio mostra andares, agentes e estado, e o minimapa fica no canto; pausado ou fora do mundo, o seu prédio fica
-apagado, mas dá para andar pela cidade. Perto da porta de um prédio, **Entrar (E)** leva para dentro: o escritório do
-dono ao vivo, com as salas de nomes fictícios e os agentes no status de agora, só para ver (nada de terminal,
-mensagens ou permissões); você vê "N visitantes agora" no seu. No modo demonstração (`?mock=1&world=approved&scene=city`,
-só prédios e pessoas fictícios): [a cidade](docs/screenshots/world-cidade.png), [o cartão de um prédio](docs/screenshots/world-cartao.png),
-[a visita](docs/screenshots/world-visita.png) e [o painel da visita](docs/screenshots/world-visita-painel.png).
+**Conta e lista de espera.** Cadastro com e-mail e senha (12 caracteres ou mais; senhas que já vazaram são recusadas),
+código de 6 dígitos por e-mail e o aceite dos Termos de Uso e da Política de Privacidade. Toda conta entra numa lista de
+espera, e o acesso é liberado por lotes: o Habblaud aberto confere sozinho a cada 30 minutos. Até 3 computadores por
+conta (**Dispositivos**, com revogar).
 
-A conta fica só neste computador, em `~/.habblaud/world.json` (no Docker, no volume `/data`), e a seção só funciona pelo
-próprio computador. O que sai e o que nunca sai do computador: [docs/world/privacidade.md](docs/world/privacidade.md).
+**Personagem.** Nome de jogador (3 a 20 caracteres, único no mundo), o mesmo editor de aparência dos agentes, 2 ou 3
+traços de personalidade e uma frase de apresentação da lista (no mundo não há texto livre além do nome). Dá para criar
+ainda na lista de espera.
+
+**Prédio.** Com a conta liberada e o personagem criado, o prédio sobe sozinho (por WebSocket) e acompanha o escritório
+ao vivo. O cartão **Seu prédio** mostra a conexão, os andares, os agentes, a última remessa e, quando o mundo recusa uma
+remessa ou para o prédio (versão antiga, outro computador, conta suspensa ou banida), o motivo; conta suspensa ou
+banida ganha **Recorrer por e-mail**. Um prédio marcado como "não verificado" (números fora do plausível, em revisão)
+fica fora de placares e destaques e mostra **Contestar por e-mail**. Quando o mundo está em manutenção, o cartão diz, e
+o Habblaud tenta de novo sozinho.
+
+**Visibilidade.** Ao vivo (andares, contadores e o status de cada personagem) ou **modo discreto** (só aceso ou apagado
+e o número de andares); fechado a visitas; esconder o país; os **tokens** do prédio só em faixas (até 100 mil, 1
+milhão…), nunca o número nem o custo, e dá para desligar; placar e compactações só se você ligar.
+
+**Cidade.** O botão **Mundo**, na barra do topo, troca o escritório pela cidade: anda-se com setas/WASD ou clicando, o
+cartão de cada prédio mostra andares, agentes e estado, e o minimapa fica no canto; pausado ou fora do mundo, o seu
+prédio fica apagado, mas dá para andar pela cidade. No modo demonstração (`?mock=1&world=approved&scene=city`, só
+prédios e pessoas fictícios): [a cidade](docs/screenshots/world-cidade.png) e
+[o cartão de um prédio](docs/screenshots/world-cartao.png).
+
+**Visitas.** Perto da porta de um prédio, **Entrar (E)** leva para dentro: o escritório do dono ao vivo, com as salas de
+nomes fictícios e os agentes no status de agora, só para ver (nada de terminal, mensagens ou permissões, e nada do
+trabalho); prédio fechado a visitas só se vê por fora. No seu, você vê "N visitantes agora" (só a contagem, nunca quem).
+No modo demonstração: [a visita](docs/screenshots/world-visita.png) e
+[o painel da visita](docs/screenshots/world-visita-painel.png).
+
+**Pausar, sair, excluir.** **Pausar** apaga o prédio na hora e guarda o lote (com 30 dias pausado, ele some do mapa; 30
+dias depois, é retirado). **Sair do mundo** retira o prédio e libera o lote; a conta e o personagem continuam, e voltar
+cria um prédio novo. **Excluir conta** (em **Conta e dados**, com o código que chega por e-mail) tira o prédio e o
+perfil do mundo na hora, apaga a conta, os likes, os bloqueios, as denúncias feitas e os dispositivos do banco em 7 dias
+(e dos backups em até 30) e apaga o `world.json` deste computador. Sem notícias do Habblaud por 7 dias, o prédio some do
+mapa e, 30 dias depois, é retirado; um e-mail avisa 3 dias antes (desligável em **Conta e dados**).
+
+**Exportar.** **Baixar meus dados** (em **Conta e dados**) salva `habblaud-world-dados.json` com o que o mundo guarda da
+sua conta: e-mail, datas, personagem, visibilidade, dispositivos, prédio, likes dados, bloqueios e denúncias feitas. Uma
+vez por dia.
+
+**Dados verdadeiros.** O World só funciona se os prédios forem de verdade: mudar o Habblaud para mandar andares,
+agentes, status, tokens ou personagens inventados ou inflados quebra os Termos de Uso e bane a conta (o servidor confere
+a plausibilidade de cada pacote). Mudar o Habblaud para qualquer outra coisa continua livre (MIT). Como o Habblaud fala
+com o World: [shared/world/README.md](shared/world/README.md).
+
+**Testar com um servidor do mundo local.** Para quem desenvolve o World, com o servidor do mundo rodando no próprio
+computador (por exemplo, em Docker, publicado na porta 4848):
+
+- Fora do Docker: `HABBLAUD_WORLD_URL=http://127.0.0.1:4848 npm run dev`.
+- Com o Habblaud no Docker: no `.env` desta pasta, `HABBLAUD_WORLD_URL=http://host.docker.internal:4848` e
+  `HABBLAUD_WORLD_DEV=1`; depois, `npm run docker:up`, que termina com a linha do World
+  (`Habblaud World: ligado: http://host.docker.internal:4848`, ou por que ficou desligado). O `docker-compose.yml` já liga
+  `host.docker.internal` ao host (`extra_hosts` com `host-gateway`; no Docker Desktop o nome já existe). No Linux, o
+  servidor do mundo precisa escutar numa interface que o container alcança (`0.0.0.0` ou o IP da ponte do Docker): uma
+  porta publicada só em `127.0.0.1` do host não responde por `host-gateway`.
+- Sem TLS, só com `HABBLAUD_WORLD_DEV=1` (ou `--dev`) e só para `127.0.0.1` e `host.docker.internal`; fora disso, só
+  `https://` ou `wss://`. O servidor do mundo precisa aceitar o nome usado na URL como o host do jogo (senão responde
+  `421`).
+
 Como a seção fica, no modo demonstração (`?mock=1&world=logged_out`, `waiting` ou `approved`):
-[sem conta](docs/screenshots/world-sem-conta.png), [lista de espera](docs/screenshots/world-lista-de-espera.png) e
-[personagem](docs/screenshots/world-personagem.png).
+[sem conta](docs/screenshots/world-sem-conta.png), [lista de espera](docs/screenshots/world-lista-de-espera.png),
+[personagem](docs/screenshots/world-personagem.png), [Seu prédio](docs/screenshots/world-predio.png) e
+[o que foi enviado](docs/screenshots/world-enviado.png).
 
 ## Como funciona
 

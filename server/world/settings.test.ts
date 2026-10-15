@@ -86,6 +86,18 @@ describe('WorldSettingsStore', () => {
     expect(existsSync(file)).toBe(false);
   });
 
+  it('conta excluída (erase): o world.json some inteiro, tema junto; de novo, nada quebra', () => {
+    const { file, store: s } = store();
+    s.save(SESSION);
+    s.setTheme('christmas');
+    expect(s.erase()).toBe(true);
+    expect(existsSync(file)).toBe(false);
+    expect(s.get()).toBeUndefined();
+    expect(s.getTheme()).toBe('auto');
+    expect(s.erase()).toBe(true);
+    expect(existsSync(file)).toBe(false);
+  });
+
   it('pausa: fica na sessão e sai com undefined', () => {
     const { file, store: s } = store();
     s.save(SESSION);

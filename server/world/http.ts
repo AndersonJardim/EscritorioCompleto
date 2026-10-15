@@ -19,7 +19,8 @@
 // HABBLAUD_WORLD_URL, 409 `not_configured`; os corpos são conferidos antes de ir ao servidor do mundo, e os erros dele
 // voltam como {error: {code}} com o mesmo status. A cena Mundo (stream e comandos) fica em viewer.ts; o stream é um GET
 // que põe o personagem na rua, então só abre pela própria página (sem `Origin` de outro site nem Sec-Fetch-Site
-// cross-site/same-site), como a guarda já faz com os POST.
+// cross-site/same-site), como a guarda já faz com os POST. A exportação dos dados também é um GET com efeito (gasta a
+// cota do dia no servidor do mundo) e devolve dados pessoais: a mesma regra. Excluir a conta pede o código do e-mail.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { parseAppearanceParts } from '../../shared/appearance';
 import { tr } from '../../shared/i18n';
@@ -36,6 +37,8 @@ import type { WorldViewer } from './viewer';
 /** Corpo máximo das rotas do mundo (o maior é o personagem). */
 const MAX_BODY = 16 * 1024;
 const REVOKE_ROUTE = /^\/api\/world\/devices\/([^/]+)\/revoke$/;
+/** Nome do arquivo de "Baixar meus dados". */
+export const EXPORT_FILENAME = 'habblaud-world-dados.json';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type Method = 'GET' | 'POST' | 'PUT';
@@ -209,7 +212,7 @@ export function createWorldRoutes(service: WorldService, viewer?: WorldViewer): 
       account: true,
       run: async (req, res) => {
         const v = parseVisibility(await readBody(req));
-        if (!v) throw new BodyError(422, 'invalid', tr('esperado {mode: "live" ou "discreet", closed, hideCountry, tokensVisible, leaderboard, compactions}'));
+        if (!v) throw new BodyError(422, 'invalid', tr('esperado {mode: "live" ou "discreet", closed, hideCountry, tokensVisible, leaderboard, compactions, notifyInactivity?}'));
         sendOutcome(res, await service.setVisibility(v));
       },
     },
@@ -288,6 +291,38 @@ export function createWorldRoutes(service: WorldService, viewer?: WorldViewer): 
         const r = viewer.command(body);
         if (!r.ok) return sendError(res, r.status, r.code, undefined, r.retryAfter);
         sendJson(res, 202, r.data);
+      },
+    },
+    // "Excluir conta", primeira etapa: o servidor do mundo manda o código ao e-mail da conta.
+    '/api/world/delete-account': {
+      method: 'POST',
+      account: true,
+      run: async (req, res) => {
+        await readBody(req);
+        const r = await service.requestDeletion();
+        sendOutcome(res, r.ok ? { ok: true, status: 202, data: {} } : r);
+      },
+    },
+    // "Excluir conta" com o código: só responde depois de fechar o prédio e apagar o world.json.
+    '/api/world/delete-account/confirm': {
+      method: 'POST',
+      account: true,
+      run: async (req, res) => sendOutcome(res, await service.confirmDeletion(code((await readBody(req)).code))),
+    },
+    // "Baixar meus dados": o JSON da conta como anexo. Só pela própria página (gasta a cota do dia); HEAD não pede nada.
+    '/api/world/export': {
+      method: 'GET',
+      account: true,
+      run: async (req, res) => {
+        if (!sameOriginRequest(req)) throw new BodyError(403, 'local_only', tr('os dados da conta só saem pela própria página do Habblaud'));
+        if (req.method === 'HEAD') {
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+          return void res.end();
+        }
+        const r = await service.exportData();
+        if (!r.ok) return sendError(res, r.status, r.code, undefined, r.retryAfter);
+        res.setHeader('Content-Disposition', `attachment; filename="${EXPORT_FILENAME}"`);
+        sendJson(res, 200, r.data);
       },
     },
     // "Ver o que foi enviado": o pacote exato da última remessa, os bytes e a resposta do servidor ({} se nada).

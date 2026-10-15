@@ -6,7 +6,9 @@
 // Fase 2 (prédio no mundo): `building` em meta.world e no status, GET /api/world/last-uplink (a última remessa, para
 // "Ver o que foi enviado"), POST /api/world/pause, /resume e /leave e PUT /api/world/theme. Os tipos do prédio vêm
 // de shared/world/api.ts (os mesmos do servidor local). Fase 3: POST /api/world/join ("Voltar ao mundo") e
-// `meta.world.scene` (o botão Mundo); a cena fala com o servidor local por net/world-stream.ts.
+// `meta.world.scene` (o botão Mundo); a cena fala com o servidor local por net/world-stream.ts. Fase 6: excluir a
+// conta (POST /api/world/delete-account e /confirm), baixar os dados (GET /api/world/export), o aviso de inatividade
+// na visibilidade, o id da conta no status e o selo "não verificado" do prédio.
 import type { AppearanceParts } from '../../../shared/appearance';
 import type { Locale } from '../../../shared/i18n';
 import type { OfficeSnapshot } from '../../../shared/types';
@@ -46,6 +48,8 @@ export interface WorldVisibility {
   tokensVisible: boolean;
   leaderboard: boolean;
   compactions: boolean;
+  /** Aviso por e-mail antes de retirar o prédio por inatividade; ausente = o padrão da conta (ligado). */
+  notifyInactivity?: boolean;
 }
 
 export interface WorldPlayer {
@@ -76,7 +80,8 @@ export interface WorldStatus {
   available: boolean;
   configured: boolean;
   state: WorldServerState;
-  account?: { emailMasked: string; access: WorldAccess };
+  /** `id`: o id da conta no mundo, quando o servidor local já sabe (vai no assunto do recurso por e-mail). */
+  account?: { emailMasked: string; access: WorldAccess; id?: string };
   player?: WorldPlayer;
   devices?: WorldDevice[];
   /** Último erro da conexão com o mundo (código), se houver. */
@@ -129,6 +134,12 @@ export interface WorldClient {
   leave(): Promise<WorldResult>;
   /** O tema escolhido em Aparência também vale para o prédio. */
   setTheme(theme: WorldThemeChoice): Promise<WorldResult>;
+  /** "Excluir conta", primeira etapa: o código de confirmação vai ao e-mail da conta. */
+  requestAccountDeletion(): Promise<WorldResult>;
+  /** "Excluir conta" com o código: a conta sai do mundo e este computador sai da conta. */
+  confirmAccountDeletion(body: { code: string }): Promise<WorldResult>;
+  /** "Baixar meus dados": o JSON da conta, já formatado para salvar (uma vez por dia). */
+  exportData(): Promise<WorldResult<string>>;
 }
 
 // ------------------------------------------------------------------ leitura defensiva
@@ -204,6 +215,7 @@ export function parseBuilding(v: unknown): WorldBuildingStatus | undefined {
   const ack = parseAckState(v.lastAck);
   if (ack) st.lastAck = ack;
   if ((STOPS as readonly unknown[]).includes(v.stopped)) st.stopped = v.stopped as WorldBuildingStop;
+  if (v.unverified === true) st.unverified = true;
   return st;
 }
 
@@ -240,7 +252,10 @@ export function parseWorldStatus(v: unknown): WorldStatus | null {
   if (!isObject(v) || !STATES.includes(v.state as WorldServerState)) return null;
   const out: WorldStatus = { available: v.available !== false, configured: v.configured === true, state: v.state as WorldServerState };
   const acc = v.account;
-  if (isObject(acc) && typeof acc.emailMasked === 'string') out.account = { emailMasked: acc.emailMasked, access: acc.access === 'approved' ? 'approved' : 'waiting' };
+  if (isObject(acc) && typeof acc.emailMasked === 'string') {
+    out.account = { emailMasked: acc.emailMasked, access: acc.access === 'approved' ? 'approved' : 'waiting' };
+    if (typeof acc.id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(acc.id)) out.account.id = acc.id;
+  }
   const p = v.player;
   if (isObject(p) && typeof p.name === 'string' && isObject(p.parts) && Array.isArray(p.traits)) {
     out.player = {
@@ -372,6 +387,17 @@ export class HttpWorldApi implements WorldClient {
   setTheme(theme: WorldThemeChoice) {
     return this.done(this.call('PUT', '/theme', { theme }));
   }
+  requestAccountDeletion() {
+    return this.done(this.call('POST', '/delete-account'));
+  }
+  confirmAccountDeletion(body: { code: string }) {
+    return this.done(this.call('POST', '/delete-account/confirm', body));
+  }
+  async exportData(): Promise<WorldResult<string>> {
+    const r = await this.call<unknown>('GET', '/export');
+    if (!r.ok) return r;
+    return isObject(r.data) ? { ok: true, data: `${JSON.stringify(r.data, null, 2)}\n` } : { ok: false, code: 'unknown', status: 200 };
+  }
 
   /** POST /pause e /resume → WorldStatus; vale o `building.paused` dele (sem o campo: o que foi pedido). */
   private async paused(path: string, expected: boolean): Promise<WorldResult<{ paused: boolean }>> {
@@ -399,6 +425,8 @@ interface FakeBuilding {
   left?: true;
   /** O "mundo" parou o prédio (goodbye), até retomar. */
   stopped?: WorldBuildingStop;
+  /** O "mundo" marcou o prédio como "não verificado". */
+  unverified?: true;
   last: WorldLastUplink | null;
   /** Quando acendeu (as visitas de mentira começam alguns segundos depois). */
   since: number;
@@ -420,6 +448,10 @@ interface FakeAccount {
   devices: WorldDevice[];
   /** O prédio: nasce com a conta aprovada e com personagem. */
   building?: FakeBuilding;
+  /** "Excluir conta" pedido (o código é FAKE_CODE). */
+  deleteRequested?: boolean;
+  /** Exportações dos dados (a segunda recebe 429, como a de verdade, uma por dia). */
+  exports?: number;
 }
 
 /**
@@ -503,6 +535,8 @@ export class FakeWorldApi implements WorldClient {
   private theme: WorldThemeChoice = 'auto';
   /** Código com que o "mundo" recusa as remessas (null: aceita). */
   private rejectCode: UplinkAckError | null = null;
+  /** O lastError do status (a conta excluída deixa `account_deleted` até entrar de novo). */
+  private lastError: WorldErrorCode | null = null;
 
   constructor(opts: FakeWorldOptions = {}) {
     this.delayMs = opts.delayMs ?? 450;
@@ -580,6 +614,23 @@ export class FakeWorldApi implements WorldClient {
     this.changed();
   }
 
+  /** O "mundo" marca (ou desmarca) o prédio da conta como "não verificado". */
+  markUnverified(on: boolean): void {
+    const b = this.current()?.building;
+    if (!b) return;
+    if (on) b.unverified = true;
+    else delete b.unverified;
+    this.changed();
+  }
+
+  /** O "mundo" entra (ou sai) em manutenção: o status traz `maintenance` e o prédio fica sem conexão até acabar. */
+  setMaintenance(on: boolean): void {
+    const b = this.current()?.building;
+    this.lastError = on ? 'maintenance' : null;
+    if (b && !b.paused && !b.stopped) b.connected = !on;
+    this.changed();
+  }
+
   /** A conexão com o mundo cai (o servidor de verdade tenta de novo sozinho; aqui, até pausar e retomar). */
   dropConnection(): void {
     const b = this.current()?.building;
@@ -647,6 +698,7 @@ export class FakeWorldApi implements WorldClient {
     if (b.stopped) out.stopped = b.stopped;
     // visitantes: só aceso e aberto a visitas (fechado, o mundo não manda nem o 0)
     if (b.connected && !b.paused && !b.left && !acc?.player?.visibility.closed) out.visitors = b.visitors ?? fakeVisitorsAt(this.now() - b.since);
+    if (b.unverified) out.unverified = true;
     return out;
   }
 
@@ -710,6 +762,7 @@ export class FakeWorldApi implements WorldClient {
         if (building) status.building = building;
       }
       if (this.theme !== 'auto') status.theme = this.theme;
+      if (this.lastError) status.lastError = this.lastError;
       return { ok: true, data: status };
     }, false);
   }
@@ -730,6 +783,7 @@ export class FakeWorldApi implements WorldClient {
       if (!acc || body.code !== FAKE_CODE) return FakeWorldApi.fail('invalid_code');
       acc.verified = true;
       this.session = { email: acc.email, deviceId: this.addDevice(acc).id };
+      this.lastError = null;
       return FakeWorldApi.ok();
     });
   }
@@ -742,6 +796,7 @@ export class FakeWorldApi implements WorldClient {
       if (!acc || acc.password !== body.password) return FakeWorldApi.fail('invalid_credentials', 401);
       if (!acc.verified) return FakeWorldApi.fail('email_not_verified', 403);
       this.session = { email, deviceId: this.addDevice(acc).id };
+      this.lastError = null;
       return FakeWorldApi.ok();
     });
   }
@@ -915,6 +970,54 @@ export class FakeWorldApi implements WorldClient {
       if (acc?.building?.connected) this.sendUplink(acc);
       return FakeWorldApi.ok();
     });
+  }
+
+  requestAccountDeletion(): Promise<WorldResult> {
+    return this.reply(() => {
+      const acc = this.current();
+      if (!acc) return FakeWorldApi.fail('not_logged_in', 401);
+      acc.deleteRequested = true;
+      return FakeWorldApi.ok();
+    }, false);
+  }
+
+  /** Com o código: a conta some (e o tema, como o world.json apagado), e o status fica `account_deleted`. */
+  confirmAccountDeletion(body: { code: string }): Promise<WorldResult> {
+    return this.reply(() => {
+      const acc = this.current();
+      if (!acc) return FakeWorldApi.fail('not_logged_in', 401);
+      if (!acc.deleteRequested || body.code !== FAKE_CODE) return FakeWorldApi.fail('invalid_code');
+      this.accounts.delete(acc.email);
+      this.session = null;
+      this.theme = 'auto';
+      this.lastError = 'account_deleted';
+      return FakeWorldApi.ok();
+    });
+  }
+
+  exportData(): Promise<WorldResult<string>> {
+    return this.reply(() => {
+      const acc = this.current();
+      if (!acc) return FakeWorldApi.fail('not_logged_in', 401);
+      acc.exports = (acc.exports ?? 0) + 1;
+      if (acc.exports > 1) return FakeWorldApi.fail('rate_limited', 429);
+      // O formato de WorldExport (protocol.ts), só com dados de mentira.
+      const data = {
+        format: 'habblaud-world-export',
+        version: 1,
+        exportedAt: new Date(this.now()).toISOString(),
+        account: { email: acc.email, access: acc.access, notifyInactivity: acc.player?.visibility.notifyInactivity !== false },
+        player: acc.player ?? null,
+        visibility: acc.player?.visibility ?? null,
+        devices: acc.devices.map((d) => ({ label: d.label, createdAt: d.createdAt, lastSeenAt: d.lastSeenAt, revokedAt: null })),
+        building: acc.building ? { floors: acc.building.last?.uplink.floors.length ?? 0, likes: 0 } : null,
+        likesGiven: [],
+        blocks: [],
+        reportsMade: [],
+        stampsReceived: [],
+      };
+      return { ok: true, data: `${JSON.stringify(data, null, 2)}\n` };
+    }, false);
   }
 }
 

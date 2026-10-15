@@ -741,34 +741,95 @@ Everything works without configuring anything. If you need to adjust something, 
 
 ## Habblaud World
 
-Habblaud World will be an online city where every Habblaud becomes a building, live. **It's in development and off by
-default:** without `HABBLAUD_WORLD_URL`, nothing shows up in the interface and nothing leaves your computer. The
-variables below (in `.env` or in the environment) are for testing against a world server:
+Habblaud World is an online pixel-art city where every Habblaud becomes a building, lit up live while the agents work,
+and everyone walks around with a character. **It's in development and off by default:** without `HABBLAUD_WORLD_URL`,
+nothing about the World shows up in the interface and nothing leaves your computer.
+
+**How to turn it on.** The variables below (in `.env` or in the environment) point Habblaud at a world server. The
+section shows up in **Settings › Habblaud World** and only works from this computer (never through the phone port); the
+account stays only here, in `~/.habblaud/world.json` (permission 600; in Docker, in the `/data` volume).
 
 | Variable | Default | What for |
 | --- | --- | --- |
 | `HABBLAUD_WORLD_URL` | — (off) | World server address, `https://` or `wss://` only (no path). |
 | `HABBLAUD_WORLD` | on | `0` hides everything about the World (routes and interface), even with the URL. |
-| `HABBLAUD_WORLD_DEV` | off | `1` accepts a local world server at `http://127.0.0.1:<port>` (`npm run dev` already does). |
+| `HABBLAUD_WORLD_DEV` | off | `1` accepts a local world server without TLS: `http://127.0.0.1:<port>` (`npm run dev` already does) or, from inside Docker, `http://host.docker.internal:<port>`. |
 
-With the account approved and the character created, your building goes up to the world on its own (over a WebSocket,
-only the anonymous list on the privacy page: floors, agents, statuses, avatars and rounded tokens); **Pause** turns it
-off right away and keeps the lot; **Leave the world** removes the building and frees the lot (the account and the
-character stay, and coming back creates a new building).
+**Privacy.** Nothing about your work leaves your computer. From the building, only this goes out: the theme, one floor
+per open room (with a random code that changes every day) and, for each agent, main or subagent, the tool, the status,
+the appearance, a drawn name and the band of tasks completed that day. Paths, project names, titles, commands,
+messages, code, cost, model, branch and your Claude account never leave. The full list, field by field (in Portuguese):
+[docs/world/privacidade.md](docs/world/privacidade.md). **See what was sent**, on the Your building card, shows the
+exact JSON of the last upload, with its size in bytes and the world's reply.
 
-The **World** button in the top bar swaps the office for the city: walk with the arrows/WASD or by clicking, each
-building's card shows floors, agents and status, and the minimap sits in the corner; paused or out of the world, your
-building stays dark, but you can still walk around the city. Near a building's door, **Enter (E)** takes you inside:
-the owner's live office, with rooms under made-up names and the agents in their current status, view only (no
-terminal, messages or permissions); you see "N visitors now" on yours. In demo mode (`?mock=1&world=approved&scene=city`,
-only fictional buildings and people): [the city](docs/screenshots/world-cidade.png), [a building's card](docs/screenshots/world-cartao.png),
-[the visit](docs/screenshots/world-visita.png) and [the visit panel](docs/screenshots/world-visita-painel.png).
+**Account and waitlist.** Sign up with e-mail and password (12 characters or more; leaked passwords are refused), a
+6-digit code by e-mail and accepting the Terms of Use and the Privacy Policy. Every account joins a waitlist, and access
+is granted in batches: an open Habblaud checks on its own every 30 minutes. Up to 3 computers per account
+(**Devices**, with revoke).
 
-The account stays only on this computer, in `~/.habblaud/world.json` (in Docker, in the `/data` volume), and the section
-only works from this computer. What leaves your computer and what never does (in Portuguese):
-[docs/world/privacidade.md](docs/world/privacidade.md). How the section looks, in demo mode (`?mock=1&world=logged_out`,
-`waiting` or `approved`; in Portuguese): [no account](docs/screenshots/world-sem-conta.png),
-[waitlist](docs/screenshots/world-lista-de-espera.png) and [character](docs/screenshots/world-personagem.png).
+**Character.** Player name (3 to 20 characters, unique in the world), the same appearance editor as the agents, 2 or 3
+personality traits and an intro line from the list (there's no free text in the world besides the name). You can create
+it while still on the waitlist.
+
+**Building.** With the account approved and the character created, the building goes up on its own (over a WebSocket)
+and follows the office live. The **Your building** card shows the connection, floors, agents, the last upload and, when
+the world refuses an upload or stops the building (old version, another computer, suspended or banned account), the
+reason; a suspended or banned account gets **Appeal by e-mail**. A building marked as "unverified" (implausible numbers,
+under review) stays out of leaderboards and highlights and shows **Dispute by e-mail**. When the world is under
+maintenance, the card says so, and Habblaud tries again on its own.
+
+**Visibility.** Live (floors, counters and each character's status) or **discreet mode** (only lit or dark and the
+number of floors); closed to visits; hide the country; the building's **tokens** only in bands (up to 100 thousand, 1
+million…), never the number or the cost, and they can be turned off; leaderboard and compactions only if you turn them
+on.
+
+**City.** The **World** button in the top bar swaps the office for the city: walk with the arrows/WASD or by clicking,
+each building's card shows floors, agents and status, and the minimap sits in the corner; paused or out of the world,
+your building stays dark, but you can still walk around the city. In demo mode (`?mock=1&world=approved&scene=city`,
+only fictional buildings and people): [the city](docs/screenshots/world-cidade.png) and
+[a building's card](docs/screenshots/world-cartao.png).
+
+**Visits.** Near a building's door, **Enter (E)** takes you inside: the owner's live office, with rooms under made-up
+names and the agents in their current status, view only (no terminal, messages or permissions, and nothing about the
+work); a building closed to visits can only be seen from outside. On yours, you see "N visitors now" (only the count,
+never who). In demo mode: [the visit](docs/screenshots/world-visita.png) and
+[the visit panel](docs/screenshots/world-visita-painel.png).
+
+**Pause, leave, delete.** **Pause** turns the building off right away and keeps the lot (after 30 days paused, it
+disappears from the map; 30 days later, it's removed). **Leave the world** removes the building and frees the lot; the
+account and the character stay, and coming back creates a new building. **Delete account** (in **Account and data**,
+with the code that arrives by e-mail) takes the building and the profile out of the world right away, deletes the
+account, likes, blocks, reports you made and devices from the database within 7 days (and from backups within 30) and
+deletes `world.json` from this computer. With no word from Habblaud for 7 days, the building disappears from the map
+and, 30 days later, is removed; an e-mail warns 3 days before (can be turned off in **Account and data**).
+
+**Export.** **Download my data** (in **Account and data**) saves `habblaud-world-dados.json` with what the world keeps
+about your account: e-mail, dates, character, visibility, devices, building, likes given, blocks and reports you made.
+Once a day.
+
+**Truthful data.** The World only works if the buildings are real: changing Habblaud to send invented or inflated
+floors, agents, statuses, tokens or characters breaks the Terms of Use and gets the account banned (the server checks
+the plausibility of every packet). Changing Habblaud for anything else stays free (MIT). How Habblaud talks to the World
+(in Portuguese): [shared/world/README.md](shared/world/README.md).
+
+**Testing with a local world server.** For World development, with the world server running on the same computer (for
+example, in Docker, published on port 4848):
+
+- Outside Docker: `HABBLAUD_WORLD_URL=http://127.0.0.1:4848 npm run dev`.
+- With Habblaud in Docker: in this folder's `.env`, `HABBLAUD_WORLD_URL=http://host.docker.internal:4848` and
+  `HABBLAUD_WORLD_DEV=1`; then `npm run docker:up`, which ends with the World line
+  (`Habblaud World: on: http://host.docker.internal:4848`, or why it stayed off). `docker-compose.yml` already maps
+  `host.docker.internal` to the host (`extra_hosts` with `host-gateway`; Docker Desktop already has the name). On
+  Linux, the world server must listen on an interface the container can reach (`0.0.0.0` or the Docker bridge IP): a
+  port published only on the host's `127.0.0.1` doesn't answer through `host-gateway`.
+- Without TLS, only with `HABBLAUD_WORLD_DEV=1` (or `--dev`) and only for `127.0.0.1` and `host.docker.internal`;
+  otherwise, only `https://` or `wss://`. The world server must accept the name used in the URL as its game host
+  (otherwise it answers `421`).
+
+How the section looks, in demo mode (`?mock=1&world=logged_out`, `waiting` or `approved`; in Portuguese):
+[no account](docs/screenshots/world-sem-conta.png), [waitlist](docs/screenshots/world-lista-de-espera.png),
+[character](docs/screenshots/world-personagem.png), [Your building](docs/screenshots/world-predio.png) and
+[what was sent](docs/screenshots/world-enviado.png).
 
 ## How it works
 

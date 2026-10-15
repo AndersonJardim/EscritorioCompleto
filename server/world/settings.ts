@@ -17,7 +17,8 @@
 // dispositivo. O token só sai daqui para o servidor do mundo (cabeçalho Authorization por HTTPS e a primeira mensagem
 // do WebSocket, `hello`, por TLS); nunca vai ao navegador, ao snapshot nem ao log. No Docker o arquivo fica no volume
 // habblaud-data (/data/world.json). O mesmo arquivo guarda o tema escolhido para o prédio (`theme`, que sobrevive a
-// sair da conta), a pausa do prédio (`paused`, da sessão) e a saída do mundo (`left`, da sessão).
+// sair da conta), a pausa do prédio (`paused`, da sessão) e a saída do mundo (`left`, da sessão). Excluir a conta apaga
+// o arquivo inteiro, tema junto (`erase`).
 import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { tr } from '../../shared/i18n';
@@ -148,6 +149,13 @@ export class WorldSettingsStore {
   clear(): void {
     this.session = undefined;
     this.write();
+  }
+
+  /** Conta excluída: apaga o world.json inteiro (a sessão e o tema). False se o disco recusou. */
+  erase(): boolean {
+    this.session = undefined;
+    this.theme = 'auto';
+    return this.write();
   }
 
   /** Grava o estado atual: sessão e tema; só o tema se não há sessão; nada (apaga o arquivo) se nem isso. */

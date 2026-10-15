@@ -4,6 +4,9 @@
 // o pacote `ws`), que responde ao `hello` como o servidor de verdade, confirma cada `uplink` e responde ao `ping`.
 // Fase 3: depois do DELETE /v1/me/building, os pacotes são recusados com `left` até o POST /v1/me/building/join; a
 // cidade (view, move...) é só registrada em `messages`: os testes mandam a área e os jogadores com `conn.send`.
+// Fase 6: excluir a conta (código FAKE_CODE; as conexões da conta recebem `goodbye: deleted`), exportar os dados (uma
+// vez por dia: a segunda vira 429), o aviso de inatividade na visibilidade e a manutenção (`options.maintenance`: 503
+// `maintenance` em toda rota REST e `goodbye: deploy` a cada `hello`).
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo, Socket } from 'node:net';
@@ -45,11 +48,21 @@ interface Account {
   left?: boolean;
   /** Quantas vezes voltou ao mundo (POST /v1/me/building/join). */
   buildingJoined?: number;
+  /** Aviso de inatividade por e-mail (ausente = nunca mandado; o servidor de verdade guarda true por padrão). */
+  notifyInactivity?: boolean;
+  /** POST /v1/me/delete pedido (o código é FAKE_CODE). */
+  deleteRequested?: boolean;
+  /** Exportações feitas (GET /v1/me/export; a segunda no mesmo "dia" recebe 429). */
+  exports?: number;
 }
 
 /** Uma conexão do WebSocket de mentira. */
 export interface FakeConnection {
   id: number;
+  /** Quando a conexão abriu (ms). */
+  openedAt: number;
+  /** E-mail da conta, depois do `welcome`. */
+  email?: string;
   /** Caminho e query do pedido de upgrade (o token nunca pode estar aqui). */
   url: string;
   headers: http.IncomingHttpHeaders;
@@ -103,7 +116,7 @@ export interface FakeWorld {
    * Login exige ALTCHA (simula "muitas tentativas"); `pauseDelayMs` atrasa só a resposta de /v1/me/building/pause;
    * `buildingFailures` faz as próximas N chamadas de /v1/me/building* responderem 503.
    */
-  options: { loginNeedsAltcha: boolean; altchaMax: number; delayMs: number; pauseDelayMs: number; buildingFailures: number };
+  options: { loginNeedsAltcha: boolean; altchaMax: number; delayMs: number; pauseDelayMs: number; buildingFailures: number; maintenance: boolean };
   close(): Promise<void>;
 }
 
@@ -118,7 +131,7 @@ export async function startFakeWorld(): Promise<FakeWorld> {
   const requests: FakeRequest[] = [];
   const accounts = new Map<string, Account>();
   const devices = new Map<string, { email: string; deviceId: string }>();
-  const options = { loginNeedsAltcha: false, altchaMax: 2_000, delayMs: 0, pauseDelayMs: 0, buildingFailures: 0 };
+  const options = { loginNeedsAltcha: false, altchaMax: 2_000, delayMs: 0, pauseDelayMs: 0, buildingFailures: 0, maintenance: false };
   let deviceSeq = 0;
 
   const send = (res: http.ServerResponse, status: number, body?: unknown) => {
@@ -181,6 +194,7 @@ export async function startFakeWorld(): Promise<FakeWorld> {
         body,
       });
       if (options.delayMs) await new Promise((ok) => setTimeout(ok, options.delayMs));
+      if (options.maintenance) return error(res, 503, 'maintenance');
       const b = body ?? {};
       const bearer = /^Bearer (\S+)$/.exec(req.headers.authorization ?? '')?.[1];
       const device = bearer ? devices.get(bearer) : undefined;
@@ -240,9 +254,48 @@ export async function startFakeWorld(): Promise<FakeWorld> {
       }
       if (method === 'PUT' && path === '/v1/me/visibility') {
         const a = accounts.get(device!.email)!;
-        const v = b as unknown as Visibility;
+        const { notifyInactivity, ...rest } = b as unknown as Visibility;
+        if (typeof notifyInactivity === 'boolean') a.notifyInactivity = notifyInactivity;
+        // Como um servidor antigo, só devolve o aviso depois que alguém o mandou.
+        const v: Visibility = { ...rest, ...(a.notifyInactivity !== undefined ? { notifyInactivity: a.notifyInactivity } : {}) };
         if (a.player) a.player.visibility = v;
         return send(res, 200, v);
+      }
+      if (method === 'POST' && path === '/v1/me/delete') {
+        accounts.get(device!.email)!.deleteRequested = true;
+        return send(res, 202, {});
+      }
+      if (method === 'POST' && path === '/v1/me/delete/confirm') {
+        const email = device!.email;
+        const a = accounts.get(email)!;
+        if (!a.deleteRequested || b.code !== FAKE_CODE) return error(res, 400, 'invalid_code');
+        accounts.delete(email);
+        for (const [t, d] of devices) if (d.email === email) devices.delete(t);
+        for (const c of ws.connections) if (c.open && c.email === email) c.goodbye('deleted');
+        return send(res, 204);
+      }
+      if (method === 'GET' && path === '/v1/me/export') {
+        const a = accounts.get(device!.email)!;
+        a.exports = (a.exports ?? 0) + 1;
+        if (a.exports > 1) {
+          res.setHeader('Retry-After', '86400');
+          return error(res, 429, 'rate_limited');
+        }
+        // No formato de WorldExport (protocol.ts), com o que o falso sabe.
+        return send(res, 200, {
+          format: 'habblaud-world-export',
+          version: 1,
+          exportedAt: '2026-10-15T12:00:00Z',
+          account: { id: 'acc_1', email: a.email, locale: a.locale, access: a.access, createdAt: '2026-10-15T00:00:00Z', notifyInactivity: a.notifyInactivity ?? true },
+          player: a.player ?? null,
+          visibility: a.player?.visibility ?? null,
+          devices: [...devices.values()].filter((d) => d.email === a.email).map((_d, i) => ({ label: `Dispositivo ${i + 1}`, createdAt: '2026-10-15T00:00:00Z', lastSeenAt: '2026-10-15T00:00:00Z', revokedAt: null })),
+          building: null,
+          likesGiven: [],
+          blocks: [],
+          reportsMade: [],
+          stampsReceived: [],
+        });
       }
       if (path.startsWith('/v1/me/building') && options.buildingFailures > 0) {
         options.buildingFailures--;
@@ -277,7 +330,7 @@ export async function startFakeWorld(): Promise<FakeWorld> {
       return error(res, 404, 'not_found');
     });
   });
-  const ws = attachFakeSocket(server, { accounts, devices });
+  const ws = attachFakeSocket(server, { accounts, devices, options });
   await new Promise<void>((ok) => server.listen(0, '127.0.0.1', ok));
   return {
     base: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
@@ -318,7 +371,7 @@ function frame(opcode: number, payload: Buffer): Buffer {
 
 function attachFakeSocket(
   server: http.Server,
-  world: { accounts: Map<string, Account>; devices: Map<string, { email: string; deviceId: string }> },
+  world: { accounts: Map<string, Account>; devices: Map<string, { email: string; deviceId: string }>; options: { maintenance: boolean } },
 ): FakeSocket {
   const fake: FakeSocket = {
     connections: [],
@@ -346,6 +399,7 @@ function attachFakeSocket(
     let account: Account | undefined;
     const conn: FakeConnection = {
       id: fake.connections.length + 1,
+      openedAt: Date.now(),
       url: req.url ?? '',
       headers: req.headers,
       open: true,
@@ -377,6 +431,8 @@ function attachFakeSocket(
       fake.hellos.push(hello);
       let answer = fake.options.hello;
       if (answer === 'silent') return;
+      // Em manutenção, o servidor de verdade manda todo mundo embora com `deploy` (e o cliente tenta de novo, com espera).
+      if (world.options.maintenance) return conn.goodbye('deploy');
       if (answer === 'auto') {
         const device = world.devices.get(String(hello.token));
         const account = device ? world.accounts.get(device.email) : undefined;
@@ -386,6 +442,7 @@ function attachFakeSocket(
       welcomed = true;
       const device = world.devices.get(String(hello.token));
       account = device ? world.accounts.get(device.email) : undefined;
+      conn.email = device?.email;
       conn.send({
         t: 'welcome',
         me: { id: 'acc_1', name: 'Ana Pixel', look: 'f', parts: {}, traits: ['games', 'cafeina'], intro: 'coffee', visibility: { ...VISIBILITY_DEFAULTS }, updatedAt: '2026-10-15T12:00:00Z' },
