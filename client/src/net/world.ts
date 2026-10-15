@@ -604,6 +604,14 @@ export class FakeWorldApi implements WorldClient {
     this.changed();
   }
 
+  /** O "mundo" entra (ou sai) em manutenção: o status traz `maintenance` e o prédio fica sem conexão até acabar. */
+  setMaintenance(on: boolean): void {
+    const b = this.current()?.building;
+    this.lastError = on ? 'maintenance' : null;
+    if (b && !b.paused && !b.stopped) b.connected = !on;
+    this.changed();
+  }
+
   /** A conexão com o mundo cai (o servidor de verdade tenta de novo sozinho; aqui, até pausar e retomar). */
   dropConnection(): void {
     const b = this.current()?.building;

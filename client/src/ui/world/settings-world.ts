@@ -803,9 +803,10 @@ export class WorldSettingsGroup {
         approved ? tr('Acesso liberado!') : tr('Você está na lista de espera. Estamos liberando o acesso aos poucos e avisamos por e-mail quando chegar a sua vez.'),
       ),
     );
-    // O mundo em manutenção (503 `maintenance`): o prédio tenta de novo sozinho, com espera.
+    // O mundo em manutenção (503 `maintenance`): o prédio tenta de novo sozinho, com espera. Com o cartão "Seu prédio",
+    // é ele que diz (no lugar do "Reconectando"); sem ele (lista de espera), um aviso próprio.
     const maintenance = s?.lastError === 'maintenance';
-    if (maintenance) out.push(para('ui-world__maint', worldErrorText('maintenance', 'status')));
+    if (maintenance && !approved) out.push(para('ui-world__maint', worldErrorText('maintenance', 'status')));
     // Aprovado: o cartão "Seu prédio" (conexão, contagens, pausar, o que foi enviado). Na espera, o lote vazio.
     if (approved) out.push(card.el);
     else

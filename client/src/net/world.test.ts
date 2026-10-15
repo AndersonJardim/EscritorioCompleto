@@ -562,6 +562,17 @@ describe('conta e dados (Fase 6)', () => {
     expect(await api.login({ email: FAKE_EMAIL, password: FAKE_PASSWORD })).toMatchObject({ ok: false, code: 'invalid_credentials' });
   });
 
+  it('FakeWorldApi: manutenção no status e o prédio sem conexão até acabar', async () => {
+    const api = new FakeWorldApi({ delayMs: 0, state: 'approved' });
+    api.setMaintenance(true);
+    let st = await api.status();
+    expect(st.ok && st.data).toMatchObject({ lastError: 'maintenance', building: { connected: false } });
+    api.setMaintenance(false);
+    st = await api.status();
+    expect(st.ok && st.data.lastError).toBeUndefined();
+    expect(st.ok && st.data.building?.connected).toBe(true);
+  });
+
   it('FakeWorldApi: o "mundo" marca o prédio como não verificado e o aviso de inatividade fica na visibilidade', async () => {
     const api = new FakeWorldApi({ delayMs: 0, state: 'approved' });
     api.markUnverified(true);
