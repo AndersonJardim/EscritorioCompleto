@@ -73,6 +73,25 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
 - **Transparência:** `docs/world/privacidade.md` lista cada campo do pacote e da conexão, com um teste que confere a
   página contra o `schema.json`; os testes da projeção conferem cada chave e que nenhum texto do escritório aparece no
   pacote. Os 60 nomes fictícios de andar ("Projeto Ipê", "Projeto Jade"...) ficam em `shared/world/`, traduzidos.
+- **A cidade (botão Mundo):** com a cena disponível (`meta.world.scene.available`), o botão **Mundo** ao lado do
+  Timelapse troca o escritório pela cidade do Habblaud World, em pixel art 3/4 no mesmo estilo: quarteirões de 6
+  lotes com calçada, meio-fio, postes, árvores, faixas de pedestres e a praça central com a fonte, os bancos e o
+  totem; lotes vazios viram jardins (parque, lago, pomar, café). Cada prédio tem a altura dos projetos abertos (até
+  12 andares desenhados, com placa "+N" acima disso), janelas acesas na proporção dos agentes trabalhando e piscando
+  em âmbar as de quem espera, o tema do dono (abóboras, teias e morcegos no Halloween; neve, luzes, festão e árvore no
+  Natal), tudo apagado com a tabuleta "Fechado" quando o prédio está fora, cor e acabamento pela semente do lote e a
+  placa com a bandeira, o nome do dono e os ❤️ likes. A fileira de baixo de cada quarteirão mostra a fachada com a
+  vitrine e a porta; a de cima, com a porta virada para o norte, mostra o telhado com a marquise da entrada e os
+  fundos. À noite os postes e as janelas acendem. Anda com setas/WASD (Shift corre) ou clicando (o A* do escritório);
+  a câmera segue, com o zoom de sempre e afastando até ver uns 200 prédios; **E** perto de uma porta avisa que visitar
+  vem em breve. Passar o mouse num prédio abre o cartão (dono, país, estado, andares até "24+", agentes trabalhando,
+  esperando e à toa ou "modo discreto", likes, "no mundo desde"); clicar num jogador abre o perfil (personagem, país,
+  traços, frase, prédio e likes recebidos). Os outros jogadores andam suaves (150 ms atrás), com o nome em cima, e
+  sentam no banco quando ficam ausentes. O minimapa no canto mostra os quarteirões em volta, mais acesos quanto mais
+  prédios ligados, e leva a câmera até onde você clicar. Esc ou **Escritório** voltam; Configurações continua aberta
+  na cidade, e o escritório para de desenhar enquanto isso. A cena é carregada só quando abre. No modo demonstração,
+  `?mock=1&world=approved&scene=city` abre uma cidade de mentira (20 prédios e jogadores fictícios);
+  `npm run shots:world` também fotografa `docs/screenshots/world-cidade.png` e `world-cartao.png`.
 
 ## [0.11.0] - 2026-10-13
 
