@@ -2888,4 +2888,6 @@ export const EN: Readonly<Record<string, string>> = {
   "Habblaud World: sem conexão com o servidor do mundo; tentando de novo.": "Habblaud World: no connection to the world server; trying again.",
   "Habblaud World: o prédio passou dos limites do mundo; {0} andar(es) e {1} agente(s) ficaram de fora.": "Habblaud World: the building went over the world's limits; {0} floor(s) and {1} agent(s) were left out.",
   "Não foi possível gravar {0} ({1}).": "Couldn't write {0} ({1}).",
+  "esperado {theme: \"auto\", \"none\", \"halloween\" ou \"christmas\"}": "expected {theme: \"auto\", \"none\", \"halloween\" or \"christmas\"}",
+  "Habblaud World: o servidor do mundo não confirmou a pausa ou a retomada do prédio ({0}).": "Habblaud World: the world server didn't confirm pausing or resuming the building ({0}).",
 };

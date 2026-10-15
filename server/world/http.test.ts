@@ -20,6 +20,7 @@ import { WorldClient } from './client';
 import { createWorldRoutes } from './http';
 import { WorldService } from './service';
 import { WorldSettingsStore } from './settings';
+import { BuildingUplink } from './uplink';
 
 setQuiet(true);
 
@@ -36,6 +37,9 @@ const CHARACTER = {
 interface Harness {
   base: string;
   hub: Hub;
+  office: Office;
+  uplink?: BuildingUplink;
+  lastFile: string;
   service?: WorldService;
   store: WorldSettingsStore;
   file: string;
@@ -50,7 +54,7 @@ afterEach(async () => {
 });
 
 /** A porta local do Habblaud (guard + API), com o mundo como no server/index.ts. */
-async function start(opts: { world?: 'off' | 'no-url' | 'on'; terminal?: boolean; meTtlMs?: number } = {}): Promise<Harness> {
+async function start(opts: { world?: 'off' | 'no-url' | 'on'; terminal?: boolean; meTtlMs?: number; uplink?: boolean } = {}): Promise<Harness> {
   const mode = opts.world ?? 'on';
   const tmp = tempDir();
   closers.push(tmp.cleanup);
@@ -86,6 +90,30 @@ async function start(opts: { world?: 'off' | 'no-url' | 'on'; terminal?: boolean
   const hub = new Hub(office, { throttleMs: 0 });
   hub.start();
   closers.push(() => hub.stop());
+  // O prédio, como no server/index.ts (com esperas curtas).
+  const lastFile = join(tmp.dir, 'data', 'world-last-uplink.json');
+  const uplink =
+    opts.uplink && service && fake
+      ? new BuildingUplink({
+          url: worldSocketUrl(fake.base),
+          version: '9.9.9',
+          build: () => ({ commit: 'unknown', dirty: false }),
+          locale: () => 'pt-BR',
+          store,
+          canAct: () => terminal,
+          agents: () => office.list(),
+          subscribe: (cb) => office.onChange(cb),
+          lastFile,
+          onGoodbye: (r) => service.goodbye(r),
+          onChange: () => office.markDirty(),
+          timing: { debounceMs: 20, minGapMs: 60, pingMs: 5_000, backoffMinMs: 20, backoffMaxMs: 60, closeWaitMs: 500 },
+        })
+      : undefined;
+  if (uplink && service) {
+    service.attachUplink(uplink);
+    uplink.start();
+    closers.push(() => uplink.stop());
+  }
   const api = createApiHandler({
     office,
     hub,
@@ -107,7 +135,7 @@ async function start(opts: { world?: 'off' | 'no-url' | 'on'; terminal?: boolean
   });
   await new Promise<void>((ok) => server.listen(0, '127.0.0.1', ok));
   closers.push(() => new Promise<void>((ok) => server.close(() => ok())));
-  return { base: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, hub, service, store, file, world: fake };
+  return { base: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, hub, office, uplink, lastFile, service, store, file, world: fake };
 }
 
 /** Todas as respostas locais do teste, para conferir que o token nunca sai. */
@@ -383,7 +411,7 @@ describe('de ponta a ponta com o servidor do mundo de mentira', () => {
     await call(s.base, 'POST', '/api/world/verify', { email: EMAIL, code: FAKE_CODE });
     await call(s.base, 'PUT', '/api/world/character', CHARACTER);
     await s.world!.close();
-    const st = await call(s.base, 'GET', '/api/world/status');
+    const st = await call(s.base, 'GET', '/api/world/status?refresh=1');
     expect(st.body).toMatchObject({ state: 'waiting', account: { access: 'waiting' }, player: { name: 'Ana Pixel' }, lastError: 'network' });
     const out = await call(s.base, 'POST', '/api/world/logout', {});
     expect(out.body).toEqual({ available: true, configured: true, state: 'logged_out', lastError: 'network' });
@@ -454,5 +482,117 @@ describe('de ponta a ponta com o servidor do mundo de mentira', () => {
     await call(s.base, 'POST', '/api/world/verify', { email: EMAIL, code: FAKE_CODE });
     const again = new WorldSettingsStore(s.file);
     expect(again.load()).toMatchObject({ deviceId: 'dev_1', email: EMAIL, access: 'waiting' });
+  });
+});
+
+async function waitFor(cond: () => boolean, what: string, ms = 3_000): Promise<void> {
+  const until = Date.now() + ms;
+  while (!cond()) {
+    if (Date.now() > until) throw new Error(`esperando: ${what}`);
+    await new Promise((ok) => setTimeout(ok, 5));
+  }
+}
+
+describe('o prédio no mundo (uplink) pelas rotas', () => {
+  it('aprovado com personagem: o prédio sobe; status, snapshot, última remessa, tema, pausa e retomada', async () => {
+    seen.length = 0;
+    const s = await start({ uplink: true });
+    const w = s.world!;
+    s.office.addMain({ id: '.claude:4242', account: '.claude', sessionId: 'sess-x', cwd: '/Users/ana/projeto-secreto', role: 'Agente principal', startedAt: Date.now(), status: 'working' });
+    await call(s.base, 'POST', '/api/world/register', { email: EMAIL, password: PASSWORD });
+    await call(s.base, 'POST', '/api/world/verify', { email: EMAIL, code: FAKE_CODE });
+    // Na lista de espera, com ou sem personagem: nada de prédio.
+    await call(s.base, 'PUT', '/api/world/character', CHARACTER);
+    expect((await call(s.base, 'GET', '/api/world/status')).body.building).toBeUndefined();
+    expect(w.ws.connections).toHaveLength(0);
+
+    // Aprovada: o prédio conecta sozinho e manda o pacote.
+    w.accounts.get(EMAIL)!.access = 'approved';
+    expect((await call(s.base, 'GET', '/api/world/status?refresh=1')).body.state).toBe('approved');
+    await waitFor(() => w.ws.uplinks.length === 1 && !!s.uplink!.status().lastAck, 'primeira remessa');
+    const st = (await call(s.base, 'GET', '/api/world/status')).body;
+    expect(st.building).toEqual({ connected: true, paused: false, floors: 1, agents: 1, lastUplinkAt: expect.any(Number), lastAck: { ok: true } });
+    expect(s.hub.current().meta.world?.building).toEqual({ connected: true, paused: false, floors: 1, agents: 1, lastUplinkAt: st.building.lastUplinkAt });
+
+    // Ver o que foi enviado: o mesmo objeto que chegou ao servidor.
+    const last = (await call(s.base, 'GET', '/api/world/last-uplink')).body;
+    expect(last).toEqual({ at: st.building.lastUplinkAt, bytes: w.ws.uplinks[0].bytes, uplink: w.ws.uplinks[0].uplink, ack: { ok: true, at: expect.any(Number), bytes: w.ws.uplinks[0].bytes } });
+    expect(JSON.stringify(last)).not.toMatch(/projeto-secreto|Users|\.claude|sess-x/);
+    expect(statSync(s.lastFile).mode & 0o777).toBe(0o600);
+
+    // Tema: grava e manda o pacote com o tema novo; fora da lista, 422.
+    expect((await call(s.base, 'PUT', '/api/world/theme', { theme: 'christmas' })).body).toEqual({ theme: 'christmas' });
+    await waitFor(() => w.ws.uplinks.some((u) => u.uplink.theme === 'christmas'), 'tema no pacote');
+    expect((await call(s.base, 'GET', '/api/world/status')).body.theme).toBe('christmas');
+    expect(JSON.parse(readFileSync(s.file, 'utf8')).theme).toBe('christmas');
+    const bad = await call(s.base, 'PUT', '/api/world/theme', { theme: 'pascoa' });
+    expect(bad.status).toBe(422);
+    expect(bad.body.error.code).toBe('invalid');
+
+    // Pausar: quando a resposta chega, a conexão já fechou; o servidor do mundo é avisado.
+    const paused = await call(s.base, 'POST', '/api/world/pause', {});
+    expect(paused.status).toBe(200);
+    expect(w.ws.open).toHaveLength(0);
+    expect(paused.body.building).toMatchObject({ connected: false, paused: true });
+    expect(JSON.parse(readFileSync(s.file, 'utf8')).paused).toBe(true);
+    await waitFor(() => w.requests.some((r) => r.path === '/v1/me/building/pause'), 'pause no servidor');
+    expect(s.hub.current().meta.world?.building).toMatchObject({ connected: false, paused: true });
+
+    // Retomar: avisa o servidor e reconecta, com o pacote inteiro.
+    const sent = w.ws.uplinks.length;
+    const resumed = await call(s.base, 'POST', '/api/world/resume', {});
+    expect(resumed.status).toBe(200);
+    expect(resumed.body.building.paused).toBe(false);
+    await waitFor(() => w.ws.uplinks.length === sent + 1, 'de volta');
+    expect(w.requests.map((r) => r.path)).toContain('/v1/me/building/resume');
+    expect(w.ws.connections).toHaveLength(2);
+
+    // O token nunca aparece do lado de cá.
+    const token = s.store.get()!.token;
+    for (const text of [...seen, JSON.stringify(s.hub.current()), readFileSync(s.lastFile, 'utf8')]) expect(text).not.toContain(token);
+
+    // Sair: fecha o prédio e a última remessa some.
+    await call(s.base, 'POST', '/api/world/logout', {});
+    await waitFor(() => w.ws.open.length === 0, 'fechou');
+    expect((await call(s.base, 'GET', '/api/world/last-uplink')).body).toEqual({});
+    expect(existsSync(s.lastFile)).toBe(false);
+    // O tema escolhido fica.
+    expect(JSON.parse(readFileSync(s.file, 'utf8'))).toEqual({ theme: 'christmas' });
+  });
+
+  it('sem conta: tema grava, pausa e retomada pedem a conta, última remessa vazia', async () => {
+    const s = await start({ uplink: true });
+    expect((await call(s.base, 'PUT', '/api/world/theme', { theme: 'halloween' })).body).toEqual({ theme: 'halloween' });
+    expect(JSON.parse(readFileSync(s.file, 'utf8'))).toEqual({ theme: 'halloween' });
+    for (const path of ['/api/world/pause', '/api/world/resume']) {
+      const r = await call(s.base, 'POST', path, {});
+      expect(r.status, path).toBe(401);
+      expect(r.body.error.code).toBe('not_logged_in');
+    }
+    expect((await call(s.base, 'GET', '/api/world/last-uplink')).body).toEqual({});
+    expect((await call(s.base, 'GET', '/api/world/status')).body).toEqual({ available: true, configured: true, state: 'logged_out', theme: 'halloween' });
+  });
+
+  it('aprovada sem personagem: sem building no status nem no snapshot', async () => {
+    const s = await start({ uplink: true });
+    await call(s.base, 'POST', '/api/world/register', { email: EMAIL, password: PASSWORD });
+    await call(s.base, 'POST', '/api/world/verify', { email: EMAIL, code: FAKE_CODE });
+    s.world!.accounts.get(EMAIL)!.access = 'approved';
+    const st = (await call(s.base, 'GET', '/api/world/status?refresh=1')).body;
+    expect(st.state).toBe('approved');
+    expect(st.building).toBeUndefined();
+    expect(s.hub.current().meta.world?.building).toBeUndefined();
+    expect(s.world!.ws.connections).toHaveLength(0);
+  });
+
+  it('sem a trava do terminal: tema, pausa e retomada recusam; status e última remessa respondem', async () => {
+    const s = await start({ uplink: true, terminal: false });
+    for (const [method, path] of [['PUT', '/api/world/theme'], ['POST', '/api/world/pause'], ['POST', '/api/world/resume']] as const) {
+      const r = await call(s.base, method, path, method === 'PUT' ? { theme: 'none' } : {});
+      expect(r.status, path).toBe(403);
+      expect(r.body.error.code).toBe('terminal_off');
+    }
+    expect((await call(s.base, 'GET', '/api/world/last-uplink')).status).toBe(200);
+    expect((await call(s.base, 'GET', '/api/world/status')).status).toBe(200);
   });
 });

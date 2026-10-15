@@ -35,6 +35,8 @@ interface Account {
   player?: Player;
   locale: string;
   invite?: string;
+  /** Prédio pausado pelo dono (POST /v1/me/building/pause). */
+  buildingPaused?: boolean;
 }
 
 /** Uma conexão do WebSocket de mentira. */
@@ -229,6 +231,11 @@ export async function startFakeWorld(): Promise<FakeWorld> {
         const v = b as unknown as Visibility;
         if (a.player) a.player.visibility = v;
         return send(res, 200, v);
+      }
+      if (method === 'POST' && (path === '/v1/me/building/pause' || path === '/v1/me/building/resume')) {
+        const a = accounts.get(device!.email)!;
+        a.buildingPaused = path.endsWith('/pause');
+        return send(res, 200, { state: a.buildingPaused ? 'paused' : 'online' });
       }
       const revoke = /^\/v1\/me\/devices\/([^/]+)\/revoke$/.exec(path);
       if (method === 'POST' && revoke) {

@@ -6,7 +6,7 @@ import http from 'node:http';
 import { join } from 'node:path';
 import { codexDirsRefused, isDefaultDir } from './accounts/detect';
 import { AccountsService } from './accounts/service';
-import { isTruthy, loadConfig, messagesOffReason, terminalOffReason } from './config';
+import { isTruthy, loadConfig, messagesOffReason, terminalOffReason, worldSocketUrl } from './config';
 import { createApiHandler, sendJson } from './http/app';
 import { createRequestGuard, isLoopbackHost } from './http/guard';
 import { createRemoteGate, isRemoteRequest, loadSecret, RemoteSessions, startRemoteListener, type RemoteListener } from './http/remote';
@@ -37,9 +37,10 @@ import { ClaudeWatcher } from './sources/watcher';
 import { discoverCodexDirs } from './sources/codex/accounts';
 import { CodexHistory } from './sources/codex/history';
 import { CodexSource } from './sources/codex/source';
-import { createBuildReader } from './build';
+import { createBuildReader, readBuildInfo } from './build';
 import { UpdateChecker } from './updates/checker';
-import { tr } from '../shared/i18n';
+import { getLocale, tr } from '../shared/i18n';
+import type { WorldLocale } from '../shared/world/protocol';
 import { createCliRunner, createOpener, SpawnService } from './spawn/spawn';
 import { runnableClaudeBin } from './claude-bin';
 import { AttachmentStore } from './spawn/attachments';
@@ -53,6 +54,8 @@ import { WorldClient } from './world/client';
 import { createWorldRoutes } from './world/http';
 import { WorldService } from './world/service';
 import { WorldSettingsStore } from './world/settings';
+import { BuildingTokens } from './world/tokens';
+import { BuildingUplink } from './world/uplink';
 
 const config = loadConfig();
 const startedAt = Date.now();
@@ -141,6 +144,30 @@ const hub = new Hub(office, {
 // "Meu dia": amostra o escritório a cada segundo e persiste em <dataDir>/stats/ (ver history/daystats.ts).
 const stats = new DayStatsService({ dir: join(config.dataDir, 'stats'), snapshot: () => hub.current() });
 stats.load();
+// O prédio no Habblaud World (world/uplink.ts): só com HABBLAUD_WORLD_URL. Conecta sozinho com a conta aprovada, o
+// personagem criado, a trava do terminal e sem pausa; o pacote sai só da projeção (shared/world/projection.ts).
+const worldTokens = new BuildingTokens({ stats });
+const worldUplink =
+  world && config.world.url
+    ? new BuildingUplink({
+        url: worldSocketUrl(config.world.url),
+        version: config.version,
+        build: () => {
+          const b = readBuildInfo(config.rootDir);
+          return { commit: b.commit, dirty: b.dirty };
+        },
+        locale: () => getLocale() as WorldLocale,
+        store: worldStore,
+        canAct: () => config.terminal,
+        agents: () => office.list(),
+        subscribe: (cb) => office.onChange(cb),
+        tokens: () => worldTokens.read(),
+        lastFile: join(config.dataDir, 'world-last-uplink.json'),
+        onGoodbye: (reason) => world.goodbye(reason),
+        onChange: () => office.markDirty(),
+      })
+    : undefined;
+if (world && worldUplink) world.attachUplink(worldUplink);
 // Terminal: só existe com bind local (ver terminalOffReason em config.ts).
 // Cada agente com o parser da ferramenta dele (o do Claude Code por padrão).
 const terminals = config.terminal
@@ -284,6 +311,7 @@ permissions?.start();
 messages?.start();
 stats.start();
 updates.start();
+worldUplink?.start();
 const ticker = setInterval(() => {
   try {
     office.tick();
@@ -509,6 +537,7 @@ function shutdown(signal: string): void {
   messages?.stop();
   ptys?.stopAll();
   updates.stop();
+  worldUplink?.stop();
   world?.stop();
   names.flush();
   void closeVite?.();

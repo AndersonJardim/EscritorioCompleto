@@ -26,6 +26,8 @@ import {
   WORLD_ACCESS,
   WORLD_LOCALES,
   type AltchaChallenge,
+  type BuildingState,
+  type BuildingStateResponse,
   type DeviceAuth,
   type DeviceInfo,
   type EmailAltchaRequest,
@@ -162,6 +164,13 @@ export function parseMe(raw: unknown): MeResponse | undefined {
 
 const none = (): Record<string, never> => ({});
 
+/** `{state}` das rotas do prédio; um estado que esta versão não conhece passa como veio (só texto curto). */
+export function parseBuildingState(raw: unknown): BuildingStateResponse | undefined {
+  const state = obj(raw)?.state;
+  if (typeof state !== 'string' || !/^[a-z_]{1,32}$/.test(state)) return undefined;
+  return { state: state as BuildingState };
+}
+
 export class WorldClient {
   private readonly base: string;
   private readonly fetchImpl: typeof fetch;
@@ -215,6 +224,16 @@ export class WorldClient {
 
   putVisibility(token: string, body: Visibility): Promise<WorldResult<Visibility>> {
     return this.call('PUT', '/v1/me/visibility', { token, body, parse: parseVisibility });
+  }
+
+  /** Pausa o prédio no mundo (apagado na hora para todos). */
+  pauseBuilding(token: string): Promise<WorldResult<BuildingStateResponse>> {
+    return this.call('POST', '/v1/me/building/pause', { token, parse: parseBuildingState });
+  }
+
+  /** Retoma o prédio no mundo. */
+  resumeBuilding(token: string): Promise<WorldResult<BuildingStateResponse>> {
+    return this.call('POST', '/v1/me/building/resume', { token, parse: parseBuildingState });
   }
 
   revokeDevice(token: string, id: string): Promise<WorldResult<Record<string, never>>> {

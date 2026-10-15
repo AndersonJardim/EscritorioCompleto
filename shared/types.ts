@@ -368,8 +368,9 @@ export interface OfficeSnapshot {
     /**
      * Habblaud World (server/world/): `enabled` = a seção aparece (HABBLAUD_WORLD não é 0 e HABBLAUD_WORLD_URL é válida;
      * sem a URL o recurso fica desligado e nada do World aparece); `configured` = HABBLAUD_WORLD_URL válida; `state` = a
-     * conta neste computador. Nada da conta além disso (o snapshot também vai ao celular e à linha do tempo). Ausente
-     * nos testes e no timelapse.
+     * conta neste computador; `building` (aditivo, só com a conta aprovada e o personagem criado) = o resumo do prédio
+     * no mundo: conectado, pausado, andares e agentes da última remessa e a hora dela. Nada da conta além disso (o
+     * snapshot também vai ao celular e à linha do tempo). Ausente nos testes e no timelapse.
      */
     world?: WorldMeta;
   };

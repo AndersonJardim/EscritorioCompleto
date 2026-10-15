@@ -21,6 +21,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { parseAppearanceParts } from '../../shared/appearance';
 import { tr } from '../../shared/i18n';
+import { isWorldThemeChoice } from '../../shared/world/api';
 import { isIntroId } from '../../shared/world/intro';
 import { parsePlayerName } from '../../shared/world/names-rules';
 import { PASSWORD_LIMITS, type PlayerInput } from '../../shared/world/protocol';
@@ -197,6 +198,39 @@ export function createWorldRoutes(service: WorldService): (req: IncomingMessage,
       method: 'GET',
       account: true,
       run: async (_req, res) => sendOutcome(res, await service.devices()),
+    },
+    // O tema de Configurações › Aparência, para o prédio no mundo (vale com ou sem conta).
+    '/api/world/theme': {
+      method: 'PUT',
+      account: true,
+      run: async (req, res) => {
+        const b = await readBody(req);
+        if (!isWorldThemeChoice(b.theme)) throw new BodyError(422, 'invalid', tr('esperado {theme: "auto", "none", "halloween" ou "christmas"}'));
+        sendOutcome(res, service.setTheme(b.theme));
+      },
+    },
+    // Pausar fecha o uplink antes de responder.
+    '/api/world/pause': {
+      method: 'POST',
+      account: true,
+      run: async (req, res) => {
+        await readBody(req);
+        sendOutcome(res, await service.pause());
+      },
+    },
+    '/api/world/resume': {
+      method: 'POST',
+      account: true,
+      run: async (req, res) => {
+        await readBody(req);
+        sendOutcome(res, service.resume());
+      },
+    },
+    // "Ver o que foi enviado": o pacote exato da última remessa, os bytes e a resposta do servidor ({} se nada).
+    '/api/world/last-uplink': {
+      method: 'GET',
+      account: false,
+      run: async (_req, res) => sendJson(res, 200, service.lastUplink() ?? {}),
     },
   };
 

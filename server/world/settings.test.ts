@@ -63,6 +63,39 @@ describe('WorldSettingsStore', () => {
     expect(existsSync(file)).toBe(false);
   });
 
+  it('tema: fica no world.json com ou sem sessão e sobrevive a sair; só o tema não é arquivo estragado', () => {
+    const { file, store: s } = store();
+    expect(s.getTheme()).toBe('auto');
+    s.setTheme('halloween');
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ theme: 'halloween' });
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+    s.save(SESSION);
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ ...SESSION, updatedAt: 1_000, theme: 'halloween' });
+    s.clear();
+    expect(s.get()).toBeUndefined();
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ theme: 'halloween' });
+    setQuiet(false);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const again = new WorldSettingsStore(file);
+    expect(again.load()).toBeUndefined();
+    expect(again.getTheme()).toBe('halloween');
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+    // De volta ao automático e sem sessão: o arquivo some.
+    again.setTheme('auto');
+    expect(existsSync(file)).toBe(false);
+  });
+
+  it('pausa: fica na sessão e sai com undefined', () => {
+    const { file, store: s } = store();
+    s.save(SESSION);
+    s.update({ paused: true });
+    expect(new WorldSettingsStore(file).load()?.paused).toBe(true);
+    s.update({ paused: undefined });
+    expect(JSON.parse(readFileSync(file, 'utf8'))).not.toHaveProperty('paused');
+    expect(new WorldSettingsStore(file).load()?.paused).toBeUndefined();
+  });
+
   it('arquivo estragado ou fora do formato: ignorado, e o log nunca mostra o conteúdo', () => {
     const { file, dir, store: s } = store();
     mkdirSync(dir, { recursive: true });

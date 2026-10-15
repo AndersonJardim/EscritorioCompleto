@@ -117,3 +117,44 @@ describe('WorldService: lista de espera', () => {
     expect(stopped.meFn).not.toHaveBeenCalled();
   });
 });
+
+describe('WorldService: status barato', () => {
+  it('sem refresh: responde da memória e relê em segundo plano quando venceu; com refresh, espera', async () => {
+    const t = tempDir();
+    try {
+      const store = new WorldSettingsStore(join(t.dir, 'world.json'));
+      store.save({ deviceId: 'dev1', token: TOKEN, email: 'ana@exemplo.com', access: 'approved' });
+      let now = 1_000_000;
+      let release: (() => void) | undefined;
+      let slow = false;
+      const meFn = vi.fn(async () => {
+        if (slow) await new Promise<void>((ok) => (release = ok));
+        return me('approved');
+      });
+      const client = { me: meFn } as unknown as WorldClient;
+      const service = new WorldService({ config: { enabled: true, dev: true, url: 'http://127.0.0.1:1' }, terminal: true, store, client, now: () => now, meTtlMs: 30_000 });
+      // Nada guardado ainda: espera a primeira leitura.
+      expect((await service.status()).account?.emailMasked).toBe('a***@exemplo.com');
+      expect(meFn).toHaveBeenCalledTimes(1);
+      // Dentro do prazo: nem toca na rede.
+      now += 10_000;
+      await service.status();
+      expect(meFn).toHaveBeenCalledTimes(1);
+      // Venceu e o servidor demora: responde na hora com o que tem e relê por trás.
+      now += 30_000;
+      slow = true;
+      const st = await service.status();
+      expect(st.state).toBe('approved');
+      expect(meFn).toHaveBeenCalledTimes(2);
+      release!();
+      await new Promise((ok) => setImmediate(ok));
+      // Com refresh, espera a leitura.
+      slow = false;
+      await service.status(true);
+      expect(meFn).toHaveBeenCalledTimes(3);
+      service.stop();
+    } finally {
+      t.cleanup();
+    }
+  });
+});
