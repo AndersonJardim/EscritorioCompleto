@@ -44,6 +44,9 @@ export function createWorld(canvas: HTMLCanvasElement, store: OfficeStore): Worl
   let raf = 0;
   let lastTs = 0;
   let hiddenAt = 0;
+  /** Escritório fora da tela (cidade aberta): sem laço de desenho nem teclado da câmera. */
+  let suspended = false;
+  let suspendedAt = 0;
   let userMoved = false;
   let framed = false;
   let lastCols = -1;
@@ -194,6 +197,7 @@ export function createWorld(canvas: HTMLCanvasElement, store: OfficeStore): Worl
     },
     overview: () => overview(true),
     zoomStep,
+    active: () => !suspended,
   });
 
   // ------------------------------------------------------------------ dados
@@ -273,6 +277,7 @@ export function createWorld(canvas: HTMLCanvasElement, store: OfficeStore): Worl
   };
 
   const onVisibility = () => {
+    if (suspended) return;
     if (document.hidden) {
       hiddenAt = Date.now();
       return;
@@ -396,6 +401,22 @@ export function createWorld(canvas: HTMLCanvasElement, store: OfficeStore): Worl
     onSound: (cb) => {
       soundCbs.add(cb);
       return () => void soundCbs.delete(cb);
+    },
+    setSuspended: (on) => {
+      if (on === suspended) return;
+      suspended = on;
+      if (on) {
+        cancelAnimationFrame(raf);
+        suspendedAt = Date.now();
+        setHover(null);
+        mouse = null;
+        return;
+      }
+      lastTs = 0;
+      if (suspendedAt && Date.now() - suspendedAt > 5000) sim.fastForward(playback ? worldNow : Date.now());
+      suspendedAt = 0;
+      hiddenAt = 0;
+      raf = requestAnimationFrame(loop);
     },
     destroy: () => {
       cancelAnimationFrame(raf);

@@ -39,6 +39,7 @@ import { TopBar } from './topbar';
 import { UpdateBanner } from './update';
 import { InviteCard } from './world/invite-card';
 import { WorldChip } from './world/world-chip';
+import { SceneSwitch, type CitySceneHost } from './world/scene-switch';
 import { worldSource } from '../net/world';
 import { FreeArea } from './viewport';
 import { tr } from '../../../shared/i18n';
@@ -54,7 +55,7 @@ function isTypingTarget(t: EventTarget | null): boolean {
   return t.isContentEditable || t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement;
 }
 
-export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi): void {
+export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi, city?: CitySceneHost): void {
   const storage = safeLocalStorage();
   let prefs: UiPrefs = loadPrefs(storage);
   let selection: Selection = world.getSelection();
@@ -76,6 +77,9 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi)
   let timelapse: TimelapsePlayer;
   /** A seleção em curso partiu da UI (lista, feed, aviso...), não de um clique no canvas. */
   let uiSelecting = false;
+  /** Botão Mundo e a ida e volta da cidade (só quando app.ts monta a cena). */
+  let scene: SceneSwitch | null = null;
+  const inCity = () => !!scene?.inCity;
 
   const ctx: UiContext = {
     store,
@@ -117,6 +121,11 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi)
       if (selection) ctx.select(selection, { focus: true });
     },
     camera(action) {
+      if (inCity() && city) {
+        if (action === 'overview') city.recenter();
+        else city.zoomBy(action === 'zoomIn' ? 1.25 : 1 / 1.25);
+        return;
+      }
       area.clearIntent();
       if (action === 'overview') world.overview();
       else world.zoomBy(action === 'zoomIn' ? 1.25 : 1 / 1.25);
@@ -226,6 +235,20 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi)
   // Chip "🏙️ no mundo" / "⏸ pausado" na barra do topo (conta aprovada; nunca pela porta do celular).
   const worldChip = new WorldChip(ctx, hw, () => settings.showWorld(topbar.settingsBtn, 'home'));
   topbar.addStatus(worldChip.el);
+  // Botão Mundo: troca o escritório pela cidade (a cena vem de app.ts, carregada sob demanda).
+  if (city) {
+    scene = new SceneSwitch(ctx, hw, city, () => {
+      const on = inCity();
+      root.classList.toggle('is-city', on);
+      if (on) {
+        if (terminal.isOpen) terminal.close();
+        if (pty.isOpen) pty.close();
+        if (ctx.isNarrow() && panels.sidebar) ctx.togglePanel('sidebar', false);
+      }
+      invalidate();
+    });
+    topbar.addSceneButton(scene.button);
+  }
   help = new HelpDialog();
   const day = new DayLauncher(ctx, (el) => root.append(el));
   topbar.addPanelButton(day.button);
@@ -252,6 +275,7 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi)
   drawer.onLayoutChange = () => applyLayout();
 
   const components: UiComponent[] = [topbar, sidebar, drawer, terminal, pty, history, deliveries, feed, toasts, settings, empty, banner, tip, notifier, splash, timelapse, sound, day, updateToaster, invite, worldChip];
+  if (scene) components.push(scene);
 
   // ---------------------------------------------------------------- renderização agrupada por quadro
   let rafId = 0;
@@ -333,6 +357,18 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi)
 
   function onKey(e: KeyboardEvent): void {
     if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+    // Na cidade os atalhos do escritório ficam desligados: Esc fecha o cartão aberto ou volta ao escritório.
+    if (inCity()) {
+      if (e.key === 'Escape') {
+        if (help.isOpen || settings.isOpen || history.isOpen || document.querySelector('dialog[open], [aria-modal="true"]')) return;
+        e.preventDefault();
+        if (!city?.escape()) scene?.close();
+      } else if (e.key === '?' && !isTypingTarget(e.target) && !help.isOpen) {
+        e.preventDefault();
+        help.open();
+      }
+      return;
+    }
     if (e.key === 'Escape') {
       if (help.isOpen || settings.isOpen || history.isOpen) return; // diálogo/popover tratam o próprio Esc
       // O terminal flutua sobre tudo: fecha primeiro (a busca dele, depois ele; a gaveta continua aberta).

@@ -155,6 +155,11 @@ export class TopBar implements UiComponent {
     this.status.append(el);
   }
 
+  /** Botão Mundo (troca de cena), ao lado do Timelapse. */
+  addSceneButton(btn: HTMLElement): void {
+    this.panelGroup.insertBefore(btn, this.timelapseBtn);
+  }
+
   /** Acrescenta um botão de janela própria (ex.: Meu dia) ao começo do grupo de painéis. */
   addPanelButton(btn: HTMLElement): void {
     this.panelGroup.prepend(btn);

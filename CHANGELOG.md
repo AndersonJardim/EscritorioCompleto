@@ -73,16 +73,34 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
 - **Transparência:** `docs/world/privacidade.md` lista cada campo do pacote e da conexão, com um teste que confere a
   página contra o `schema.json`; os testes da projeção conferem cada chave e que nenhum texto do escritório aparece no
   pacote. Os 60 nomes fictícios de andar ("Projeto Ipê", "Projeto Jade"...) ficam em `shared/world/`, traduzidos.
-- **A cidade pelo servidor local (Fase 3):** com a cena Mundo aberta no navegador, o Habblaud pede ao servidor do mundo
-  o pedaço da cidade em volta do seu personagem (`view`) pela mesma conexão do prédio e repassa ao navegador por
-  `GET /api/world/stream` (SSE: o estado inteiro ao abrir, depois cada mudança na ordem); fechada a cena, avisa
-  (`view.off`) e nada mais desce. Prédios por chunk com revisão (um salto pede a área de novo), jogadores por perto,
-  minimapa e a sua posição ficam só em memória. Os comandos do personagem (`POST /api/world/cmd`: andar, perfil e, nas
-  próximas fases, entrar, like, cumprimento, bloqueio e denúncia) são conferidos campo a campo, no máximo 5 lotes por
-  segundo e só o último passo de cada lote; no máximo 4 abas com a cidade. Só pelo próprio computador e só pela
-  própria página (nunca por outro site). O snapshot ganha `meta.world.scene` para a barra mostrar o botão Mundo, e o
-  modo demonstração tem uma cidade falsa (20 prédios, 5 pessoas andando). A geometria da cidade (lotes, quarteirões,
-  portas, chunks e o que é caminhável) fica em `shared/world/city.ts`, a mesma do servidor do mundo.
+- **A cidade (botão Mundo, Fase 3):** com a cena disponível (`meta.world.scene.available`), o botão **Mundo** ao lado
+  do Timelapse troca o escritório pela cidade do Habblaud World, em pixel art 3/4 no mesmo estilo: quarteirões de 6
+  lotes com calçada, meio-fio, postes, árvores, faixas de pedestres e a praça central com a fonte, os bancos e o
+  totem; lotes vazios viram jardins (parque, lago, pomar, café). Cada prédio tem a altura dos projetos abertos (até
+  12 andares desenhados, com placa "+N" acima disso), janelas acesas na proporção dos agentes trabalhando e piscando
+  em âmbar as de quem espera, o tema do dono (abóboras, teias e morcegos no Halloween; neve, luzes, festão e árvore no
+  Natal), tudo apagado com a tabuleta "Fechado" quando o prédio está fora, cor e acabamento pela semente do lote e a
+  placa com a bandeira, o nome do dono e os ❤️ likes. A fileira de baixo de cada quarteirão mostra a fachada com a
+  vitrine e a porta; a de cima, com a porta virada para o norte, mostra o telhado com a marquise da entrada e os
+  fundos. À noite os postes e as janelas acendem. Anda com setas/WASD (Shift corre) ou clicando (o A* do escritório);
+  a câmera segue, com o zoom de sempre e afastando até ver uns 200 prédios; **E** perto de uma porta avisa que visitar
+  vem em breve. Passar o mouse num prédio abre o cartão (dono, país, estado, andares até "24+", agentes trabalhando,
+  esperando e à toa ou "modo discreto", likes, "no mundo desde"); clicar num jogador abre o perfil (personagem, país,
+  traços, frase, prédio e likes recebidos). Os outros jogadores andam suaves (150 ms atrás), com o nome em cima, e
+  sentam no banco quando ficam ausentes. O minimapa no canto mostra os quarteirões em volta, mais acesos quanto mais
+  prédios ligados, e leva a câmera até onde você clicar. Esc ou **Escritório** voltam; Configurações continua aberta
+  na cidade, e o escritório para de desenhar enquanto isso. A cena é carregada só quando abre. No modo demonstração,
+  `?mock=1&world=approved&scene=city` abre uma cidade de mentira (20 prédios e jogadores fictícios);
+  `npm run shots:world` também fotografa `docs/screenshots/world-cidade.png` e `world-cartao.png`.
+  **Pelo servidor local:** com a cena aberta, o Habblaud pede ao servidor do mundo o pedaço da cidade em volta do seu
+  personagem (`view`) pela mesma conexão do prédio e repassa ao navegador por `GET /api/world/stream` (SSE: o estado
+  inteiro ao abrir, depois cada mudança na ordem); fechada a cena, avisa (`view.off`) e nada mais desce. Prédios por
+  chunk com revisão (um salto pede a área de novo), jogadores por perto, minimapa e a sua posição ficam só em memória.
+  Os comandos do personagem (`POST /api/world/cmd`: andar, perfil e, nas próximas fases, entrar, like, cumprimento,
+  bloqueio e denúncia) são conferidos campo a campo, no máximo 5 lotes por segundo e só o último passo de cada lote;
+  no máximo 4 abas com a cidade. Só pelo próprio computador e só pela própria página (nunca por outro site). A
+  geometria da cidade (lotes, quarteirões, portas, chunks e o que é caminhável) fica em `shared/world/city.ts`, a
+  mesma do servidor do mundo.
 - **Voltar ao mundo** (`POST /api/world/join`): depois de sair, o cartão pede a volta ao servidor do mundo
   (`POST /v1/me/building/join`) antes de reconectar; o prédio volta novo, em outro lote. Sair do mundo em outro
   computador também vale aqui: o pacote recusado (`left`) ou a conta marcada como fora do mundo deixam este Habblaud
