@@ -415,7 +415,7 @@ export function worldErrorText(raw: WorldErrorCode | string, action: WorldAction
 
 /**
  * Estado do cartão "Seu prédio" (conta aprovada). Sem personagem o prédio não entra no mundo; fora do mundo ("Sair do
- * mundo") e pausado valem mais do que a conexão (os dois fecham o socket); depois, uma parada pedida pelo servidor do
+ * mundo") e pausado valem mais do que a conexão (nos dois nenhum pacote sobe); depois, uma parada pedida pelo servidor do
  * mundo (`stopped`, com o motivo); sem conexão aberta, o Habblaud está conectando ou tentando de novo.
  */
 export type BuildingState = 'connected' | 'reconnecting' | 'paused' | 'stopped' | 'left' | 'no_player';
@@ -540,7 +540,7 @@ export function buildingView(b: WorldBuildingStatus | undefined, hasPlayer: bool
       return {
         state,
         label: tr('Fora do mundo'),
-        desc: tr('Você saiu do mundo: o prédio foi retirado e o lote, liberado. Nada sai deste computador.'),
+        desc: tr('Você saiu do mundo: o prédio foi retirado e o lote, liberado. Dá para andar pela cidade; nada do escritório sai deste computador.'),
         stats,
         rejected: null,
         toggle: { action: 'join', text: tr('Voltar ao mundo'), hint: tr('Voltar cria um prédio novo, em outro lote; a conta e o personagem são os mesmos.') },
@@ -555,7 +555,7 @@ export function buildingView(b: WorldBuildingStatus | undefined, hasPlayer: bool
       return {
         state,
         label: tr('Pausado'),
-        desc: tr('Nada sai deste computador e o prédio está apagado no mundo.'),
+        desc: tr('Pausado: seu prédio está apagado, mas você pode andar pela cidade. Nada do escritório sai deste computador.'),
         stats,
         rejected,
         toggle: { action: 'resume', text: tr('Retomar'), hint: `${tr('Retomar volta a enviar e acende o prédio.')} ${later}` },

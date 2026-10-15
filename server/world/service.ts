@@ -21,13 +21,14 @@
 //   muda (meta.world) e a interface mostra "Liberado" sem ninguém clicar. Para ao sair, ao ser aprovado ou sem a trava.
 // - Qualquer 401 do servidor do mundo numa rota com token = token revogado ou vencido: a sessão daqui é apagada.
 // - Entrar de novo (outra conta ou a mesma) troca a sessão e revoga o dispositivo anterior no servidor.
-// - O prédio (uplink.ts) acompanha a conta: cada mudança de estado chama `uplink.sync()`; pausar fecha o uplink antes de
-//   responder e avisa o servidor do mundo (POST /v1/me/building/pause); o `goodbye` do uplink atualiza a conta daqui.
-// - "Sair do mundo" (leave): grava a saída e a pausa, fecha o uplink e espera o DELETE /v1/me/building antes de
-//   responder; a conta e o personagem continuam. "Voltar ao mundo" (join) chama POST /v1/me/building/join e, com a
+// - O prédio (uplink.ts) acompanha a conta: cada mudança de estado chama `uplink.sync()`; pausar para o envio do pacote
+//   antes de responder (a conexão fecha, ou fica só para a cena Mundo aberta, sem `uplink`) e avisa o servidor do mundo
+//   (POST /v1/me/building/pause); o `goodbye` do uplink atualiza a conta daqui.
+// - "Sair do mundo" (leave): grava a saída e a pausa, para o envio (como a pausa) e espera o DELETE /v1/me/building
+//   antes de responder; a conta e o personagem continuam, e dá para andar pela cidade. "Voltar ao mundo" (join) chama POST /v1/me/building/join e, com a
 //   resposta, tira a saída e a pausa e reabre o uplink: o pacote seguinte cria um prédio novo, em outro lote. A saída
 //   feita em outro computador chega pelo uplink (`uplink.ack {error: 'left'}`) ou pelo `left: true` do /v1/me, e vale
-//   aqui do mesmo jeito (saída e pausa gravadas, uplink fechado até o join).
+//   aqui do mesmo jeito (saída e pausa gravadas, nenhum pacote até o join).
 // - Retomar sem resposta do servidor do mundo (rede, 429, 5xx): o uplink reconecta assim mesmo, e o aviso da retomada
 //   tenta de novo com a espera crescente da reconexão (backoffDelay), até dar certo ou o prédio ser pausado de novo.
 // - GET /api/world/status sem `refresh` é barato: responde com o que está em memória e, se o /v1/me venceu, relê em
@@ -35,6 +36,7 @@
 import { getLocale, tr } from '../../shared/i18n';
 import {
   worldLastError,
+  type WorldBuildingStop,
   type WorldKnownErrorCode,
   type WorldLastUplink,
   type WorldMeta,
@@ -61,6 +63,9 @@ import type { WorldSession, WorldSettingsStore } from './settings';
 import { backoffDelay, UPLINK_TIMING, type BuildingUplink } from './uplink';
 
 export type Outcome<T> = WorldResult<T>;
+
+/** Paradas pedidas pelo servidor do mundo em que a cena Mundo não abre (a conexão não volta sozinha). */
+const SCENE_STOPS: readonly WorldBuildingStop[] = ['banned', 'suspended', 'update', 'other-device'];
 
 /** Avisos do prédio ao servidor do mundo (REST, com o token). */
 type BuildingCall = 'pause' | 'resume' | 'leave' | 'join';
@@ -170,8 +175,13 @@ export class WorldService {
     const m: WorldMeta = { enabled: this.o.config.enabled && this.configured, configured: this.configured, state: this.state() };
     if (this.uplink && this.hasBuilding()) m.building = this.uplink.meta();
     // A cena Mundo (botão Mundo da barra): com a conta aprovada e o personagem criado; `available` pede ainda a trava do
-    // terminal (as rotas da cena exigem). Sem conta liberada ou sem personagem, nem aparece.
-    if (this.configured && this.hasBuilding()) m.scene = { available: this.o.terminal };
+    // terminal (as rotas da cena exigem) e a conexão possível: conta banida ou suspensa, versão recusada ou o prédio
+    // conectado em outro computador, a cidade não abre. Pausado ou fora do mundo, abre (anda-se com o prédio apagado).
+    // Sem conta liberada ou sem personagem, nem aparece.
+    if (this.configured && this.hasBuilding()) {
+      const stop = this.uplink?.status().stopped;
+      m.scene = { available: this.o.terminal && !(stop && SCENE_STOPS.includes(stop)) };
+    }
     return m;
   }
 
@@ -193,7 +203,10 @@ export class WorldService {
     return this.compose();
   }
 
-  /** Pausa o prédio: grava a pausa, fecha o uplink (antes de responder) e avisa o servidor do mundo. */
+  /**
+   * Pausa o prédio: grava a pausa, para o envio do pacote (antes de responder; a conexão fecha, ou fica só para a cena
+   * Mundo aberta) e avisa o servidor do mundo.
+   */
   async pause(): Promise<Outcome<WorldStatus>> {
     const s = this.o.store.get();
     if (!s) return { ok: false, status: 401, code: 'not_logged_in' };
@@ -206,7 +219,7 @@ export class WorldService {
   }
 
   /**
-   * Sai do mundo: grava a saída (com a pausa, o uplink não reabre), fecha o uplink e só então pede ao servidor do mundo
+   * Sai do mundo: grava a saída (com a pausa, nenhum pacote sai), para o envio e só então pede ao servidor do mundo
    * que retire o prédio (DELETE /v1/me/building), esperando a resposta. Sem resposta boa, o prédio fica só pausado
    * aqui (nada sai; a pausa também é avisada) e a interface mostra o erro para tentar de novo.
    */
@@ -274,7 +287,7 @@ export class WorldService {
   /**
    * A conta saiu do mundo em outro lugar (outro computador, ou o servidor do mundo já sabia): o servidor recusou o
    * pacote com `left` (uplink.ts) ou o /v1/me trouxe `left: true`. Fica como o "Sair do mundo" daqui: saída e pausa
-   * gravadas e o uplink fechado, até o "Voltar ao mundo".
+   * gravadas e nenhum pacote, até o "Voltar ao mundo".
    */
   leftElsewhere(): void {
     const s = this.o.store.get();

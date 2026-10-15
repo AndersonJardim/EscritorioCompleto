@@ -17,6 +17,12 @@ const WELCOME = {
 class FakeLink implements CityLink {
   connected = false;
   sent: ClientMessage[] = [];
+  /** O que a cena queria a cada aviso `cityChanged` (a conexão de quem está pausado abre ou fecha com isso). */
+  changes: boolean[] = [];
+  viewer?: WorldViewer;
+  cityChanged(): void {
+    this.changes.push(!!this.viewer?.wantsCity);
+  }
   sendCity(msg: ClientMessage): boolean {
     if (!this.connected) return false;
     this.sent.push(msg);
@@ -89,6 +95,7 @@ function setup(opts: { connected?: boolean } = {}) {
   let n = 0;
   const viewer = new WorldViewer({ now: () => clock.t, streamId: () => `s${++n}`, pingMs: 60_000 });
   viewer.attach(link);
+  link.viewer = viewer;
   if (opts.connected ?? true) {
     link.connected = true;
     viewer.opened(WELCOME);
@@ -122,6 +129,27 @@ describe('WorldViewer: a cidade só com a cena aberta', () => {
     expect(link.types()).toEqual(['view', 'view.off']);
     expect(viewer.size).toBe(0);
     expect(viewer.isViewing).toBe(false);
+  });
+
+  it('avisa a conexão quando passa a querer a cidade e quando deixa (pausado, ela abre e fecha com a cena), depois do view.off', async () => {
+    const { link, viewer, open } = setup({ connected: false });
+    const a = open();
+    expect(viewer.wantsCity).toBe(true);
+    await Promise.resolve();
+    expect(link.changes).toEqual([true]);
+    const b = open();
+    await Promise.resolve();
+    expect(link.changes).toEqual([true]);
+    // a conexão abriu por causa da cena: `view` a cada welcome
+    link.connected = true;
+    viewer.opened(WELCOME);
+    expect(link.types()).toEqual(['view']);
+    a.st.close();
+    b.st.close();
+    expect(link.types()).toEqual(['view', 'view.off']);
+    expect(link.changes).toEqual([true]);
+    await Promise.resolve();
+    expect(link.changes).toEqual([true, false]);
   });
 
   it('no máximo 4 streams', () => {

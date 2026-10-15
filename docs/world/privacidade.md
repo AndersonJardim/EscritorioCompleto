@@ -43,7 +43,7 @@ mundo e o seu prédio entra na cidade. Pela conexão sai **só** isto:
 | --- | --- | --- |
 | Primeira mensagem da conexão (`hello`) | O `token` do dispositivo, a `version` do Habblaud, o `build` (`commit` do código em uso e `dirty`, a marca de "cópia modificada") e o `locale` da interface (`pt-BR`, `en`, `es` ou `fr`) | Autenticar, saber se é uma versão oficial e mandar os avisos no seu idioma. O token vai só aqui, nunca na URL; o idioma não vai no pacote do prédio. Nunca o caminho da pasta nem nada da máquina |
 | O pacote do prédio | Ao conectar e, depois, quando o escritório muda: no máximo um a cada 5 segundos, e nada se o pacote não mudou | É o prédio ao vivo |
-| Sinal de vida (`ping`) | A cada 30 segundos, sem conteúdo | Para o prédio ficar aceso enquanto o Habblaud está aberto |
+| Sinal de vida (`ping`) | A cada 30 segundos, sem conteúdo | Para o prédio ficar aceso enquanto o Habblaud está aberto (pausado ou fora do mundo, não acende nada: só mantém a conexão da cena Mundo) |
 | Cena Mundo aberta ou fechada (`view` e `view.off`) | Ao abrir e ao fechar a cidade no navegador, sem conteúdo | Para o servidor mandar o pedaço da cidade em volta do seu personagem só enquanto você olha; com a cena fechada, nada desce |
 | Os passos do seu personagem (`move`) | Enquanto você anda na cidade (no máximo 5 por segundo): a posição na cidade (`x`, `y`, em tiles), a direção (`dir`: `n`, `s`, `e` ou `w`) e se está andando (`moving`) | É o seu personagem na rua; a posição é na cidade do mundo, nunca nada do escritório. Com a aba em segundo plano, um passo parado a cada 30 s |
 | Pedido de área de novo (`resync`) | Quando chega uma mudança de prédio fora de ordem: só o id do pedaço da cidade (`chunk`) | Para o seu Habblaud mostrar os prédios certos |
@@ -160,12 +160,18 @@ exemplo). Quem não quiser nem isso usa o modo discreto ou pausa.
 - A seção do World só funciona pelo próprio computador (`http://localhost`), nunca pelo celular, e só com o Habblaud
   acessível apenas pelo próprio computador. Como acontece com as mensagens pelo escritório, qualquer programa deste
   computador que alcance o `localhost` consegue agir pela conta.
-- **Pausar** fecha a conexão do prédio antes de responder e avisa o servidor do mundo: o prédio apaga na hora para
-  todos e o lote fica guardado. **Retomar** reabre (sem resposta do servidor, o Habblaud tenta avisar de novo).
-- **Sair do mundo** fecha a conexão do prédio e só responde depois que o servidor do mundo retira o prédio e libera
-  o lote. A conta e o personagem continuam; nada sai até você clicar em **Voltar ao mundo**, que pede a volta ao
-  servidor do mundo e cria um prédio novo, em outro lote. Se a conta sair do mundo em outro computador, este também
-  fica fora do mundo, sem enviar nada, até **Voltar ao mundo**.
+- **Pausar** para o envio do pacote do prédio antes de responder e avisa o servidor do mundo: o prédio apaga na hora
+  para todos e o lote fica guardado. **Retomar** volta a enviar (sem resposta do servidor, o Habblaud tenta avisar de
+  novo).
+- **Pausado: seu prédio está apagado, mas você pode andar pela cidade.** Com a cena Mundo aberta, a conexão continua
+  (ou abre) levando só a primeira mensagem (`hello`), o sinal de vida e os comandos da cena (`view`, `view.off`,
+  `move`, `profile`): nenhum pacote do prédio sai, e o sinal de vida não acende o prédio. Fechada a cena, a conexão
+  fecha e nada sai. Fora do mundo vale o mesmo.
+- **Sair do mundo** para o envio do pacote e só responde depois que o servidor do mundo retira o prédio e libera o
+  lote. A conta e o personagem continuam (dá para andar pela cidade, como pausado); nenhum pacote do prédio sai até
+  você clicar em **Voltar ao mundo**, que pede a volta ao servidor do mundo e cria um prédio novo, em outro lote. Se a
+  conta sair do mundo em outro computador, este também fica fora do mundo, sem enviar pacote, até **Voltar ao
+  mundo**.
 - **A cidade** (a cena Mundo) só desce com ela aberta no navegador: os prédios e as pessoas por perto que o servidor
   do mundo manda ficam na memória do Habblaud e vão à página pelo `localhost`, nunca para o disco nem para os logs, e
   são esquecidos ao fechar a cena ou cair a conexão. A cena só abre pela própria página do Habblaud, nunca por outro

@@ -380,15 +380,16 @@ Em desenvolvimento e desligado por padrão (o que sai do computador: `docs/world
   mundo numa fila (na ordem pedida); a retomada sem resposta (rede, prazo, 429, 5xx) tenta de novo com a espera da
   reconexão do uplink (2 s a 60 s), até dar certo ou o prédio ser pausado de novo.
 - `uplink.ts`: o prédio no mundo, por WebSocket (o `WebSocket` global do Node) em `<HABBLAUD_WORLD_URL>/v1/socket`
-  (`wss://`; `ws://127.0.0.1` só no modo dev). Conecta só com a conta aprovada, o personagem criado, a trava do
-  terminal e sem pausa. Manda o `hello` (`{v, version, build: {commit, dirty}, locale, token}`) e, a cada `welcome`, o
+  (`wss://`; `ws://127.0.0.1` só no modo dev). Conecta só com a conta aprovada, o personagem criado e a trava do
+  terminal; pausado ou fora do mundo, só enquanto a cena Mundo está aberta (o viewer avisa por `cityChanged`) e sem
+  nenhum `uplink` (nem o do `welcome`): só `hello`, `ping`/`pong` e os comandos da cena. Manda o `hello` (`{v, version, build: {commit, dirty}, locale, token}`) e, a cada `welcome`, o
   pacote inteiro; depois, a cada mudança do escritório (`Office.onChange`) ou a cada minuto, projeta
   (`shared/world/projection.ts`) e manda se mudou: 3 s desde a primeira mudança, no máximo uma remessa a cada 5 s.
   `{t: 'ping'}` a cada 30 s (sem resposta por 75 s, reconecta). Reconexão de 2 s a 60 s (dobra, ±25 %). `goodbye`:
   `deploy` reconecta; `banned`, `suspended`, `update` e `other-device` param até retomar (ou reabrir); `waiting`,
   `no_player` e `unauthorized` param até a sessão mudar e avisam a conta (`service.goodbye`). `uplink.ack {error:
   'left'}` (a conta saiu do mundo, aqui ou em outro computador) e o `left: true` do `/v1/me` gravam `left` e `paused`
-  (`service.leftElsewhere`) e fecham a conexão até o join. A última remessa
+  (`service.leftElsewhere`): nenhum pacote até o join (a conexão só fica com a cena aberta). A última remessa
   `{at, bytes, uplink, ack}` fica em memória e em `<dataDir>/world-last-uplink.json` (modo 600; só da mesma sessão,
   apagado ao sair). Avisa o snapshot (`markDirty`) ao conectar, cair, pausar, retomar e a cada ack. Tarefas e
   compactações (`signals.ts`) são observadas pelo mesmo `Office.onChange`, no máximo uma vez por segundo, com ou sem
@@ -404,9 +405,10 @@ Em desenvolvimento e desligado por padrão (o que sai do computador: `docs/world
   porta local com `Host` local (a porta do celular recebe 403 `local_only`, nem com login); tudo, menos o `status`, exige
   a trava do terminal (403 `terminal_off`); sem `HABBLAUD_WORLD_URL`, 409 `not_configured`; `HABBLAUD_WORLD=0`, 404.
   Erros: `{error: {code, message?, retryAfter?}}`, com o status e o código do servidor do mundo quando vêm de lá.
-  Do prédio: `PUT /api/world/theme` `{theme}` (com ou sem conta), `POST /api/world/pause` (fecha o uplink antes de
-  responder e avisa `POST /v1/me/building/pause`), `POST /api/world/resume` (avisa `/resume` e reconecta),
-  `POST /api/world/leave` ("Sair do mundo": grava `left` e `paused`, fecha o uplink e responde depois do
+  Do prédio: `PUT /api/world/theme` `{theme}` (com ou sem conta), `POST /api/world/pause` (para o envio antes de
+  responder, fechando o uplink se a cena Mundo não está aberta, e avisa `POST /v1/me/building/pause`),
+  `POST /api/world/resume` (avisa `/resume` e reconecta, ou manda o pacote inteiro pela conexão da cena),
+  `POST /api/world/leave` ("Sair do mundo": grava `left` e `paused`, para o envio como a pausa e responde depois do
   `DELETE /v1/me/building`; sem resposta boa, fica só pausado e devolve o erro), `POST /api/world/join` ("Voltar ao
   mundo": `POST /v1/me/building/join` e, só com a resposta boa, tira `left` e `paused` e reabre o uplink; o 404 aqui
   não conta como feito; o `/resume` fora do mundo passa por ele e, sem ter saído, ele é o `/resume`) e
@@ -415,9 +417,10 @@ Em desenvolvimento e desligado por padrão (o que sai do computador: `docs/world
   memória e relê `/v1/me` em segundo plano quando venceu.
 
 O estado vai no snapshot em `meta.world` (`{enabled, configured, state, building?, scene?}`, nada da conta; `building` =
-`{connected, paused, floors, agents, lastUplinkAt?, left?, stopped?}`, com `stopped: true` sem o motivo, que só vai no
-status; `scene` = `{available}` com a conta aprovada e o personagem, `available` com a trava do terminal: o botão
-Mundo da barra) e em `GET /api/access` (`world`). O build grava
+`{connected, paused, floors, agents, lastUplinkAt?, left?, stopped?}`, com `connected` = aceso e mandando (a conexão
+só da cena, pausado, não conta) e `stopped: true` sem o motivo, que só vai no status; `scene` = `{available}` com a
+conta aprovada e o personagem, `available` com a trava do terminal e sem parada de `banned`, `suspended`, `update` ou
+`other-device`: o botão Mundo da barra) e em `GET /api/access` (`world`). O build grava
 `dist/build.json` (`{commit, dirty, builtAt}`, `scripts/build-info.mjs`; sem git, `unknown`;
 `HABBLAUD_BUILD_COMMIT`/`HABBLAUD_BUILD_DIRTY` substituem o git), lido por `readBuildInfo()` (`build.ts`) a cada conexão
 do uplink: o `hello` leva só `{commit, dirty}`.
@@ -438,7 +441,8 @@ em `shared/world/city.ts` (fonte da verdade; o servidor do mundo guarda a cópia
   Cliente com mais de 1 MB acumulado é desconectado (o EventSource reconecta).
 - O primeiro stream (com a conexão aceita) manda `view`; o último que fecha manda `view.off`. A cada `welcome` com
   stream aberto, `view` de novo; a cada queda, a cidade daqui é esquecida e sai um snapshot com `connected: false`.
-  Pausado ou fora do mundo, a conexão fica fechada e a cena não recebe nada.
+  Pausado ou fora do mundo, a conexão só existe com a cena aberta: abrir o primeiro stream conecta (`hello`, `view`) e
+  fechar o último manda `view.off` e fecha; nenhum `uplink` sai por ela.
 - Regras do estado: `area` substitui o chunk e o `rev` (mesmo menor); `area.patch` só com `rev` = último + 1 (item
   com `lot` substitui o prédio, sem `lot` mescla, `removed` tira); salto, chunk desconhecido ou item parcial de prédio
   que não está aqui pedem `resync {chunk}` (no máximo um a cada 5 s por chunk) e o patch não passa; ficam só os 3×3
@@ -453,7 +457,8 @@ em `shared/world/city.ts` (fonte da verdade; o servidor do mundo guarda a cópia
   `view.off` dizem se aquele stream quer a cidade (o viewer decide o que vai ao mundo; `view` com a cidade aberta
   recomeça tudo).
 - No navegador, `client/src/net/world-stream.ts`: `createWorldStream({mock})` com `on`, `send` (fila e um lote a cada
-  200 ms) e `close`; no modo demonstração, `FakeWorldStream` (20 prédios, 5 pessoas andando nas calçadas, minimapa).
+  200 ms) e `close`; no modo demonstração, `FakeWorldStream` (20 prédios com o meu no lote (3,1), 5 pessoas andando
+  nas calçadas e uma sentada num banco da praça, minimapa, `afk` depois de 60 s; `?perf=N` enche N lotes).
 
 ## Variáveis de ambiente
 

@@ -876,17 +876,78 @@ describe('a cena Mundo pelas rotas (stream e comandos)', () => {
     expect(s.viewer!.size).toBe(0);
   });
 
-  it('sair do mundo derruba a conexão: o stream recebe o snapshot sem conexão e o comando volta not_connected', async () => {
-    const { s } = await approved();
+  it('pausado e fora do mundo dá para andar na cidade: a conexão fica (ou volta) só com a cena aberta e sem nenhum uplink', async () => {
+    const { s, w, conn } = await approved();
+    await waitFor(() => w.ws.uplinks.length >= 1, 'primeira remessa');
+    const sleep = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
+    /** O que a cena pode mandar com o prédio pausado ou fora do mundo. */
+    const SCENE_ONLY = new Set(['hello', 'view', 'view.off', 'move', 'profile', 'ping', 'pong']);
     const sse = await openStream(s.base);
-    await waitFor(() => sse.events().length >= 1, 'snapshot');
+    await waitFor(() => conn().messages.some((m) => m.t === 'view'), 'view');
+    const first = conn();
     const stream = sse.events()[0].data.stream;
-    expect((await call(s.base, 'POST', '/api/world/leave', {})).status).toBe(200);
-    await waitFor(() => sse.events().some((e) => e.event === 'world.snapshot' && e.data.connected === false), 'snapshot sem conexão');
-    const r = await call(s.base, 'POST', '/api/world/cmd', { stream, cmds: [{ t: 'move', x: 21, y: 15, dir: 's', moving: false }] });
-    expect(r.status).toBe(409);
-    expect(r.body.error.code).toBe('not_connected');
+
+    // Pausa com a cena aberta: a conexão continua, o tema novo (que mudaria o pacote) não sobe.
+    expect((await call(s.base, 'POST', '/api/world/pause', {})).status).toBe(200);
+    const sent = w.ws.uplinks.length;
+    const fromPause = first.messages.length;
+    expect((await call(s.base, 'PUT', '/api/world/theme', { theme: 'christmas' })).status).toBe(200);
+    s.office.markDirty();
+    await sleep(250);
+    expect(first.open).toBe(true);
+    expect(w.ws.uplinks).toHaveLength(sent);
+    const move = await call(s.base, 'POST', '/api/world/cmd', { stream, cmds: [{ t: 'move', x: 22, y: 15, dir: 'e', moving: true }] });
+    expect(move.status).toBe(202);
+    await waitFor(() => first.messages.some((m) => m.t === 'move'), 'move pausado');
+    // O cartão e o selo: pausado e apagado (a conexão da cena não acende o prédio).
+    expect((await call(s.base, 'GET', '/api/world/status')).body.building).toMatchObject({ connected: false, paused: true });
+    expect(s.service!.meta().scene).toEqual({ available: true });
+
+    // Fechada a cena: `view.off` e a conexão de quem está pausado fecha.
     sse.close();
+    await waitFor(() => first.messages.some((m) => m.t === 'view.off'), 'view.off');
+    await waitFor(() => !first.open, 'conexão fechada');
+    expect(first.messages.slice(fromPause).every((m) => SCENE_ONLY.has(m.t as string))).toBe(true);
+
+    // A cena de novo, ainda pausado: conexão nova com `hello` e `view`, e nenhum pacote (nem o do welcome).
+    const sse2 = await openStream(s.base);
+    await waitFor(() => w.ws.open.length === 1 && w.ws.open[0] !== first && w.ws.open[0]!.messages.some((m) => m.t === 'view'), 'view na conexão nova');
+    const second = w.ws.open[0]!;
+    await sleep(250);
+    expect(w.ws.uplinks).toHaveLength(sent);
+    expect(second.messages.map((m) => m.t)).toEqual(['hello', 'view']);
+
+    // Retomar com a cena aberta: o pacote inteiro sai pela mesma conexão, já com o tema novo.
+    expect((await call(s.base, 'POST', '/api/world/resume', {})).status).toBe(200);
+    await waitFor(() => w.ws.uplinks.length > sent, 'pacote depois de retomar');
+    expect(w.ws.uplinks.at(-1)).toMatchObject({ conn: second.id, uplink: { theme: 'christmas' } });
+    expect(second.open).toBe(true);
+
+    // Sair do mundo com a cena aberta: a conexão continua, sem pacote; o comando ainda vai.
+    expect((await call(s.base, 'POST', '/api/world/leave', {})).status).toBe(200);
+    const atLeave = w.ws.uplinks.length;
+    const fromLeave = second.messages.length;
+    expect((await call(s.base, 'PUT', '/api/world/theme', { theme: 'halloween' })).status).toBe(200);
+    await sleep(250);
+    expect(w.ws.uplinks).toHaveLength(atLeave);
+    expect(second.open).toBe(true);
+    expect((await call(s.base, 'GET', '/api/world/status')).body.building).toMatchObject({ connected: false, paused: true, left: true });
+    const stream2 = sse2.events()[0].data.stream;
+    expect((await call(s.base, 'POST', '/api/world/cmd', { stream: stream2, cmds: [{ t: 'profile', playerId: 'p_2' }] })).status).toBe(202);
+    await waitFor(() => second.messages.some((m) => m.t === 'profile'), 'profile fora do mundo');
+    sse2.close();
+    await waitFor(() => !second.open, 'conexão fechada fora do mundo');
+    expect(second.messages.slice(fromLeave).every((m) => SCENE_ONLY.has(m.t as string))).toBe(true);
+    expect(w.ws.open).toHaveLength(0);
+  });
+
+  it('banida ou suspensa: o botão Mundo some (scene.available false) e a cidade não abre', async () => {
+    const { s, conn } = await approved();
+    expect(s.service!.meta().scene).toEqual({ available: true });
+    conn().send({ t: 'goodbye', reason: 'suspended' });
+    await waitFor(() => !s.uplink!.connected, 'conexão fechada');
+    expect(s.service!.meta().scene).toEqual({ available: false });
+    expect((await call(s.base, 'GET', '/api/world/status')).body.building).toMatchObject({ stopped: 'suspended' });
   });
 
   it('o stream só abre pela própria página: Origin de outro site ou Sec-Fetch-Site cross-site recebem 403', async () => {

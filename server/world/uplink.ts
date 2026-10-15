@@ -14,7 +14,10 @@
 // Changing Habblaud for other purposes (themes, fixes, features) remains free: it is MIT.
 //
 // O prédio sobe ao mundo: WebSocket cliente (o `WebSocket` global do Node) com o servidor do Habblaud World.
-// - Conecta só com a conta aprovada, o personagem criado, a trava do terminal e o prédio sem pausa.
+// - Conecta só com a conta aprovada, o personagem criado e a trava do terminal; com o prédio pausado ou fora do mundo,
+//   só enquanto a cena Mundo está aberta no navegador (para andar pela cidade) e sem nenhum `uplink`: a conexão leva
+//   então só `hello`, `ping`/`pong` e os comandos da cena (`view`, `view.off`, `move`, `profile`...). Fechada a cena, a
+//   conexão de quem está pausado ou fora do mundo fecha também.
 // - Primeira mensagem: `hello` com o token do dispositivo (só aqui, por TLS; nunca na URL nem em log), a versão, o
 //   commit do build ({commit, dirty}) e o idioma. Com o `welcome`, manda o pacote inteiro.
 // - Depois, ao mudar o escritório (Office.onChange) ou a cada `refreshMs`: projeta (shared/world/projection.ts, a única
@@ -28,9 +31,10 @@
 // - Guarda a última remessa ({at, bytes, uplink, ack}) em memória e em <dataDir>/world-last-uplink.json (modo 600)
 //   para "Ver o que foi enviado": é o mesmo objeto que foi para o fio.
 // - `uplink.ack {error: 'left'}`: a conta saiu do mundo (aqui ou em outro computador); a conta grava a saída e a pausa
-//   (`onLeft`) e a conexão fecha: nada mais sai até o "Voltar ao mundo".
+//   (`onLeft`): nenhum pacote sai até o "Voltar ao mundo" (a conexão só continua com a cena Mundo aberta).
 // - A cena Mundo (viewer.ts) usa a mesma conexão: recebe o `welcome`, a queda e as mensagens da cidade (`CityListener`)
-//   e manda os comandos do jogador por `sendCity`, só depois do `welcome`. A lógica da cena fica lá.
+//   e manda os comandos do jogador por `sendCity`, só depois do `welcome`; avisa quando passa a querer (ou deixa de
+//   querer) a cidade (`cityChanged`), para a conexão de quem está pausado abrir ou fechar. A lógica da cena fica lá.
 import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { dayKeyOf, systemTimeZone } from '../../shared/daystats';
@@ -133,7 +137,7 @@ export interface BuildingUplinkOptions {
   lastFile: string | null;
   /** O servidor do mundo mandou `goodbye` (a conta atualiza o estado: lista de espera, sem personagem, token recusado...). */
   onGoodbye?: (reason: GoodbyeReason) => void;
-  /** O servidor recusou o pacote com `left`: a conta saiu do mundo (a conta grava a saída e a pausa e fecha o uplink). */
+  /** O servidor recusou o pacote com `left`: a conta saiu do mundo (a conta grava a saída e a pausa; nada mais sobe). */
   onLeft?: () => void;
   /** O resumo do prédio mudou (meta.world.building): o snapshot é republicado. */
   onChange?: () => void;
@@ -151,6 +155,8 @@ export interface CityListener {
   closed(): void;
   /** Uma mensagem que não é do prédio (área, jogadores, avisos...), como veio. */
   message(msg: Record<string, unknown>): void;
+  /** A cena Mundo está aberta e quer a cidade (algum stream quer o `view`). */
+  readonly wantsCity: boolean;
 }
 
 interface LastRecord extends WorldLastUplink {
@@ -256,20 +262,37 @@ export class BuildingUplink {
     }
   }
 
-  /** Pausa: fecha a conexão e espera ela fechar (até `closeWaitMs`). A pausa em si fica em world.json (quem chama grava). */
+  /**
+   * Pausa (ou saída do mundo): nenhum `uplink` sai daqui em diante. Com a cena Mundo aberta, a conexão continua (para
+   * andar pela cidade); sem ela, fecha e espera fechar (até `closeWaitMs`). A pausa em si fica em world.json (quem chama
+   * grava antes).
+   */
   async pause(): Promise<void> {
-    this.clearReconnect();
-    await this.closeSocket();
+    this.clearSendTimer();
+    if (!this.wanted()) {
+      this.clearReconnect();
+      await this.closeSocket();
+    }
     this.o.onChange?.();
   }
 
-  /** Retoma: esquece a parada por `goodbye` e reconecta se der. */
+  /** Retoma: esquece a parada por `goodbye` e reconecta se der; já conectado (cena aberta), o pacote vai inteiro. */
   resume(): void {
     this.stop_ = undefined;
     this.attempt = 0;
     this.clearReconnect();
+    if (this.sending()) {
+      this.forceNext = true;
+      this.clearSendTimer();
+      this.armSend(Math.max(0, this.lastSentAt + this.t.minGapMs - this.now()));
+    }
     this.sync();
     this.o.onChange?.();
+  }
+
+  /** A cena Mundo abriu ou fechou (viewer.ts): a conexão de quem está pausado ou fora do mundo acompanha. */
+  cityChanged(): void {
+    this.sync();
   }
 
   /** O tema mudou: confere o pacote logo. */
@@ -306,7 +329,8 @@ export class BuildingUplink {
     const u = this.last?.uplink;
     const s = this.o.store.get();
     const m: WorldBuildingMeta = {
-      connected: this.welcomed,
+      // aceso no mundo: conectado e mandando (pausado ou fora do mundo, a conexão da cena Mundo não conta)
+      connected: this.welcomed && !s?.paused && !s?.left,
       paused: !!s?.paused,
       floors: u ? u.floors.length : (this.fromWelcome?.floors ?? 0),
       agents: u ? u.floors.reduce((n, f) => n + f.agents.length, 0) : (this.fromWelcome?.agents ?? 0),
@@ -329,9 +353,17 @@ export class BuildingUplink {
   private wanted(): boolean {
     const s = this.o.store.get();
     if (this.stopped || !s || !this.o.canAct()) return false;
-    if (s.access !== 'approved' || !s.player || s.paused) return false;
+    if (s.access !== 'approved' || !s.player) return false;
     if (this.stop_ && (HARD_STOPS.includes(this.stop_.reason) || this.stop_.key === sessionKey(s))) return false;
+    // Pausado ou fora do mundo: só com a cena Mundo aberta (e sem `uplink`, veja `sending`).
+    if (s.paused || s.left) return !!this.city?.wantsCity;
     return true;
+  }
+
+  /** O prédio pode subir agora: conectado e sem pausa nem saída. Pausado ou fora do mundo, nenhum `uplink` sai. */
+  private sending(): boolean {
+    const s = this.o.store.get();
+    return this.welcomed && !!s && !s.paused && !s.left;
   }
 
   private connect(): void {
@@ -420,10 +452,11 @@ export class BuildingUplink {
     log.info(tr('Habblaud World: prédio conectado.'));
     this.pingTimer = setInterval(() => this.ping(), this.t.pingMs);
     this.pingTimer.unref?.();
-    // A cada welcome o pacote vai inteiro, mesmo igual ao último (o servidor não guarda o conteúdo dos andares).
+    // A cada welcome o pacote vai inteiro, mesmo igual ao último (o servidor não guarda o conteúdo dos andares); pausado
+    // ou fora do mundo (conexão só da cena Mundo), nada vai, e a retomada manda o pacote inteiro.
     this.forceNext = true;
     this.clearSendTimer();
-    this.armSend(Math.max(0, this.lastSentAt + this.t.minGapMs - this.now()));
+    if (this.sending()) this.armSend(Math.max(0, this.lastSentAt + this.t.minGapMs - this.now()));
     this.o.onChange?.();
     this.city?.opened(msg);
   }
@@ -575,7 +608,7 @@ export class BuildingUplink {
 
   /** Mudou algo: projeta depois de `debounceMs` desde a primeira mudança (sem reiniciar a espera), respeitando `minGapMs`. */
   private schedule(): void {
-    if (!this.welcomed || this.sendTimer) return;
+    if (!this.sending() || this.sendTimer) return;
     this.armSend(Math.max(this.t.debounceMs, this.lastSentAt + this.t.minGapMs - this.now()));
   }
 
@@ -592,10 +625,10 @@ export class BuildingUplink {
     this.sendTimer = undefined;
   }
 
-  /** Projeta e manda, se mudou (ou se é a primeira depois do welcome). */
+  /** Projeta e manda, se mudou (ou se é a primeira depois do welcome). Pausado ou fora do mundo, nada. */
   private flush(): void {
     const s = this.o.store.get();
-    if (!this.welcomed || !s) return;
+    if (!this.sending() || !s) return;
     const now = this.now();
     if (now < this.lastSentAt + this.t.minGapMs) return this.armSend(this.lastSentAt + this.t.minGapMs - now);
     // O escritório ainda está relendo as sessões: um pacote pela metade não sai (o fim do boot avisa a mudança).
@@ -626,7 +659,7 @@ export class BuildingUplink {
     const json = JSON.stringify(r.uplink);
     if (json === this.lastJson && !this.forceNext) return;
     const msg: UplinkMessage = { t: 'uplink', uplink: r.uplink };
-    if (!this.send(msg)) return;
+    if (!this.sending() || !this.send(msg)) return;
     this.forceNext = false;
     this.lastSentAt = now;
     this.lastJson = json;

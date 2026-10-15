@@ -15,11 +15,12 @@
 //   GET  /api/world/devices                  → {devices: DeviceInfo[]}
 //   POST /api/world/devices/:id/revoke       {} → 204 (o próprio dispositivo: sai daqui também)
 //   PUT  /api/world/theme                    {theme: WorldThemeChoice} → 200 {theme} (com ou sem conta: fica em world.json)
-//   POST /api/world/pause                    {} → 200 WorldStatus (fecha o uplink antes de responder; avisa
-//                                                POST /v1/me/building/pause, documentada em protocol.ts)
+//   POST /api/world/pause                    {} → 200 WorldStatus (para o envio do pacote antes de responder; a
+//                                                conexão fecha, ou fica só para a cena Mundo aberta, sem `uplink`;
+//                                                avisa POST /v1/me/building/pause, documentada em protocol.ts)
 //   POST /api/world/resume                   {} → 200 WorldStatus (avisa POST /v1/me/building/resume e reabre o uplink;
 //                                                sem resposta do servidor do mundo, tenta de novo com espera crescente)
-//   POST /api/world/leave                    {} → 200 WorldStatus ("Sair do mundo": fecha o uplink, chama
+//   POST /api/world/leave                    {} → 200 WorldStatus ("Sair do mundo": para o envio como a pausa, chama
 //                                                DELETE /v1/me/building e só então responde; a conta e o personagem
 //                                                continuam)
 //   POST /api/world/join                     {} → 200 WorldStatus ("Voltar ao mundo": POST /v1/me/building/join e,
@@ -119,7 +120,10 @@ export interface WorldUplinkAck {
  * criado. `floors` e `agents` são os da última remessa (antes dela, os que o servidor mandou no `welcome`; 0 sem nada).
  */
 export interface WorldBuildingStatus {
-  /** WebSocket aberto e aceito (`welcome`). */
+  /**
+   * WebSocket aberto e aceito (`welcome`) e o prédio subindo. Pausado ou fora do mundo é sempre false: a conexão que a
+   * cena Mundo abre para andar pela cidade não leva o prédio.
+   */
   connected: boolean;
   /** Pausado pelo dono (POST /api/world/pause). */
   paused: boolean;
@@ -135,7 +139,7 @@ export interface WorldBuildingStatus {
    * `no_player`, `unauthorized` (a conta mudou do outro lado; o estado daqui é atualizado).
    */
   stopped?: WorldBuildingStop;
-  /** Saiu do mundo (POST /api/world/leave): o prédio foi retirado e nada sai até o resume (prédio novo, lote novo). */
+  /** Saiu do mundo (POST /api/world/leave): o prédio foi retirado e nenhum pacote sai até o join (prédio novo, lote novo). */
   left?: true;
 }
 
@@ -178,7 +182,9 @@ export interface WorldMeta {
   building?: WorldBuildingMeta;
   /**
    * A cena Mundo (Fase 3), só com o World configurado, a conta aprovada e o personagem criado; `available` pede ainda a
-   * trava do terminal (as rotas da cena exigem). A barra mostra o botão Mundo com `available`.
+   * trava do terminal (as rotas da cena exigem) e nenhuma parada de banimento, suspensão, versão recusada ou outro
+   * computador (a conexão não volta sozinha). Pausado ou fora do mundo, vale (anda-se com o prédio apagado). A barra
+   * mostra o botão Mundo com `available`.
    */
   scene?: WorldSceneMeta;
 }
@@ -258,7 +264,10 @@ export interface WorldSceneChunk {
 export interface WorldSceneSnapshot {
   /** Id deste stream: vai em POST /api/world/cmd. */
   stream: string;
-  /** A conexão com o servidor do mundo está aberta (`welcome`). Sem ela (pausado, fora do mundo, caiu), nada desce. */
+  /**
+   * A conexão com o servidor do mundo está aberta (`welcome`). Sem ela (caiu, reconectando, parada pelo servidor), nada
+   * desce. Pausado ou fora do mundo, ela abre só com a cena aberta, sem pacote do prédio.
+   */
   connected: boolean;
   /** `view` mandado: o servidor do mundo está mandando a área e os jogadores. */
   viewing: boolean;

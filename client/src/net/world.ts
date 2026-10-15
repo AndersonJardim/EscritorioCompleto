@@ -119,13 +119,13 @@ export interface WorldClient {
   revokeDevice(id: string): Promise<WorldResult>;
   /** A última remessa; `null` = nada saiu deste computador ainda. */
   lastUplink(): Promise<WorldResult<WorldLastUplink | null>>;
-  /** Para o envio na hora (o servidor local fecha a conexão antes de responder): o prédio apaga. */
+  /** Para o envio na hora (antes da resposta; a conexão só fica para a cena Mundo aberta): o prédio apaga. */
   pause(): Promise<WorldResult<{ paused: boolean }>>;
   /** Volta a enviar: o prédio acende de novo. */
   resume(): Promise<WorldResult<{ paused: boolean }>>;
   /** "Voltar ao mundo" depois de sair: o servidor do mundo aceita a volta e o prédio novo nasce em outro lote. */
   join(): Promise<WorldResult>;
-  /** "Sair do mundo": o servidor local fecha a conexão e o servidor do mundo retira o prédio antes da resposta. */
+  /** "Sair do mundo": o servidor local para o envio e o servidor do mundo retira o prédio antes da resposta. */
   leave(): Promise<WorldResult>;
   /** O tema escolhido em Aparência também vale para o prédio. */
   setTheme(theme: WorldThemeChoice): Promise<WorldResult>;
@@ -842,8 +842,8 @@ export class FakeWorldApi implements WorldClient {
       const b = acc.building;
       if (!b) return FakeWorldApi.fail('no_player', 409);
       b.paused = paused;
-      // Como o de verdade: pausar fecha a conexão; retomar (também depois de sair do mundo ou de uma parada)
-      // reconecta e manda o pacote inteiro.
+      // Como o de verdade: pausar apaga o prédio (o selo deixa de mostrar "no mundo"); retomar (também depois de sair
+      // do mundo ou de uma parada) reconecta e manda o pacote inteiro.
       b.connected = !paused;
       if (!paused) {
         delete b.left;

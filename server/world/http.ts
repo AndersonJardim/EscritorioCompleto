@@ -228,7 +228,7 @@ export function createWorldRoutes(service: WorldService, viewer?: WorldViewer): 
         sendOutcome(res, service.setTheme(b.theme));
       },
     },
-    // "Sair do mundo": fecha o uplink e espera o servidor do mundo retirar o prédio antes de responder.
+    // "Sair do mundo": para o envio do pacote e espera o servidor do mundo retirar o prédio antes de responder.
     '/api/world/leave': {
       method: 'POST',
       account: true,
@@ -237,7 +237,7 @@ export function createWorldRoutes(service: WorldService, viewer?: WorldViewer): 
         sendOutcome(res, await service.leave());
       },
     },
-    // Pausar fecha o uplink antes de responder.
+    // Pausar para o envio do pacote antes de responder (a conexão só continua com a cena Mundo aberta).
     '/api/world/pause': {
       method: 'POST',
       account: true,

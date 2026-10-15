@@ -17,7 +17,9 @@
 // mandar os comandos do jogador, e repassa tudo ao navegador por SSE (GET /api/world/stream; rotas em http.ts).
 // - Só pede a cidade (`view`) com pelo menos um stream aberto e a conexão aceita (`welcome`); fechado o último stream,
 //   manda `view.off`. Sem cena aberta, nenhuma área nem jogador desce. A cada `welcome` (reconexão) com stream aberto,
-//   manda `view` de novo; a cada queda, a cidade daqui é esquecida.
+//   manda `view` de novo; a cada queda, a cidade daqui é esquecida. Quando passa a querer a cidade (ou deixa de querer),
+//   avisa a conexão (`cityChanged`): com o prédio pausado ou fora do mundo, ela só existe com a cena aberta, e sem
+//   `uplink` (pausado, dá para andar pela cidade com o prédio apagado).
 // - O estado (shared/world/scene.ts: chunks com `rev`, prédios, jogadores visíveis, minimapa, minha posição, `afk`) fica
 //   só em memória e nunca vai para o log. Salto de `rev`: pede `resync {chunk}` e o patch não passa ao navegador.
 // - O stream manda `world.snapshot` (tudo o que há, com o id do stream) ao conectar e a cada recomeço (conexão aberta
@@ -38,6 +40,8 @@ import type { CityListener } from './uplink';
 export interface CityLink {
   readonly connected: boolean;
   sendCity(msg: ClientMessage): boolean;
+  /** A cena passou a querer a cidade ou deixou de querer (a conexão de quem está pausado abre ou fecha). */
+  cityChanged?(): void;
 }
 
 export interface ViewerOptions {
@@ -75,6 +79,8 @@ export class WorldViewer implements CityListener {
   private pinger?: ReturnType<typeof setInterval>;
   private connected = false;
   private viewing = false;
+  /** O que a conexão sabe que a cena quer (avisado por `cityChanged`). */
+  private wanted = false;
 
   constructor(o: ViewerOptions = {}) {
     this.now = o.now ?? Date.now;
@@ -98,6 +104,11 @@ export class WorldViewer implements CityListener {
   /** `view` mandado e valendo. */
   get isViewing(): boolean {
     return this.viewing;
+  }
+
+  /** Algum stream aberto quer a cidade (a cena Mundo está na tela). */
+  get wantsCity(): boolean {
+    return [...this.streams.values()].some((s) => s.wantsView);
   }
 
   /** O estado como o navegador recebe (sem o id do stream). Para os testes e o diagnóstico. */
@@ -206,7 +217,12 @@ export class WorldViewer implements CityListener {
    * já foi a todos os streams); `force` manda o snapshot mesmo sem mudança (conexão nova).
    */
   private syncView(force = false): boolean {
-    const want = [...this.streams.values()].some((s) => s.wantsView);
+    const want = this.wantsCity;
+    if (want !== this.wanted) {
+      this.wanted = want;
+      // depois do `view.off` (abaixo), para a conexão de quem está pausado fechar só depois dele
+      queueMicrotask(() => this.link?.cityChanged?.());
+    }
     let changed = force;
     if (this.connected && want && !this.viewing) {
       if (this.link?.sendCity({ t: 'view' })) {
