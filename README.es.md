@@ -853,7 +853,8 @@ propia computadora (por ejemplo, en Docker, publicado en el puerto 4848):
   Linux, el servidor del mundo tiene que escuchar en una interfaz que el contenedor alcance (`0.0.0.0` o la IP del
   puente de Docker): un puerto publicado solo en el `127.0.0.1` del host no responde por `host-gateway`.
 - Sin TLS, solo con `HABBLAUD_WORLD_DEV=1` (o `--dev`) y solo para `127.0.0.1` y `host.docker.internal`; fuera de eso,
-  solo `https://` o `wss://`.
+  solo `https://` o `wss://`. El servidor del mundo tiene que aceptar el nombre usado en la URL como host del juego (si
+  no, responde `421`).
 
 Cómo se ve la sección, en el modo demostración (`?mock=1&world=logged_out`, `waiting` o `approved`; en portugués):
 [sin cuenta](docs/screenshots/world-sem-conta.png), [lista de espera](docs/screenshots/world-lista-de-espera.png),

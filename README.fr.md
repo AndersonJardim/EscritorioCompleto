@@ -861,7 +861,8 @@ ordinateur (par exemple, dans Docker, publié sur le port 4848) :
   déjà ce nom). Sous Linux, le serveur du monde doit écouter sur une interface que le conteneur atteint (`0.0.0.0` ou
   l'IP du pont Docker) : un port publié seulement sur le `127.0.0.1` de l'hôte ne répond pas par `host-gateway`.
 - Sans TLS, seulement avec `HABBLAUD_WORLD_DEV=1` (ou `--dev`) et seulement pour `127.0.0.1` et `host.docker.internal` ;
-  sinon, uniquement `https://` ou `wss://`.
+  sinon, uniquement `https://` ou `wss://`. Le serveur du monde doit accepter le nom utilisé dans l'URL comme hôte du
+  jeu (sinon il répond `421`).
 
 À quoi ressemble la section, en mode démonstration (`?mock=1&world=logged_out`, `waiting` ou `approved` ; en
 portugais) : [sans compte](docs/screenshots/world-sem-conta.png), [liste d'attente](docs/screenshots/world-lista-de-espera.png),

@@ -820,7 +820,8 @@ example, in Docker, published on port 4848):
   Linux, the world server must listen on an interface the container can reach (`0.0.0.0` or the Docker bridge IP): a
   port published only on the host's `127.0.0.1` doesn't answer through `host-gateway`.
 - Without TLS, only with `HABBLAUD_WORLD_DEV=1` (or `--dev`) and only for `127.0.0.1` and `host.docker.internal`;
-  otherwise, only `https://` or `wss://`.
+  otherwise, only `https://` or `wss://`. The world server must accept the name used in the URL as its game host
+  (otherwise it answers `421`).
 
 How the section looks, in demo mode (`?mock=1&world=logged_out`, `waiting` or `approved`; in Portuguese):
 [no account](docs/screenshots/world-sem-conta.png), [waitlist](docs/screenshots/world-lista-de-espera.png),
