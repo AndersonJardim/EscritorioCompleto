@@ -9713,11 +9713,18 @@ html.is-replay #world {
   border-style: dashed;
 }
 
-/* "Sair do mundo": separado das ações do dia a dia por uma linha, com a explicação ao lado. */
+/* "Sair do mundo": separado das ações do dia a dia por uma linha, com a explicação em cima do botão. */
 .ui-world__leave {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   margin-top: 2px;
   padding-top: 8px;
   border-top: 1px solid var(--ui-line);
+}
+
+.ui-world__leave .ui-set__hint {
+  line-height: 1.45;
 }
 
 .ui-world__bhead {

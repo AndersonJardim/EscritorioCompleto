@@ -59,7 +59,7 @@ export class BuildingCard {
     this.hint = h('p', { class: 'ui-set__hint' });
     this.error = h('p', { class: 'ui-world__error', role: 'alert', hidden: true });
     this.leaveBtn = h('button', { class: 'ui-btn', type: 'button', text: tr('Sair do mundo'), on: { click: () => void this.leave() } });
-    this.leaveRow = h('div', { class: 'ui-set ui-world__leave' }, h('div', { class: 'ui-set__text' }, h('span', { class: 'ui-set__hint', text: leaveHint() })), this.leaveBtn);
+    this.leaveRow = h('div', { class: 'ui-world__leave' }, h('p', { class: 'ui-set__hint', text: leaveHint() }), h('div', { class: 'ui-world__actions' }, this.leaveBtn));
     this.el = h(
       'section',
       { class: 'ui-world__building', attrs: { 'aria-labelledby': titleId } },
