@@ -364,6 +364,8 @@ export interface OfficeSnapshot {
     pty?: PtyStatus;
     /** Verificação de versão nova no GitHub (ausente nos testes e no timelapse). */
     updates?: UpdateStatus;
+    /** Habblaud World (em desenvolvimento). Ausente ou `enabled: false` = nada do World aparece na interface. */
+    world?: { enabled: boolean; configured: boolean; state: 'off' | 'logged_out' | 'waiting' | 'approved' };
   };
 }
 

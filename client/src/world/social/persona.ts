@@ -51,8 +51,8 @@ export const TRAITS: Readonly<Record<TraitId, Trait>> = {
 /** Ordem fixa (o sorteio depende dela: não reordene). */
 export const TRAIT_IDS = Object.keys(TRAITS) as TraitId[];
 
-/** Pares que não combinam na mesma pessoa. */
-const CLASHES: readonly (readonly [TraitId, TraitId])[] = [
+/** Pares que não combinam na mesma pessoa (exportado para o personagem do Habblaud World; vai para shared/world/traits.ts). */
+export const CLASHES: readonly (readonly [TraitId, TraitId])[] = [
   ['timidez', 'piadas'],
   ['timidez', 'fofoca'],
   ['apostas', 'economia'],
