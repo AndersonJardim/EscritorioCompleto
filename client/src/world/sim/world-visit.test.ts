@@ -11,7 +11,8 @@ import { DEFAULT_WORLD_OPTIONS } from '../api';
 import { MISSING_DEBOUNCE_MS } from '../constants';
 import { inRect } from '../layout/geometry';
 import type { Character } from './character';
-import { Sim } from './sim';
+import { Sim, type VisitLight } from './sim';
+import { canStand, NO_INTENT, stepFree, VISITOR_ID, VISITOR_LANYARD, visitorInfo } from './visitor';
 
 const theme: RoomTheme = {
   carpet: '#4f6d8f',
@@ -187,5 +188,187 @@ describe('visita a um prédio do mundo no Sim', () => {
     run(sim, clock, 120, () => sim.chars.size === 0);
     expect(sim.chars.size).toBe(0);
     expect(sim.rooms.size).toBe(3);
+  });
+});
+
+// ------------------------------------------------------------------------------------------------ cena Visita (Fase 4)
+
+/** O Sim da cena Visita: `visit: true`, carteiras só em memória. */
+const visitSim = () => new Sim(art, () => ({ ...DEFAULT_WORLD_OPTIONS, liveliness: 'calm' }), null, { visit: true });
+
+function visit(detail: WorldBuildingDetail, light: VisitLight = 'live'): { sim: Sim; clock: { now: number }; snap: OfficeSnapshot } {
+  const sim = visitSim();
+  sim.visitLight = light;
+  const clock = { now: T0 };
+  const snap = officeFromBuilding(detail, clock.now, OPTS);
+  sim.applySnapshot(snap, clock.now);
+  return { sim, clock, snap };
+}
+
+describe('Sim da visita (visit: true)', () => {
+  it('nenhum tempo do status: quem espera um shell fica de braços cruzados (sem pipoca, teia ou cochilo) e o ocioso não cochila', () => {
+    const { sim, clock } = visit(sampleBuildingDetail());
+    expect(sim.visit).toBe(true);
+    // 40 min depois (o tempo da visita não é o tempo do status: nada escala)
+    run(sim, clock, 2);
+    clock.now += 40 * 60_000;
+    run(sim, clock, 3);
+    const thiago = charByName(sim, 'Thiago');
+    expect(thiago.mode).toBe('shell');
+    expect(thiago.shellStage).toBeNull();
+    if (thiago.atSpot === thiago.homeSpot && thiago.seated) {
+      expect(thiago.pose).toBe('wait');
+      expect(thiago.held).toBe('none');
+    }
+    for (const name of ['Larissa', 'Gustavo']) {
+      const ch = charByName(sim, name);
+      expect(sim.longIdle(ch, clock.now)).toBe(false);
+      expect(ch.icon).not.toBe('zzz');
+    }
+    // o mesmo prédio fora da visita: 40 min de espera viram cochilo com teia
+    const office = newSim();
+    const snap = officeFromBuilding(sampleBuildingDetail(), T0, OPTS);
+    office.applySnapshot(snap, T0);
+    const c2 = { now: T0 };
+    run(office, c2, 2);
+    c2.now += 40 * 60_000;
+    run(office, c2, 1);
+    expect(charByName(office, 'Thiago').shellStage).toBe('nap');
+    expect(office.longIdle(charByName(office, 'Larissa'), c2.now)).toBe(true);
+  });
+
+  it('apagado: as salas entram escuras e ficam assim; discreto: acesas e vazias; o prédio que acende chama os agentes, que acendem a luz', () => {
+    const away = visit(sampleBuildingDetail('away'), 'away');
+    for (const r of away.sim.rooms.values()) expect(r.lightOn, r.id).toBe(false);
+    run(away.sim, away.clock, 5);
+    for (const r of away.sim.rooms.values()) expect(r.lightOn).toBe(false);
+    const discreet = visit(sampleBuildingDetail('discreet'), 'discreet');
+    run(discreet.sim, discreet.clock, 2);
+    for (const r of discreet.sim.rooms.values()) expect(r.lightOn).toBe(true);
+    expect(discreet.sim.chars.size).toBe(0);
+    // o dono voltou: o patch traz o prédio aceso e os andares com gente
+    const live = sampleBuildingDetail();
+    away.sim.visitLight = 'live';
+    const { snapshot } = applyBuildingPatch(away.snap, { rev: 13, floors: live.floors, building: live.building }, away.clock.now);
+    away.sim.applySnapshot(snapshot, away.clock.now);
+    run(away.sim, away.clock, 60, () => [...away.sim.rooms.values()].every((r) => r.lightOn));
+    expect([...away.sim.rooms.values()].every((r) => r.lightOn)).toBe(true);
+    expect(away.sim.chars.size).toBe(6);
+  });
+});
+
+describe('o visitante', () => {
+  const ME = { name: 'Pixel Dev', look: 'f' as const, parts: {} };
+
+  function withVisitor(detail = sampleBuildingDetail()) {
+    const v = visit(detail);
+    run(v.sim, v.clock, 1);
+    const ch = v.sim.setVisitor(visitorInfo(ME, v.clock.now), v.clock.now)!;
+    run(v.sim, v.clock, 10, () => !v.sim.visitorBusy);
+    return { ...v, ch };
+  }
+
+  it('chega pelo elevador da recepção, com o crachá de visitante, fora dos agentes (snapshot, vida social, lugares)', () => {
+    const { sim, clock, ch, snap } = withVisitor();
+    expect(ch.id).toBe(VISITOR_ID);
+    expect(ch.appearance.lanyard).toBe(VISITOR_LANYARD);
+    expect(ch.alpha).toBe(1);
+    expect(ch.inside).toBe(false);
+    expect(sim.visitorBusy).toBe(false);
+    const el = sim.spots.get(sim.elevators[0]!.spotId)!;
+    expect([ch.tx, ch.ty]).toEqual([el.tx, el.ty]);
+    expect(sim.chars.has(VISITOR_ID)).toBe(false);
+    expect([...sim.people()].at(-1)).toBe(ch);
+    expect(sim.person(VISITOR_ID)).toBe(ch);
+    expect(sim.visitorElevator()).not.toBeNull();
+    // snapshots seguintes não mexem nele (nem o mandam embora)
+    sim.applySnapshot(snap, clock.now);
+    run(sim, clock, MISSING_DEBOUNCE_MS / 1000 + 2);
+    expect(sim.visitor).toBe(ch);
+    expect(ch.leaving).toBe(false);
+    for (const c of sim.chars.values()) expect(c.gathering?.members.some((m) => m.id === VISITOR_ID) ?? false).toBe(false);
+    expect(ch.gathering).toBeNull();
+    // ninguém contou o visitante: as carteiras e as salas são só dos agentes
+    expect(sim.social.wallets.get(VISITOR_ID)).toBeUndefined();
+  });
+
+  it('anda com o teclado e não atravessa parede nem assento; o clique leva por um caminho', () => {
+    const { sim, clock, ch } = withVisitor();
+    const start = { x: ch.x, y: ch.y };
+    sim.visitorIntent = { dx: 0, dy: 1, run: false };
+    run(sim, clock, 1.5);
+    expect(ch.y).toBeGreaterThan(start.y + 20);
+    expect(['walk', 'stand']).toContain(ch.pose);
+    // segurando para cima por muito tempo: para na parede, nunca dentro dela
+    sim.visitorIntent = { dx: 0, dy: -1, run: true };
+    run(sim, clock, 6);
+    sim.visitorIntent = { ...NO_INTENT };
+    const grid = sim.building.grid;
+    expect(canStand(grid, ch.x, ch.y)).toBe(true);
+    // passeando em todas as direções, os pés ficam sempre em chão livre
+    for (const [dx, dy] of [[1, 0], [0, 1], [-1, 1], [1, -1], [-1, 0]] as const) {
+      sim.visitorIntent = { dx, dy, run: true };
+      for (let i = 0; i < 60; i++) {
+        run(sim, clock, 1 / 30);
+        expect(canStand(grid, ch.x, ch.y)).toBe(true);
+      }
+    }
+    sim.visitorIntent = { ...NO_INTENT };
+    run(sim, clock, 0.2);
+    // o clique: até a porta da sala do primeiro andar
+    const room = sim.rooms.get('f_0a1b2c3d4e')!;
+    const door = room.layout.door!;
+    expect(sim.visitorWalkTo(door.x, door.y)).toBe(true);
+    run(sim, clock, 30, () => !ch.step && !ch.queue.length);
+    expect([ch.tx, ch.ty]).toEqual([door.x, door.y]);
+    expect(ch.seated).toBe(false);
+  });
+
+  it('sai pelo elevador: entra, some e só então a cena manda o leave; ocupado, não anda nem sai de novo', () => {
+    const { sim, clock, ch } = withVisitor();
+    sim.visitorIntent = { dx: 1, dy: 1, run: false };
+    run(sim, clock, 1);
+    sim.visitorIntent = { ...NO_INTENT };
+    let left = 0;
+    expect(sim.visitorExit(() => left++)).toBe(true);
+    expect(sim.visitorBusy).toBe(true);
+    expect(sim.visitorExit(() => left++)).toBe(false);
+    expect(sim.visitorWalkTo(1, 1)).toBe(false);
+    run(sim, clock, 15, () => left > 0);
+    expect(left).toBe(1);
+    expect(ch.inside).toBe(true);
+    expect(ch.alpha).toBe(0);
+    sim.setVisitor(null, clock.now);
+    expect(sim.visitor).toBeNull();
+    expect([...sim.people()].some((c) => c.id === VISITOR_ID)).toBe(false);
+  });
+
+  it('a aba voltou do segundo plano no meio da chegada ou da saída: termina na hora (e a saída acontece)', () => {
+    const v = visit(sampleBuildingDetail());
+    const ch = v.sim.setVisitor(visitorInfo(ME, v.clock.now), v.clock.now)!;
+    v.sim.fastForward(v.clock.now);
+    expect(ch.alpha).toBe(1);
+    expect(v.sim.visitorBusy).toBe(false);
+    let left = false;
+    v.sim.visitorExit(() => (left = true));
+    v.sim.fastForward(v.clock.now + 1000);
+    expect(left).toBe(true);
+  });
+});
+
+describe('stepFree e canStand (puros)', () => {
+  it('sem intenção não anda; diagonal normalizada; desliza na parede por um eixo', () => {
+    const sim = visitSim();
+    const grid = sim.building.grid;
+    const el = sim.spots.get(sim.elevators[0]!.spotId)!;
+    const pos = { x: el.tx * 16 + 8, y: el.ty * 16 + 11, dir: 'down' as const };
+    expect(stepFree(grid, pos, NO_INTENT, 10)).toEqual({ ...pos, moved: false });
+    const d = stepFree(grid, pos, { dx: 1, dy: 1, run: false }, 10);
+    expect(Math.hypot(d.x - pos.x, d.y - pos.y)).toBeCloseTo(10, 5);
+    // para cima, logo abaixo da parede dos elevadores: não sobe, mas anda para o lado
+    const up = stepFree(grid, pos, { dx: 1, dy: -1, run: false }, 40);
+    expect(up.moved).toBe(true);
+    expect(canStand(grid, up.x, up.y)).toBe(true);
+    expect(up.y).toBeGreaterThanOrEqual(pos.y - 40 * Math.SQRT1_2 - 1e-9);
   });
 });

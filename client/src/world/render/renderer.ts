@@ -421,7 +421,8 @@ export class Renderer {
         if (fs?.front) push(K.FurnFront, f.ay + 0.5, f, vis, s);
       }
     }
-    for (const ch of this.sim.chars.values()) {
+    // os agentes e, na visita, o visitante
+    for (const ch of this.sim.people()) {
       const head = this.headOf(ch);
       head.visible = false;
       if (ch.inside || ch.alpha <= 0.01 || now < ch.hiddenUntil) continue;
@@ -532,7 +533,7 @@ export class Renderer {
 
   /** Remove entradas de personagens que já saíram. */
   pruneHeads(): void {
-    for (const id of this.heads.keys()) if (!this.sim.chars.has(id)) this.heads.delete(id);
+    for (const id of this.heads.keys()) if (!this.sim.person(id)) this.heads.delete(id);
   }
 
   roomInSlot(slot: number): RoomState | undefined {
@@ -930,6 +931,8 @@ export class Renderer {
    * mesa ao lado).
    */
   private drawCobwebs(now: number): void {
+    // visita: nenhum tempo veio do mundo, então nada de teia
+    if (this.sim.visit) return;
     const { ctx } = this;
     for (const ch of this.sim.chars.values()) {
       if (ch.mode !== 'shell' || !ch.shellSince || ch.leaving || !ch.seated || ch.atSpot !== ch.homeSpot) continue;

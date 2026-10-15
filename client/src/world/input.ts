@@ -5,7 +5,8 @@ export type Hit = { type: 'agent'; id: string } | { type: 'room'; id: string } |
 
 export interface InputHandlers {
   pick(sx: number, sy: number): Hit;
-  click(hit: Hit): void;
+  /** Clique (ou toque) sem arrastar: o que foi tocado e onde (px CSS do canvas). */
+  click(hit: Hit, at: { x: number; y: number }): void;
   doubleClick(hit: Hit): void;
   hover(sx: number, sy: number, inside: boolean): void;
   /** O usuário mexeu na câmera (cancela "seguir"). */
@@ -14,6 +15,8 @@ export interface InputHandlers {
   zoomStep(steps: number, sx?: number, sy?: number): void;
   /** (Opcional) O escritório está na tela? Com a cena da cidade aberta, o teclado não mexe na câmera escondida. */
   active?(): boolean;
+  /** (Opcional) O teclado mexe na câmera? (Na visita, as setas e o WASD andam com o visitante.) Padrão: sim. */
+  keys?(): boolean;
 }
 
 const DRAG_THRESHOLD = 5;
@@ -123,7 +126,7 @@ export function attachInput(canvas: HTMLCanvasElement, camera: Camera, h: InputH
       }
       lastTap = { t: now, x: p.x, y: p.y };
     }
-    h.click(hit);
+    h.click(hit, p);
   };
 
   const onCancel = (e: PointerEvent) => {
@@ -164,6 +167,7 @@ export function attachInput(canvas: HTMLCanvasElement, camera: Camera, h: InputH
   const onKey = (e: KeyboardEvent) => {
     if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
     if (h.active && !h.active()) return;
+    if (h.keys && !h.keys()) return;
     const t = e.target as HTMLElement | null;
     // Campo ou rádio em foco (velocidade do replay): as setas são do controle, não da câmera.
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.getAttribute?.('role') === 'radio')) return;
