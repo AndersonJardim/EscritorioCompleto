@@ -10,6 +10,12 @@ do meio (0.**3**.0).
 
 ## [Não lançado]
 
+### Corrigido
+
+- **Cidade: entrar e curtir voltaram a funcionar depois de deixar a aba em segundo plano.** Depois de meio minuto com
+  o Habblaud em outra aba ou janela, o personagem parava de mandar a posição ao Habblaud World: andava na tela, mas
+  "Entrar" e curtir diziam para chegar mais perto da porta.
+
 ## [1.0.1] - 2026-10-16
 
 ### Corrigido
