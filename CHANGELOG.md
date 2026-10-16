@@ -10,6 +10,8 @@ do meio (0.**3**.0).
 
 ## [Não lançado]
 
+## [1.0.3] - 2026-10-16
+
 ### Corrigido
 
 - **Cidade: “Responder” e “Mostrar no escritório” nos avisos voltam ao escritório e abrem o pedido do agente.** Com
@@ -574,7 +576,8 @@ Primeira versão publicada.
   Subagentes chegam, trabalham e entregam ao principal. Mostra as duas contas, com o uso de 5 horas e semanal de
   cada uma (tap de statusline), além de feed de atividade, avisos e modo demonstração. Roda no Node ou no Docker local.
 
-[Não lançado]: https://github.com/marmottajr/habblaud/compare/v1.0.2...HEAD
+[Não lançado]: https://github.com/marmottajr/habblaud/compare/v1.0.3...HEAD
+[1.0.3]: https://github.com/marmottajr/habblaud/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/marmottajr/habblaud/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/marmottajr/habblaud/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/marmottajr/habblaud/compare/v0.11.0...v1.0.0
