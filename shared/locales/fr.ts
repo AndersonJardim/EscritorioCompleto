@@ -2654,8 +2654,9 @@ export const FR: Readonly<Record<string, string>> = {
   "world.json ilegível ({0}): ignorado (entre de novo no Habblaud World).": "world.json illisible ({0}) : ignoré (reconnectez-vous à Habblaud World).",
   "Não foi possível gravar {0} ({1}); a sessão do Habblaud World vale só nesta execução.": "Impossible d'écrire {0} ({1}) ; la session Habblaud World ne vaut que pour cette exécution.",
 
-  // client/src/ui/world/invite-card.ts
-  "Conheça o Habblaud World": "Découvrez Habblaud World",
+  // client/src/ui/world/world-popups.ts
+  "Novidade: Habblaud World": "Nouveau : Habblaud World",
+  "Seu escritório agora pode virar um prédio numa cidade online, aceso enquanto os seus agentes trabalham.": "Votre bureau peut désormais devenir un immeuble dans une ville en ligne, éclairé pendant que vos agents travaillent.",
   "Seu escritório vira um prédio numa cidade em pixel art, aceso enquanto os seus agentes trabalham.": "Votre bureau devient un immeuble dans une ville en pixel art, éclairé pendant que vos agents travaillent.",
   "Crie um personagem, ande pela cidade e visite os prédios de outras pessoas.": "Créez un personnage, promenez-vous dans la ville et visitez les immeubles des autres.",
   "Cumprimente quem passa e deixe likes nos prédios, sem chat e sem spam.": "Saluez les passants et likez les immeubles, sans chat ni spam.",
@@ -2665,6 +2666,11 @@ export const FR: Readonly<Record<string, string>> = {
   "Criar conta": "Créer un compte",
   "Agora não": "Pas maintenant",
   "Não mostrar de novo": "Ne plus afficher",
+  "Você está na lista de espera": "Vous êtes sur la liste d'attente",
+  "O acesso é liberado aos poucos, em lotes. Avisamos por e-mail quando chegar a sua vez.": "L'accès est ouvert peu à peu, par lots. Nous vous préviendrons par e-mail quand ce sera votre tour.",
+  "Enquanto isso, o Habblaud continua normal e nada do escritório é enviado.": "En attendant, Habblaud fonctionne normalement et rien du bureau n'est envoyé.",
+  "Entendi": "Compris",
+  "Chegou a sua vez: crie o seu personagem e entre na cidade.": "C'est votre tour : créez votre personnage et entrez dans la ville.",
 
   // client/src/ui/world/settings-world.ts
   "← Voltar": "← Retour",

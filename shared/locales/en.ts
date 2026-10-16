@@ -2637,8 +2637,9 @@ export const EN: Readonly<Record<string, string>> = {
   "world.json fora do formato: ignorado (entre de novo no Habblaud World).": "world.json is malformed: ignored (sign in to Habblaud World again).",
   "world.json ilegível ({0}): ignorado (entre de novo no Habblaud World).": "world.json unreadable ({0}): ignored (sign in to Habblaud World again).",
   "Não foi possível gravar {0} ({1}); a sessão do Habblaud World vale só nesta execução.": "Couldn't write {0} ({1}); the Habblaud World session only lasts for this run.",
-  // client/src/ui/world/invite-card.ts
-  "Conheça o Habblaud World": "Meet Habblaud World",
+  // client/src/ui/world/world-popups.ts
+  "Novidade: Habblaud World": "New: Habblaud World",
+  "Seu escritório agora pode virar um prédio numa cidade online, aceso enquanto os seus agentes trabalham.": "Your office can now become a building in an online city, lit up while your agents work.",
   "Seu escritório vira um prédio numa cidade em pixel art, aceso enquanto os seus agentes trabalham.": "Your office becomes a building in a pixel-art city, lit up while your agents work.",
   "Crie um personagem, ande pela cidade e visite os prédios de outras pessoas.": "Create a character, walk around the city and visit other people's buildings.",
   "Cumprimente quem passa e deixe likes nos prédios, sem chat e sem spam.": "Greet passersby and like buildings, with no chat and no spam.",
@@ -2648,6 +2649,11 @@ export const EN: Readonly<Record<string, string>> = {
   "Criar conta": "Create account",
   "Agora não": "Not now",
   "Não mostrar de novo": "Don't show again",
+  "Você está na lista de espera": "You're on the waitlist",
+  "O acesso é liberado aos poucos, em lotes. Avisamos por e-mail quando chegar a sua vez.": "Access opens gradually, in batches. We'll email you when it's your turn.",
+  "Enquanto isso, o Habblaud continua normal e nada do escritório é enviado.": "Meanwhile, Habblaud works as usual and nothing from the office is sent.",
+  "Entendi": "Got it",
+  "Chegou a sua vez: crie o seu personagem e entre na cidade.": "It's your turn: create your character and enter the city.",
 
   // client/src/ui/world/settings-world.ts
   "← Voltar": "← Back",

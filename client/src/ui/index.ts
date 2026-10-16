@@ -37,7 +37,7 @@ import { Toasts } from './toasts';
 import { UpdateToaster } from './version';
 import { TopBar } from './topbar';
 import { UpdateBanner } from './update';
-import { InviteCard } from './world/invite-card';
+import { WorldPopups } from './world/world-popups';
 import { WorldChip } from './world/world-chip';
 import { WorldSocialNotifier } from './world/away-summary';
 import { worldGate } from './world/settings-world';
@@ -231,10 +231,10 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi,
   const feed = new FeedPanel(ctx);
   const toasts = new Toasts(ctx);
   const updateToaster = new UpdateToaster(ctx, (n) => toasts.push(n));
-  // Habblaud World (em desenvolvimento): seção em Configurações e cartão de convite, só com meta.world ligado.
+  // Habblaud World (em desenvolvimento): seção em Configurações e os popups de lançamento, só com meta.world ligado.
   const hw = worldSource(store);
   settings = new SettingsPopover(ctx, notifier, sound, hw);
-  const invite = new InviteCard(ctx, hw, { openWorld: () => settings.showWorld(topbar.settingsBtn, 'register'), settingsOpen: () => settings.isOpen });
+  const popups = new WorldPopups(ctx, hw, { openWorld: (screen) => settings.showWorld(topbar.settingsBtn, screen), settingsOpen: () => settings.isOpen });
   // Chip "🏙️ no mundo" / "⏸ pausado" na barra do topo (conta aprovada; nunca pela porta do celular).
   const worldChip = new WorldChip(ctx, hw, () => settings.showWorld(topbar.settingsBtn, 'home'), (n) => toasts.push(n));
   topbar.addStatus(worldChip.el);
@@ -279,7 +279,7 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi,
   const scrim = h('div', { class: 'ui-scrim', attrs: { 'aria-hidden': 'true' }, on: { click: () => ctx.togglePanel('sidebar', false) } });
 
   root.classList.add('ui-root');
-  root.append(timelapse.vignette, topbar.el, sidebar.el, scrim, feed.el, drawer.el, terminal.el, pty.el, timelapse.el, timelapse.badge, toasts.el, banner.el, update.el, empty.el, invite.el, tip.el, settings.el, history.el, deliveries.el, help.el, renamer.el, live, splash.el);
+  root.append(timelapse.vignette, topbar.el, sidebar.el, scrim, feed.el, drawer.el, terminal.el, pty.el, timelapse.el, timelapse.badge, toasts.el, banner.el, update.el, empty.el, popups.el, tip.el, settings.el, history.el, deliveries.el, help.el, renamer.el, live, splash.el);
   area = new FreeArea(world, { root, topbar: topbar.el, sidebar: sidebar.el, drawer: drawer.el, feed: feed.el }, () => ({
     sidebar: panels.sidebar,
     feed: panels.feed,
@@ -288,7 +288,7 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi,
   }));
   drawer.onLayoutChange = () => applyLayout();
 
-  const components: UiComponent[] = [topbar, sidebar, drawer, terminal, pty, history, deliveries, feed, toasts, settings, empty, banner, tip, notifier, splash, timelapse, sound, day, updateToaster, invite, worldChip];
+  const components: UiComponent[] = [topbar, sidebar, drawer, terminal, pty, history, deliveries, feed, toasts, settings, empty, banner, tip, notifier, splash, timelapse, sound, day, updateToaster, popups, worldChip];
   if (scene) components.push(scene);
   root.append(worldSocial.el);
   components.push(worldSocial);

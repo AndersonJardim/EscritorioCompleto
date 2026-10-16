@@ -28,10 +28,15 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
   obrigatório dos Termos de Uso e da Política de Privacidade; o desafio anti-robô é resolvido pelo próprio Habblaud) ou
   **Já tenho conta**; código de 6 dígitos com reenvio; **Esqueci a senha**; **Dispositivos** (até 3, com revogar) e
   sair. Na lista de espera, só o aviso, sem posição nem previsão, e o Habblaud aberto confere sozinho a cada 30 minutos
-  se o acesso foi liberado. O cartão **Conheça o Habblaud World** aparece uma vez, para quem ainda não tem conta. Tudo
-  só pelo próprio computador: nunca pela porta do celular, e o que age pela conta só com o acesso local (a trava do
-  terminal). O token do dispositivo fica em `~/.habblaud/world.json` (permissão 600; no Docker, no volume `/data`) e
-  nunca vai ao navegador, ao snapshot, aos logs nem à URL.
+  se o acesso foi liberado. Tudo só pelo próprio computador: nunca pela porta do celular, e o que age pela conta só com
+  o acesso local (a trava do terminal). O token do dispositivo fica em `~/.habblaud/world.json` (permissão 600; no
+  Docker, no volume `/data`) e nunca vai ao navegador, ao snapshot, aos logs nem à URL.
+- **Popups de lançamento:** três avisos em janela modal, por cima do escritório (e de Configurações). **Novidade:
+  Habblaud World**, para quem ainda não tem conta, com o botão **Criar conta**: "Agora não" o traz de volta em 3 dias
+  (no máximo 3 vezes), "Não mostrar de novo" encerra e, com a conta criada, ele não volta. **Você está na lista de
+  espera**, logo depois do cadastro (ou ao abrir a página já na espera), uma vez por navegador. **Acesso liberado!**,
+  quando chega a sua vez e o personagem ainda não existe, com **Criar personagem** levando direto à tela dele. Nenhum
+  deles aparece pela porta do celular, no timelapse ou no modo demonstração.
 - **Personagem:** nome de jogador, dica visual, o mesmo editor de aparência da gaveta do agente, 2 ou 3 traços de
   personalidade (os que não combinam ficam desabilitados) e uma frase de apresentação da lista; dá para criar ainda na
   lista de espera. Se a moderação trocar o nome, a seção pede um nome novo, que entra sem esperar os 30 dias.
