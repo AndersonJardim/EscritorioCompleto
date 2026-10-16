@@ -506,7 +506,7 @@ export function worldErrorText(raw: WorldErrorCode | string, action: WorldAction
     case 'method_not_allowed':
       return tr('O pedido saiu num formato que o servidor não aceita. Atualize o Habblaud e tente de novo.');
     case 'not_configured':
-      return tr('O Habblaud World não está ligado neste Habblaud (falta HABBLAUD_WORLD_URL).');
+      return tr('O Habblaud World não está ligado neste Habblaud (HABBLAUD_WORLD_URL recusada; veja o log do servidor).');
     case 'rate_limited':
       return action === 'export'
         ? tr('Dá para baixar os dados uma vez por dia. Tente de novo amanhã.')

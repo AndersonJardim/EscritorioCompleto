@@ -80,7 +80,7 @@ export interface WorldServiceOptions {
   /** Trava do terminal (ServerConfig.terminal): sem ela, nada age pela conta. */
   terminal: boolean;
   store: WorldSettingsStore;
-  /** Ausente = sem HABBLAUD_WORLD_URL (não configurado). */
+  /** Ausente = sem servidor do mundo aceito (HABBLAUD_WORLD_URL recusada; não configurado). */
   client?: WorldClient;
   /** Idioma do cadastro quando a página não manda (padrão: o do servidor). */
   locale?: () => WorldLocale;
@@ -177,7 +177,7 @@ export class WorldService {
     return s ? s.access : 'logged_out';
   }
 
-  /** OfficeSnapshot.meta.world. Sem HABBLAUD_WORLD_URL, `enabled: false`: o recurso está desligado e nada aparece. */
+  /** OfficeSnapshot.meta.world. Sem servidor do mundo aceito, `enabled: false`: o recurso está desligado e nada aparece. */
   meta(): WorldMeta {
     const m: WorldMeta = { enabled: this.o.config.enabled && this.configured, configured: this.configured, state: this.state() };
     if (this.uplink && this.hasBuilding()) m.building = { ...this.uplink.meta(), ...this.o.social?.meta() };

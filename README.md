@@ -742,17 +742,18 @@ Everything works without configuring anything. If you need to adjust something, 
 ## Habblaud World
 
 Habblaud World is an online pixel-art city where every Habblaud becomes a building, lit up live while the agents work,
-and everyone walks around with a character. **It's in development and off by default:** without `HABBLAUD_WORLD_URL`,
-nothing about the World shows up in the interface and nothing leaves your computer.
+and everyone walks around with a character. **It's on by default**, pointing at `server.habblaud.com`; **nothing leaves
+your computer until you create an account** and sign in, and `HABBLAUD_WORLD=0` turns everything off. Access is granted
+through a waiting list.
 
-**How to turn it on.** The variables below (in `.env` or in the environment) point Habblaud at a world server. The
-section shows up in the **Habblaud World** window (the city button in the top bar) and only works from this computer (never through the phone port); the
+**How to configure it.** The variables below (in `.env` or in the environment) are optional: without them, Habblaud
+points at the official server. The section shows up in the **Habblaud World** window (the city button in the top bar) and only works from this computer (never through the phone port); the
 account stays only here, in `~/.habblaud/world.json` (permission 600; in Docker, in the `/data` volume).
 
 | Variable | Default | What for |
 | --- | --- | --- |
-| `HABBLAUD_WORLD_URL` | — (off) | World server address, `https://` or `wss://` only (no path). |
-| `HABBLAUD_WORLD` | on | `0` hides everything about the World (routes and interface), even with the URL. |
+| `HABBLAUD_WORLD_URL` | `https://server.habblaud.com` | World server address, `https://` or `wss://` only (no path). |
+| `HABBLAUD_WORLD` | on | `0` turns off everything about the World (routes and interface) and nothing leaves your computer. |
 | `HABBLAUD_WORLD_DEV` | off | `1` accepts a local world server without TLS: `http://127.0.0.1:<port>` (`npm run dev` already does) or, from inside Docker, `http://host.docker.internal:<port>`. |
 
 **Privacy.** Nothing about your work leaves your computer. From the building, only this goes out: the theme, one floor
@@ -942,8 +943,9 @@ metadata (letter, email, organization) is read on the host by `docker:up` and pa
   with no token, to the public GitHub API (`api.github.com/repos/marmottajr/habblaud/releases/latest`). It doesn't send anything
   about your sessions; GitHub only sees your IP and the version in use, which goes in the `User-Agent`.
   `HABBLAUD_UPDATE_CHECK=0` turns off the request.
-  [Habblaud World](#habblaud-world) (in development, off by default) only talks to the world server when
-  `HABBLAUD_WORLD_URL` is set: see [what leaves your computer](docs/world/privacidade.md) (in Portuguese).
+  [Habblaud World](#habblaud-world) (on by default) only sends something to the world server after you create an
+  account and sign in, and only what is listed in [what leaves your computer](docs/world/privacidade.md) (in Portuguese);
+  `HABBLAUD_WORLD=0` turns it all off.
   So is the [phone with login](#phone-with-login-and-https-approving-requests), which only exists after `npm run remote:setup`.
 - **No credentials:** Habblaud doesn't read passwords or access tokens. From each account's `.claude.json` it only uses the
   email, the organization and the `/usage` cache; live usage comes from the mod (or the statusline tap).
