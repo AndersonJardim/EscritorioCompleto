@@ -72,7 +72,9 @@ export class WorldPopups implements UiComponent {
     private readonly hooks: WorldPopupHooks,
   ) {
     this.memory = this.load();
-    this.el = h('dialog', { class: 'ui-world-popup', attrs: { 'aria-labelledby': TITLE_ID, 'aria-modal': 'true' } });
+    // `aria-modal` só enquanto aberto: fechado, o <dialog> continua no DOM e não pode parecer um modal aberto
+    // (o teclado da cidade e os atalhos do escritório param na presença de um modal).
+    this.el = h('dialog', { class: 'ui-world-popup', attrs: { 'aria-labelledby': TITLE_ID } });
     // Clique no fundo (fora do conteúdo) fecha, como "Agora não" / "Depois".
     this.el.addEventListener('click', (e) => {
       if (e.target === this.el) this.close();
@@ -123,6 +125,7 @@ export class WorldPopups implements UiComponent {
     } else {
       this.el.setAttribute('open', '');
     }
+    this.el.setAttribute('aria-modal', 'true');
     primary.focus({ preventScroll: true });
   }
 
@@ -197,6 +200,7 @@ export class WorldPopups implements UiComponent {
       if (typeof this.el.close === 'function') this.el.close();
       else this.el.removeAttribute('open');
     }
+    this.el.removeAttribute('aria-modal');
     if (this.open) this.onClosed();
   }
 

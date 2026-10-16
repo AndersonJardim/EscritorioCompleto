@@ -10,6 +10,14 @@ do meio (0.**3**.0).
 
 ## [Não lançado]
 
+## [1.0.1] - 2026-10-16
+
+### Corrigido
+
+- **Cidade: as teclas voltaram a andar.** Na 1.0.0, com os popups de lançamento e a janela do Habblaud World na
+  página, WASD, as setas e os atalhos do escritório paravam de responder mesmo com tudo fechado: um `<dialog>`
+  fechado continua na página e era tomado por um modal aberto. Só os diálogos abertos contam agora.
+
 ## [1.0.0] - 2026-10-16
 
 Por que 1.0: o escritório (salas, personagens, subagentes, uso por conta, terminal, timelapse, celular com login) está
@@ -551,7 +559,8 @@ Primeira versão publicada.
   Subagentes chegam, trabalham e entregam ao principal. Mostra as duas contas, com o uso de 5 horas e semanal de
   cada uma (tap de statusline), além de feed de atividade, avisos e modo demonstração. Roda no Node ou no Docker local.
 
-[Não lançado]: https://github.com/marmottajr/habblaud/compare/v1.0.0...HEAD
+[Não lançado]: https://github.com/marmottajr/habblaud/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/marmottajr/habblaud/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/marmottajr/habblaud/compare/v0.11.0...v1.0.0
 [0.11.0]: https://github.com/marmottajr/habblaud/releases/tag/v0.11.0
 [0.10.0]: https://github.com/marmottajr/habblaud/releases/tag/v0.10.0

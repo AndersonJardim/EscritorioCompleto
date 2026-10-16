@@ -382,7 +382,7 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi,
     // Na cidade os atalhos do escritório ficam desligados: Esc fecha o cartão aberto ou volta ao escritório.
     if (inCity()) {
       if (e.key === 'Escape') {
-        if (help.isOpen || settings.isOpen || worldDialog.isOpen || history.isOpen || document.querySelector('dialog[open], [aria-modal="true"]')) return;
+        if (help.isOpen || settings.isOpen || worldDialog.isOpen || history.isOpen || document.querySelector('dialog[open], :not(dialog)[aria-modal="true"]')) return;
         e.preventDefault();
         if (!city?.escape()) scene?.close();
       } else if (e.key === '?' && !isTypingTarget(e.target) && !help.isOpen) {

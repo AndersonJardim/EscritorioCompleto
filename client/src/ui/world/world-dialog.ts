@@ -47,7 +47,8 @@ export class WorldDialog implements UiComponent, WorldThemeLink {
     this.body = h('div', { class: 'ui-world-dialog__body' }, this.group.el);
     this.el = h(
       'dialog',
-      { class: 'ui-world-dialog', attrs: { 'aria-labelledby': TITLE_ID, 'aria-modal': 'true' } },
+      // `aria-modal` só enquanto aberto (fechado, o <dialog> fica no DOM e não pode parecer um modal aberto).
+      { class: 'ui-world-dialog', attrs: { 'aria-labelledby': TITLE_ID } },
       h('div', { class: 'ui-world-dialog__head' }, badge, h('div', { class: 'ui-world-dialog__heading' }, this.title, this.group.chip), close),
       this.body,
     );
@@ -85,6 +86,7 @@ export class WorldDialog implements UiComponent, WorldThemeLink {
     this.opener = opener ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     if (typeof this.el.showModal === 'function') this.el.showModal();
     else this.el.setAttribute('open', '');
+    this.el.setAttribute('aria-modal', 'true');
     this.button.setAttribute('aria-expanded', 'true');
     this.body.scrollTop = 0;
     // O foco começa no título (o leitor de tela anuncia a janela); as telas com formulário levam ao primeiro campo.
@@ -99,6 +101,7 @@ export class WorldDialog implements UiComponent, WorldThemeLink {
 
   close(): void {
     if (!this.el.open) return;
+    this.el.removeAttribute('aria-modal');
     if (typeof this.el.close === 'function') this.el.close();
     else {
       this.el.removeAttribute('open');
