@@ -203,7 +203,7 @@ exemplo). Quem não quiser nem isso usa o modo discreto ou pausa.
    recebe das salas só o id e nunca recebe contas, uso nem estatísticas. Os testes conferem cada chave do pacote
    contra a lista do `schema.json`, que nenhum texto do escritório (caminhos, nomes de sala, títulos, atividades,
    comandos, tarefas, branch, modelo, conta, e-mail, nomes editados) aparece nele e que nenhum número parece um horário.
-3. **Você vê o que foi enviado:** Configurações › Habblaud World › Ver o que foi enviado mostra o JSON exato da última
+3. **Você vê o que foi enviado:** Habblaud World › Ver o que foi enviado (o botão de cidade na barra do topo) mostra o JSON exato da última
    remessa, a hora, o tamanho e a resposta do servidor (aceito, ou o motivo da recusa). É o mesmo objeto que foi para
    o fio.
 4. **Código aberto:** quem revisa um pull request que mexe em `shared/world/` ou `server/world/` confere esta lista

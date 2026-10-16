@@ -780,7 +780,7 @@ mientras los agentes trabajan, y cada persona pasea con un personaje. **Está en
 defecto:** sin `HABBLAUD_WORLD_URL`, no aparece nada del World en la interfaz y nada sale de la computadora.
 
 **Cómo activarlo.** Las variables de abajo (en el `.env` o en el entorno) apuntan Habblaud a un servidor del mundo. La
-sección aparece en **Configuración › Habblaud World** y solo funciona desde la propia computadora (nunca por el puerto
+sección aparece en la ventana **Habblaud World** (el botón de ciudad en la barra superior) y solo funciona desde la propia computadora (nunca por el puerto
 del celular); la cuenta queda solo aquí, en `~/.habblaud/world.json` (permiso 600; en Docker, en el volumen `/data`).
 
 | Variable | Por defecto | Para qué |

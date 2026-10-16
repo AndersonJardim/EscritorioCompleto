@@ -23,7 +23,11 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
   `host.docker.internal` ao host (`extra_hosts` com `host-gateway`, inofensivo no macOS), e o `npm run docker:up`
   termina dizendo se o World está ligado e para qual servidor. O build grava `dist/build.json` com o commit e se a
   cópia estava modificada (vai na primeira mensagem da conexão do prédio).
-- **Conta:** **Configurações › Habblaud World** (depois de Acesso pelo celular). **Criar conta** (e-mail e senha de 12
+- **Janela própria:** o Habblaud World tem um botão só dele na barra do topo (o ícone de cidade, ao lado de
+  Configurações; só aparece com o servidor do mundo configurado) e abre num modal só dele, fora das Configurações: o
+  prédio em pixels, o estado da conta no cabeçalho e tudo o que segue num corpo rolável. O chip "no mundo" ao lado da
+  versão, os popups de lançamento e o aviso "Enquanto você estava fora" abrem a mesma janela, na tela certa.
+- **Conta:** na janela do Habblaud World. **Criar conta** (e-mail e senha de 12
   caracteres ou mais, o resumo do que sai e do que nunca sai do computador, a linha dos dados verdadeiros e o aceite
   obrigatório dos Termos de Uso e da Política de Privacidade; o desafio anti-robô é resolvido pelo próprio Habblaud) ou
   **Já tenho conta**; código de 6 dígitos com reenvio; **Esqueci a senha**; **Dispositivos** (até 3, com revogar) e
@@ -42,7 +46,7 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
   lista de espera. Se a moderação trocar o nome, a seção pede um nome novo, que entra sem esperar os 30 dias.
 - **Visibilidade do prédio:** ao vivo ou discreto, fechado a visitas, esconder o país, tokens (só em faixas), placar,
   compactações e **Avisar quando baterem na porta** (desligado por padrão).
-- **Conta e dados** (nova tela em Configurações › Habblaud World): o interruptor **Avisar por e-mail antes de retirar
+- **Conta e dados** (nova tela da janela do Habblaud World): o interruptor **Avisar por e-mail antes de retirar
   meu prédio por inatividade**; **Baixar meus dados**, que salva `habblaud-world-dados.json` com o que o mundo guarda da
   conta (uma vez por dia); e **Excluir conta** em três etapas: o que some e quando (o prédio e o perfil na hora; a
   conta, os likes, os bloqueios, as denúncias feitas e os dispositivos do banco em 7 dias; dos backups, em até 30), a
@@ -123,7 +127,7 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
   ficam numa chave à parte e somem ao sair. **Ver como os outros veem** (no cartão **Seu prédio** e na porta do seu
   prédio) entra no seu próprio prédio. **Para o dono:** o selo do topo ganha "👀 N" e o cartão **Seu prédio**, "N
   visitantes agora" (só a contagem, nunca quem); o primeiro visitante de cada conexão dá o aviso "Alguém entrou no seu
-  prédio", desligável em **Configurações › Habblaud World › Avisar quando alguém visitar**. Pelo servidor local, o
+  prédio", desligável em **Habblaud World › Avisar quando alguém visitar**. Pelo servidor local, o
   stream da cena repassa o interior (`building`, `building.patch` com a revisão conferida e `resync {building}` num
   salto) e os visitantes (`visitors`, também em `meta.world.building.visitors`).
 - **O social leve, sem nenhum texto livre:** na cidade, **L** (ou o botão ❤️ que aparece perto da porta, até 4 passos)
@@ -141,7 +145,7 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
   ficam no canto, só com os ícones. **No escritório:** o chip da barra ganha "❤️ N hoje"; ao conectar, o cartão
   **Enquanto você estava fora** (visitas, likes e os carimbos deixados na portaria, sem quem) aparece no canto e também
   em **Seu prédio**, com o código do prédio para mandar a um amigo; **Avisar quando baterem na porta** (Visibilidade,
-  desligado por padrão) mostra "Alguém bateu na porta do seu prédio"; **Configurações › Habblaud World › Bloqueados**
+  desligado por padrão) mostra "Alguém bateu na porta do seu prédio"; **Habblaud World › Bloqueados**
   lista quem você bloqueou, com **Desbloquear**. **Pelo servidor local:** `POST /api/world/summary/seen` e
   `/api/world/unblock`, e os comandos `like`, `unlike`, `greet`, `block`, `unblock`, `report`, `stamp`, `teleport`,
   `knock` e `summary.seen` na cena, conferidos campo a campo.

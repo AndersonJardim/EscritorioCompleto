@@ -783,7 +783,7 @@ les agents travaillent, et où chacun se promène avec un personnage. **C'est en
 défaut :** sans `HABBLAUD_WORLD_URL`, rien du World n'apparaît dans l'interface et rien ne sort de l'ordinateur.
 
 **Comment l'activer.** Les variables ci-dessous (dans le `.env` ou dans l'environnement) pointent Habblaud vers un
-serveur du monde. La section apparaît dans **Réglages › Habblaud World** et ne fonctionne que depuis l'ordinateur
+serveur du monde. La section apparaît dans la fenêtre **Habblaud World** (le bouton ville de la barre du haut) et ne fonctionne que depuis l'ordinateur
 lui-même (jamais par le port du téléphone) ; le compte reste ici seulement, dans `~/.habblaud/world.json` (permission
 600 ; dans Docker, dans le volume `/data`).
 

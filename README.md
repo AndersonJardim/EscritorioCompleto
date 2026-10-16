@@ -746,7 +746,7 @@ and everyone walks around with a character. **It's in development and off by def
 nothing about the World shows up in the interface and nothing leaves your computer.
 
 **How to turn it on.** The variables below (in `.env` or in the environment) point Habblaud at a world server. The
-section shows up in **Settings › Habblaud World** and only works from this computer (never through the phone port); the
+section shows up in the **Habblaud World** window (the city button in the top bar) and only works from this computer (never through the phone port); the
 account stays only here, in `~/.habblaud/world.json` (permission 600; in Docker, in the `/data` volume).
 
 | Variable | Default | What for |

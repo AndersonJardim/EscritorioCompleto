@@ -1,10 +1,11 @@
 // Os popups do lançamento do Habblaud World, um modal de verdade (<dialog> no top layer, com o fundo escurecido, o
-// foco preso e o Esc fechando) por cima do escritório, e acima de Configurações quando este está aberto:
+// foco preso e o Esc fechando) por cima do escritório, e acima da janela do Habblaud World quando ela está aberta:
 // - "Novidade: Habblaud World", para quem ainda não tem conta. "Agora não" fecha e ele volta depois de 3 dias, no
-//   máximo 3 vezes; "Não mostrar de novo" encerra; com a conta criada, nunca mais. Com Configurações aberto, espera.
+//   máximo 3 vezes; "Não mostrar de novo" encerra; com a conta criada, nunca mais. Com Configurações ou a janela do
+//   World abertos, espera.
 // - "Você está na lista de espera", logo depois do cadastro (ou ao abrir a página já na espera), uma vez por navegador.
 // - "Acesso liberado!", quando a conta é liberada com a página aberta (ou ao abrir já liberada, sem personagem), uma
-//   vez por navegador; "Criar personagem" abre Configurações › Habblaud World na tela do personagem.
+//   vez por navegador; "Criar personagem" abre a janela do Habblaud World na tela do personagem.
 // Quem decide é nextWorldPopup (world-model.ts, puro e testado); a memória vai ao localStorage quando o popup aparece
 // (sem armazenamento, vale só para esta página). Só com o servidor do World configurado e a página aberta pelo próprio
 // computador: nunca pela porta do celular, no timelapse ou no modo demonstração.
@@ -29,8 +30,8 @@ import {
   type WorldPopupMemory,
 } from './world-model';
 
-/** Prédio em pixels (o mundo é uma cidade de prédios). */
-const BUILDING = pixelIcon(
+/** Prédio em pixels (o mundo é uma cidade de prédios): o selo dos popups e do cabeçalho da janela do World. */
+export const WORLD_BUILDING_ICON = pixelIcon(
   [
     '....####....',
     '....#..#....',
@@ -50,10 +51,10 @@ const BUILDING = pixelIcon(
 );
 
 export interface WorldPopupHooks {
-  /** Abre Configurações › Habblaud World na tela pedida (o cadastro ou o personagem). */
+  /** Abre a janela do Habblaud World na tela pedida (o cadastro ou o personagem). */
   openWorld(screen: 'register' | 'character'): void;
-  /** Configurações aberto: o popup de lançamento espera (os outros dois ficam por cima). */
-  settingsOpen(): boolean;
+  /** Configurações ou a janela do World abertos: o popup de lançamento espera (os outros dois ficam por cima). */
+  panelOpen(): boolean;
 }
 
 const TITLE_ID = 'ui-world-popup-title';
@@ -91,14 +92,14 @@ export class WorldPopups implements UiComponent {
   render(): void {
     const meta = this.src.meta();
     if (this.open) {
-      // A conta foi criada por outro caminho (Configurações, outra aba): o lançamento não vale mais.
+      // A conta foi criada por outro caminho (a janela do World, outra aba): o lançamento não vale mais.
       if (this.open === 'launch' && meta?.state !== 'logged_out') this.close();
       return;
     }
     const gate = { ...worldGate(this.ctx, this.src), replaying: this.ctx.store.replaying };
     const d = nextWorldPopup(meta, gate, this.memory, Date.now());
-    // Com Configurações aberto por cima, o lançamento espera a próxima leitura (sem contar como aparição).
-    if (d.show === 'launch' && this.hooks.settingsOpen()) return;
+    // Com Configurações ou a janela do World abertos, o lançamento espera a próxima leitura (sem contar como aparição).
+    if (d.show === 'launch' && this.hooks.panelOpen()) return;
     if (d.memory) this.remember(d.memory);
     if (d.show) this.show(d.show);
   }
@@ -108,7 +109,7 @@ export class WorldPopups implements UiComponent {
   private show(kind: WorldPopupKind): void {
     this.open = kind;
     const badge = h('span', { class: 'ui-world-popup__badge', attrs: { 'aria-hidden': 'true' } });
-    badge.innerHTML = BUILDING;
+    badge.innerHTML = WORLD_BUILDING_ICON;
     const { title, body, actions, primary } = this.content(kind);
     this.el.className = `ui-world-popup is-${kind}`;
     this.el.replaceChildren(

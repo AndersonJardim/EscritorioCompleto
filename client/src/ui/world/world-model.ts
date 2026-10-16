@@ -1,4 +1,4 @@
-// Habblaud World na interface, parte pura (sem DOM): quando a seção de Configurações e os popups de lançamento
+// Habblaud World na interface, parte pura (sem DOM): quando a janela do World e os popups de lançamento
 // aparecem, a máquina de estados da seção, as regras de senha, nome de jogador e traços e o texto de cada erro. São
 // conferências de antemão, para responder na hora: quem decide é o servidor (o nome, por exemplo, ainda passa pela
 // lista de palavras bloqueadas, que só ele tem). Também o cartão "Seu prédio" (Fase 2): estado, contagens, motivo de

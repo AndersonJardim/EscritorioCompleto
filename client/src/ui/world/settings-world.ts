@@ -1,14 +1,15 @@
-// Seção "Habblaud World" das Configurações (depois de "Acesso pelo celular"): conta (cadastro com aceite dos termos e o
-// resumo de privacidade, código do e-mail, login, esqueci a senha), lista de espera, personagem (o editor de aparência
-// da gaveta do agente, mais nome, traços e frase de apresentação), o cartão "Seu prédio" com Pausar/Retomar e "Ver o
-// que foi enviado" (building.ts), visibilidade do prédio, dispositivos e sair. Também a dica do tema em Aparência,
-// quando a escolha vai para o prédio. Fase 6: "Conta e dados" (o aviso de inatividade, "Baixar meus dados" e "Excluir
-// conta" em três etapas: o que some e quando, a confirmação e o código do e-mail), o aviso da manutenção do mundo e o
-// da conta excluída. Fala com as rotas locais /api/world/* (net/world.ts); as regras puras estão em world-model.ts.
+// O conteúdo da janela "Habblaud World" (world-dialog.ts, o botão próprio da barra do topo): conta (cadastro com
+// aceite dos termos e o resumo de privacidade, código do e-mail, login, esqueci a senha), lista de espera, personagem
+// (o editor de aparência da gaveta do agente, mais nome, traços e frase de apresentação), o cartão "Seu prédio" com
+// Pausar/Retomar e "Ver o que foi enviado" (building.ts), visibilidade do prédio, dispositivos e sair. Também a dica
+// do tema em Configurações › Aparência, quando a escolha vai para o prédio. Fase 6: "Conta e dados" (o aviso de
+// inatividade, "Baixar meus dados" e "Excluir conta" em três etapas: o que some e quando, a confirmação e o código do
+// e-mail), o aviso da manutenção do mundo e o da conta excluída. Fala com as rotas locais /api/world/* (net/world.ts);
+// as regras puras estão em world-model.ts.
 //
-// O popover de Configurações chama render() a cada quadro sujo: o miolo só é refeito quando a tela muda (senão o que
-// foi digitado e o foco se perderiam); o status é buscado ao abrir o popover, depois de cada ação e quando o
-// meta.world do snapshot muda, nunca dentro do render.
+// A janela chama render() a cada quadro sujo: o miolo só é refeito quando a tela muda (senão o que foi digitado e o
+// foco se perderiam); o status é buscado ao abrir a janela, depois de cada ação e quando o meta.world do snapshot
+// muda, nunca dentro do render.
 import { getLocale, intlLocale, tr } from '../../../../shared/i18n';
 import type { Appearance } from '../../art/api';
 import { access } from '../../net/access';
@@ -259,7 +260,8 @@ interface View {
 
 export class WorldSettingsGroup {
   readonly el: HTMLElement;
-  private readonly chip: HTMLElement;
+  /** O estado da conta ("Sem conta", "Na lista de espera", "Liberado"), no cabeçalho da janela. */
+  readonly chip: HTMLElement;
   private readonly flashEl: HTMLElement;
   private readonly body: HTMLElement;
   private ui: WorldUi = initialWorldUi();
@@ -292,8 +294,6 @@ export class WorldSettingsGroup {
   private themeInflight = 0;
   /** Quando a última escolha de tema foi feita aqui (um status pedido antes dela não a desfaz). */
   private themePickedAt = 0;
-  /** Rolar até a seção de novo quando ela terminar de carregar (aberta pelo chip ou pelo convite, ainda carregando). */
-  private scrollPending = false;
   /** Relógio lógico das escolhas de tema e dos pedidos de status (qual veio antes). */
   private themeClock = 0;
 
@@ -305,14 +305,7 @@ export class WorldSettingsGroup {
     this.flashEl = h('p', { class: 'ui-world__flash', role: 'status', hidden: true });
     this.body = h('div', { class: 'ui-world__body' });
     this.sent = new SentDialog(() => this.client, () => this.ctx.now());
-    this.el = h(
-      'div',
-      { class: 'ui-set-group ui-world', hidden: true, attrs: { id: 'ui-world' } },
-      h('div', { class: 'ui-world__top' }, h('h3', { text: tr('Habblaud World'), tabIndex: -1 }), this.chip),
-      this.flashEl,
-      this.body,
-      this.sent.el,
-    );
+    this.el = h('div', { class: 'ui-world', hidden: true, attrs: { id: 'ui-world' } }, this.flashEl, this.body, this.sent.el);
     this.themeError = h('span', { class: 'ui-world__error', role: 'alert', hidden: true });
     this.themeNote = h('span', { class: 'ui-set__hint ui-world-theme', hidden: true }, h('span', { text: tr('O tema também vale para o seu prédio no Habblaud World.') }), this.themeError);
     src.onChange?.(() => {
@@ -325,7 +318,7 @@ export class WorldSettingsGroup {
     return this.src.client;
   }
 
-  /** A cada render do popover (barato: só refaz o miolo quando a tela muda). */
+  /** A cada render da janela, aberta ou não (barato: só refaz o miolo quando a tela muda). */
   render(open: boolean): void {
     const meta = this.src.meta();
     const gate = worldGate(this.ctx, this.src);
@@ -352,7 +345,7 @@ export class WorldSettingsGroup {
     this.paint();
   }
 
-  /** Abre numa tela (o cartão de convite pede o cadastro). */
+  /** Vai para uma tela (os popups de lançamento pedem o cadastro ou o personagem; o chip do topo, o prédio). */
   show(screen?: WorldScreen): void {
     if (screen) this.ui = worldReduce(this.ui, { type: 'go', screen });
     this.ctx.invalidate();
@@ -387,14 +380,10 @@ export class WorldSettingsGroup {
     else if (!st.theme && pref !== 'auto') void this.onThemePicked(pref);
   }
 
-  /** Rola até a seção e a destaca por um instante. */
-  highlight(): void {
-    // Carregando, a seção ainda é curta e a rolagem para antes dela: rola de novo quando o conteúdo chegar.
-    this.scrollPending = this.builtKey === 'loading' || this.loading;
-    this.el.scrollIntoView({ block: 'start' });
-    this.el.classList.remove('is-highlight');
-    void this.el.offsetWidth;
-    this.el.classList.add('is-highlight');
+  /** Volta ao topo do corpo rolável da janela (a cada tela nova, o começo dela é o que importa). */
+  private scrollToTop(): void {
+    const host = this.el.parentElement;
+    if (host) host.scrollTop = 0;
   }
 
   private dispatch(e: WorldUiEvent): void {
@@ -467,12 +456,9 @@ export class WorldSettingsGroup {
       this.epoch++;
       this.view = this.build();
       this.body.replaceChildren(this.view.el);
+      this.scrollToTop();
     } else {
       this.view?.sync?.();
-    }
-    if (this.scrollPending && !this.loading && this.builtKey !== 'loading') {
-      this.scrollPending = false;
-      requestAnimationFrame(() => this.el.scrollIntoView({ block: 'start' }));
     }
     setText(this.chip, this.chipText());
     setVariant(this.chip, 'is-', this.mode === 'active' ? (this.ui.server ?? 'loading') : this.mode);

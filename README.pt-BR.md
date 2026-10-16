@@ -744,7 +744,7 @@ trabalham, e cada pessoa passeia com um personagem. **Está em desenvolvimento e
 `HABBLAUD_WORLD_URL`, nada do World aparece na interface e nada sai do computador.
 
 **Como ligar.** As variáveis abaixo (no `.env` ou no ambiente) apontam o Habblaud para um servidor do mundo. A seção
-aparece em **Configurações › Habblaud World** e só funciona pelo próprio computador (nunca pela porta do celular); a
+aparece na janela **Habblaud World** (o botão de cidade na barra do topo) e só funciona pelo próprio computador (nunca pela porta do celular); a
 conta fica só aqui, em `~/.habblaud/world.json` (permissão 600; no Docker, no volume `/data`).
 
 | Variável | Padrão | Para quê |
