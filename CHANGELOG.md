@@ -10,6 +10,13 @@ do meio (0.**3**.0).
 
 ## [Não lançado]
 
+### Corrigido
+
+- **Cidade: “Responder” e “Mostrar no escritório” nos avisos voltam ao escritório e abrem o pedido do agente.** Com
+  a cidade aberta, o clique no aviso de um pedido ou pergunta (e na notificação do navegador, no chip de pedidos da
+  barra e nas Entregas) não fazia nada visível: o agente era escolhido atrás da cidade. Agora a cidade fecha, a
+  gaveta abre no agente e o cartão do pedido recebe o foco.
+
 ## [1.0.2] - 2026-10-16
 
 ### Corrigido

@@ -104,6 +104,9 @@ export function createUI(root: HTMLElement, store: OfficeStore, world: WorldApi,
     agent: (id) => store.agent(id),
     selection: () => selection,
     select(sel, opts) {
+      // Na cidade o escritório (gaveta, terminal) fica escondido: escolher um agente ou sala volta para ele. Antes de
+      // tudo: a área livre só mede a gaveta e a barra lateral sem a classe `is-city`.
+      scene?.leaveFor(sel);
       if (sel && opts?.focus) area.setIntent(sel);
       else area.clearIntent();
       // A gaveta passa a contar na área livre ANTES do foco: o mundo centraliza já na parte visível.
