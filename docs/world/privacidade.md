@@ -5,9 +5,10 @@ e agentes você está rodando e o que cada personagem está fazendo. A regra que
 
 > **Com os dados que saem não dá para saber quem você é nem em que trabalha.**
 
-**Situação hoje:** o World está em desenvolvimento e vem **desligado**. Sem `HABBLAUD_WORLD_URL` (veja o README), nada
-aparece e nada sai do computador. Esta página é a lista completa do que pode sair quando ele estiver ligado; qualquer
-mudança nela entra no código e nesta página no mesmo pull request.
+**Situação hoje:** o World está no ar e vem **ligado por padrão**, apontando para `server.habblaud.com` (ou a
+`HABBLAUD_WORLD_URL` que você definir; veja o README). **Nada sai do computador antes de você criar a conta e entrar**;
+`HABBLAUD_WORLD=0` desliga tudo. Esta página é a lista completa do que pode sair; qualquer mudança nela entra no código
+e nesta página no mesmo pull request.
 
 ## O que sai: a conta e o personagem
 
@@ -30,7 +31,7 @@ Ao usar o World, sai do computador, por HTTPS, para o servidor do mundo:
 | Voltar ao mundo | Ao clicar em "Voltar ao mundo" depois de sair (`POST /v1/me/building/join`, só com o token) | Para o servidor aceitar o prédio de novo (um prédio novo, em outro lote) |
 | Excluir a conta | Ao pedir a exclusão e ao digitar o código que chegou por e-mail (`POST /v1/me/delete` e `/v1/me/delete/confirm`, com o token e o código) | Para o servidor apagar a conta: o prédio e o perfil somem do mundo na hora; a conta, os likes, os bloqueios, as denúncias feitas e os dispositivos saem do banco em 7 dias e dos backups em até 30. Aqui, o `world.json` é apagado |
 | Baixar meus dados | Ao clicar em "Baixar meus dados" (`GET /v1/me/export`, só com o token; uma vez por dia) | O servidor devolve, num arquivo JSON, o que guarda da sua conta (inclusive o nome reservado, o país e os IPs do cadastro e do último login); nada novo sai do computador |
-| Versão do Habblaud | Em toda chamada, no cabeçalho `User-Agent` (`Habblaud/0.11.0`) | Compatibilidade e diagnóstico |
+| Versão do Habblaud | Em toda chamada, no cabeçalho `User-Agent` (`Habblaud/1.0.0`) | Compatibilidade e diagnóstico |
 
 Enquanto a conta está na lista de espera, o Habblaud aberto pergunta ao servidor do mundo, a cada 30 minutos, se o
 acesso já foi liberado (`GET /v1/me`, só com o token do dispositivo, sem mais nada). Liberado ou fora da conta, para.
@@ -64,7 +65,7 @@ O pacote do prédio tem estes campos e mais nenhum (o formato exato está em
 | Campo | O que é | Por quê |
 | --- | --- | --- |
 | `v` | Versão do formato do pacote (`1`) | Compatibilidade |
-| `version` | Versão do Habblaud (`0.11.0`) | Compatibilidade do protocolo |
+| `version` | Versão do Habblaud (`1.0.0`) | Compatibilidade do protocolo |
 | `theme` | `none`, `halloween` ou `christmas`, já resolvido: o "Automático" vira o tema do calendário (Halloween em outubro, Natal de 1º de novembro a 26 de dezembro), pela data do computador (no Docker, UTC) | O prédio e o interior com o seu tema |
 | `floors` | Um andar por sala com alguém presente, em ordem embaralhada | Altura do prédio e as salas do interior |
 | `id` (do andar) | Um id aleatório por sala (`f_` e 10 caracteres), que não vem do caminho da pasta, **troca a cada 24 h** (com sorteio de ±6 h) e troca também quando a sala some e volta ou quando o Habblaud reinicia. Sem horário nenhum | Quem visita hoje e amanhã não sabe se é o mesmo projeto |

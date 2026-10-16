@@ -10,19 +10,29 @@ do meio (0.**3**.0).
 
 ## [Não lançado]
 
-### Habblaud World (em desenvolvimento, desligado por padrão)
+## [1.0.0] - 2026-10-16
 
-A base do Habblaud World, a cidade online onde cada Habblaud vira um prédio. Sem `HABBLAUD_WORLD_URL` o recurso fica
-desligado: nada aparece na interface e nada sai do computador (`HABBLAUD_WORLD=0` esconde até as rotas). O que pode
-sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privacidade.md); o README ganhou a seção
-**Habblaud World** completa, nos quatro idiomas.
+Por que 1.0: o escritório (salas, personagens, subagentes, uso por conta, terminal, timelapse, celular com login) está
+estável há várias versões, e o Habblaud World chega inteiro: conta, personagem, prédio, cidade, visitas e o social
+leve. Para atualizar: `git pull` e `npm run docker:up`.
 
-- **Ligar e testar:** `HABBLAUD_WORLD_URL` (só `https://` ou `wss://`), `HABBLAUD_WORLD=0` e `HABBLAUD_WORLD_DEV=1`,
-  que aceita um servidor do mundo local sem TLS em `http://127.0.0.1:<porta>` (o `npm run dev` já aceita) ou, de dentro
-  do Docker, em `http://host.docker.internal:<porta>`. O `docker-compose.yml` repassa as três variáveis e liga
-  `host.docker.internal` ao host (`extra_hosts` com `host-gateway`, inofensivo no macOS), e o `npm run docker:up`
-  termina dizendo se o World está ligado e para qual servidor. O build grava `dist/build.json` com o commit e se a
-  cópia estava modificada (vai na primeira mensagem da conexão do prédio).
+### Habblaud World
+
+A cidade online do Habblaud está no ar: cada Habblaud vira um prédio, aceso ao vivo enquanto os agentes trabalham, e
+cada pessoa passeia pela cidade com um personagem. **Vem ligado por padrão**, apontando para `server.habblaud.com`;
+**nada sai do computador até você criar a conta** e entrar, e `HABBLAUD_WORLD=0` desliga tudo (esconde até as
+rotas). O acesso é liberado por lista de espera. O que pode sair e o que nunca sai está em
+[`docs/world/privacidade.md`](docs/world/privacidade.md); o README tem a seção **Habblaud World** completa, nos quatro
+idiomas.
+
+- **Configurar e testar:** sem `HABBLAUD_WORLD_URL`, o servidor oficial (`https://server.habblaud.com`; o `npm run
+  docker:up` e o log do servidor dizem "(padrão)"); definida, vale a definida (só `https://` ou `wss://`; recusada, o
+  World fica desligado, com o motivo no log). `HABBLAUD_WORLD=0` desliga tudo, e `HABBLAUD_WORLD_DEV=1` aceita um
+  servidor do mundo local sem TLS em `http://127.0.0.1:<porta>` (o `npm run dev` já aceita) ou, de dentro do Docker, em
+  `http://host.docker.internal:<porta>`. O `docker-compose.yml` repassa as três variáveis e liga `host.docker.internal`
+  ao host (`extra_hosts` com `host-gateway`, inofensivo no macOS), e o `npm run docker:up` termina dizendo se o World
+  está ligado e para qual servidor. O build grava `dist/build.json` com o commit e se a cópia estava modificada (vai na
+  primeira mensagem da conexão do prédio).
 - **Janela própria:** o Habblaud World tem um botão só dele na barra do topo (o ícone de cidade, ao lado de
   Configurações; só aparece com o servidor do mundo configurado) e abre num modal só dele, fora das Configurações: o
   prédio em pixels, o estado da conta no cabeçalho e tudo o que segue num corpo rolável. O chip "no mundo" ao lado da
@@ -541,7 +551,14 @@ Primeira versão publicada.
   Subagentes chegam, trabalham e entregam ao principal. Mostra as duas contas, com o uso de 5 horas e semanal de
   cada uma (tap de statusline), além de feed de atividade, avisos e modo demonstração. Roda no Node ou no Docker local.
 
-[Não lançado]: https://github.com/marmottajr/habblaud/compare/v0.5.0...HEAD
+[Não lançado]: https://github.com/marmottajr/habblaud/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/marmottajr/habblaud/compare/v0.11.0...v1.0.0
+[0.11.0]: https://github.com/marmottajr/habblaud/releases/tag/v0.11.0
+[0.10.0]: https://github.com/marmottajr/habblaud/releases/tag/v0.10.0
+[0.9.0]: https://github.com/marmottajr/habblaud/releases/tag/v0.9.0
+[0.8.0]: https://github.com/marmottajr/habblaud/releases/tag/v0.8.0
+[0.7.0]: https://github.com/marmottajr/habblaud/releases/tag/v0.7.0
+[0.6.0]: https://github.com/marmottajr/habblaud/releases/tag/v0.6.0
 [0.5.0]: https://github.com/marmottajr/habblaud/releases/tag/v0.5.0
 [0.4.0]: https://github.com/marmottajr/habblaud/releases/tag/v0.4.0
 [0.3.2]: https://github.com/marmottajr/habblaud/releases/tag/v0.3.2

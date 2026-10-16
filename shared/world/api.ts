@@ -232,11 +232,11 @@ export interface WorldLastUplink {
  */
 export interface WorldMeta {
   /**
-   * A seção aparece: HABBLAUD_WORLD não é 0 e há HABBLAUD_WORLD_URL válida. Sem a URL o recurso está desligado (o
-   * padrão até a versão que ligar o World) e nada do World aparece na interface.
+   * A seção aparece: HABBLAUD_WORLD não é 0 e o servidor do mundo foi aceito (o padrão, server.habblaud.com, ou uma
+   * HABBLAUD_WORLD_URL válida). Com a URL recusada o recurso está desligado e nada do World aparece na interface.
    */
   enabled: boolean;
-  /** HABBLAUD_WORLD_URL válida. */
+  /** Servidor do mundo aceito (o padrão ou HABBLAUD_WORLD_URL válida). */
   configured: boolean;
   state: WorldState;
   /** O prédio no mundo (só com a conta aprovada e o personagem criado). */
@@ -420,7 +420,7 @@ export interface WorldErrorResponse {
  * unsupported_media_type, method_not_allowed, not_found e internal (500: erro do próprio servidor local).
  */
 export const WORLD_LOCAL_ERROR_CODES = [
-  'not_configured', // 409: sem HABBLAUD_WORLD_URL
+  'not_configured', // 409: sem servidor do mundo aceito (HABBLAUD_WORLD_URL recusada)
   'local_only', // 403: pela porta do celular ou com Host que não é local
   'terminal_off', // 403: trava do terminal desligada (porta exposta na rede ou HABBLAUD_TERMINAL=0)
   'not_logged_in', // 401: ação da conta sem ter entrado

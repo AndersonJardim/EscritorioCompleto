@@ -7,7 +7,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AccountsService } from '../accounts/service';
-import { parseWorldConfig, worldSocketUrl, type WorldConfig } from '../config';
+import { DEFAULT_WORLD_URL, parseWorldConfig, worldSocketUrl, type WorldConfig } from '../config';
 import { createApiHandler } from '../http/app';
 import { createRequestGuard } from '../http/guard';
 import { Hub } from '../http/sse';
@@ -198,7 +198,7 @@ describe('HABBLAUD_WORLD e HABBLAUD_WORLD_URL', () => {
     expect((await call(s.base, 'GET', '/api/access')).body.world).toBe(false);
   });
 
-  it('sem URL: recurso desligado (meta.world sem enabled), status off e o resto 409 not_configured', async () => {
+  it('sem URL (HABBLAUD_WORLD_URL recusada): recurso desligado (meta.world sem enabled), status off e o resto 409 not_configured', async () => {
     const s = await start({ world: 'no-url' });
     expect((await call(s.base, 'GET', '/api/world/status')).body).toEqual({ available: true, configured: false, state: 'off' });
     const r = await call(s.base, 'POST', '/api/world/register', REGISTER);
@@ -212,8 +212,12 @@ describe('HABBLAUD_WORLD e HABBLAUD_WORLD_URL', () => {
   it('parseWorldConfig: só https/wss; http://127.0.0.1 no modo de desenvolvimento; só a origem', () => {
     const p = (url: string | undefined, extra: NodeJS.ProcessEnv = {}, argv: string[] = []) =>
       parseWorldConfig({ HABBLAUD_WORLD_URL: url, ...extra }, argv);
-    expect(p(undefined)).toEqual({ enabled: true, dev: false });
+    // Sem HABBLAUD_WORLD_URL (ou vazia), o servidor do mundo padrão; definida, vale a definida (e recusada não cai no padrão).
+    expect(p(undefined)).toEqual({ enabled: true, dev: false, url: DEFAULT_WORLD_URL, defaultUrl: true });
+    expect(p('  ')).toEqual({ enabled: true, dev: false, url: DEFAULT_WORLD_URL, defaultUrl: true });
+    expect(DEFAULT_WORLD_URL).toBe('https://server.habblaud.com');
     expect(p('https://server.habblaud.com')).toEqual({ enabled: true, dev: false, url: 'https://server.habblaud.com' });
+    expect(p('https://outro.exemplo.com')).toEqual({ enabled: true, dev: false, url: 'https://outro.exemplo.com' });
     expect(p('wss://server.habblaud.com/').url).toBe('https://server.habblaud.com');
     expect(p('https://server.habblaud.com:8443').url).toBe('https://server.habblaud.com:8443');
     expect(p('http://server.habblaud.com').warning).toMatch(/https/);
@@ -238,7 +242,7 @@ describe('HABBLAUD_WORLD e HABBLAUD_WORLD_URL', () => {
       expect(p(bad).warning).not.toContain('pw@');
     }
     expect(p('https://server.habblaud.com', { HABBLAUD_WORLD: '0' })).toEqual({ enabled: false, dev: false });
-    expect(p(undefined, { HABBLAUD_WORLD: 'off' }).enabled).toBe(false);
+    expect(p(undefined, { HABBLAUD_WORLD: 'off' })).toEqual({ enabled: false, dev: false });
     expect(worldSocketUrl('https://server.habblaud.com')).toBe('wss://server.habblaud.com/v1/socket');
     expect(worldSocketUrl('http://127.0.0.1:4848')).toBe('ws://127.0.0.1:4848/v1/socket');
     expect(worldSocketUrl('http://host.docker.internal:4848')).toBe('ws://host.docker.internal:4848/v1/socket');

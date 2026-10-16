@@ -282,7 +282,7 @@ export function createWorldRoutes(service: WorldService, viewer?: WorldViewer, s
       method: 'GET',
       account: true,
       run: async (req, res) => {
-        if (!viewer) throw new BodyError(409, 'not_configured', tr('Habblaud World desligado: defina HABBLAUD_WORLD_URL'));
+        if (!viewer) throw new BodyError(409, 'not_configured', tr('Habblaud World desligado: HABBLAUD_WORLD_URL recusada (veja o log do servidor)'));
         if (!sameOriginRequest(req)) throw new BodyError(403, 'local_only', tr('a cena Mundo só abre pela própria página do Habblaud'));
         if (req.method === 'HEAD') {
           res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache' });
@@ -298,7 +298,7 @@ export function createWorldRoutes(service: WorldService, viewer?: WorldViewer, s
       account: true,
       run: async (req, res) => {
         const body = await readBody(req);
-        if (!viewer) throw new BodyError(409, 'not_configured', tr('Habblaud World desligado: defina HABBLAUD_WORLD_URL'));
+        if (!viewer) throw new BodyError(409, 'not_configured', tr('Habblaud World desligado: HABBLAUD_WORLD_URL recusada (veja o log do servidor)'));
         const r = viewer.command(body);
         if (!r.ok) return sendError(res, r.status, r.code, undefined, r.retryAfter);
         sendJson(res, 202, r.data);
@@ -387,7 +387,7 @@ export function createWorldRoutes(service: WorldService, viewer?: WorldViewer, s
     }
     if (route.account && !service.configured) {
       req.resume();
-      return sendError(res, 409, 'not_configured', tr('Habblaud World desligado: defina HABBLAUD_WORLD_URL'));
+      return sendError(res, 409, 'not_configured', tr('Habblaud World desligado: HABBLAUD_WORLD_URL recusada (veja o log do servidor)'));
     }
     route.run(req, res, url).catch((err) => fail(res, err));
   };

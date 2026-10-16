@@ -779,18 +779,19 @@ Tout fonctionne sans rien configurer. Si vous avez besoin d'ajuster quelque chos
 ## Habblaud World
 
 Habblaud World est une ville en ligne en pixel art où chaque Habblaud devient un immeuble, allumé en direct pendant que
-les agents travaillent, et où chacun se promène avec un personnage. **C'est en développement et désactivé par
-défaut :** sans `HABBLAUD_WORLD_URL`, rien du World n'apparaît dans l'interface et rien ne sort de l'ordinateur.
+les agents travaillent, et où chacun se promène avec un personnage. **Il est activé par défaut**, pointant vers
+`server.habblaud.com` ; **rien ne sort de l'ordinateur tant que vous n'avez pas créé de compte** et ouvert une session,
+et `HABBLAUD_WORLD=0` désactive tout. L'accès est accordé par liste d'attente.
 
-**Comment l'activer.** Les variables ci-dessous (dans le `.env` ou dans l'environnement) pointent Habblaud vers un
-serveur du monde. La section apparaît dans la fenêtre **Habblaud World** (le bouton ville de la barre du haut) et ne fonctionne que depuis l'ordinateur
+**Comment le configurer.** Les variables ci-dessous (dans le `.env` ou dans l'environnement) sont facultatives : sans
+elles, Habblaud pointe vers le serveur officiel. La section apparaît dans la fenêtre **Habblaud World** (le bouton ville de la barre du haut) et ne fonctionne que depuis l'ordinateur
 lui-même (jamais par le port du téléphone) ; le compte reste ici seulement, dans `~/.habblaud/world.json` (permission
 600 ; dans Docker, dans le volume `/data`).
 
 | Variable | Par défaut | À quoi ça sert |
 | --- | --- | --- |
-| `HABBLAUD_WORLD_URL` | — (désactivé) | Adresse du serveur du monde, uniquement `https://` ou `wss://` (sans chemin). |
-| `HABBLAUD_WORLD` | activé | `0` cache tout le World (routes et interface), même avec l'URL. |
+| `HABBLAUD_WORLD_URL` | `https://server.habblaud.com` | Adresse du serveur du monde, uniquement `https://` ou `wss://` (sans chemin). |
+| `HABBLAUD_WORLD` | activé | `0` désactive tout le World (routes et interface) et rien ne sort de l'ordinateur. |
 | `HABBLAUD_WORLD_DEV` | désactivé | `1` accepte un serveur du monde local sans TLS : `http://127.0.0.1:<port>` (`npm run dev` l'accepte déjà) ou, depuis Docker, `http://host.docker.internal:<port>`. |
 
 **Confidentialité.** Rien de votre travail ne sort de l'ordinateur. De l'immeuble ne sortent que le thème, un étage par
@@ -988,8 +989,9 @@ avec `no-new-privileges`. Les métadonnées des comptes (lettre, e-mail, organis
   (`api.github.com/repos/marmottajr/habblaud/releases/latest`). Elle n'envoie rien sur vos sessions ; GitHub ne voit que
   votre IP et la version utilisée, qui figure dans le `User-Agent`.
   `HABBLAUD_UPDATE_CHECK=0` désactive la requête.
-  [Habblaud World](#habblaud-world) (en développement, désactivé par défaut) ne parle au serveur du monde que si
-  `HABBLAUD_WORLD_URL` est définie : voir [ce qui sort](docs/world/privacidade.md) (en portugais).
+  [Habblaud World](#habblaud-world) (activé par défaut) n'envoie quelque chose au serveur du monde qu'après la création
+  du compte et l'ouverture de session, et seulement ce qui figure dans [ce qui sort](docs/world/privacidade.md) (en
+  portugais) ; `HABBLAUD_WORLD=0` désactive tout.
   Le [téléphone avec connexion](#téléphone-avec-connexion-et-https-valider-les-demandes) aussi : il n'existe qu'après `npm run remote:setup`.
 - **Sans identifiants :** Habblaud ne lit ni mots de passe ni tokens d'accès. Du `.claude.json` de chaque compte, il
   n'utilise que l'e-mail, l'organisation et le cache de `/usage` ; l'utilisation en direct vient du mod (ou de la
