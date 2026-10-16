@@ -796,14 +796,15 @@ títulos, comandos, mensajes, código, costo, modelo, rama y tu cuenta de Claude
 campo (en portugués): [docs/world/privacidade.md](docs/world/privacidade.md). **Ver lo que se envió**, en la tarjeta Tu
 edificio, muestra el JSON exacto del último envío, con el tamaño en bytes y la respuesta del mundo.
 
-**Cuenta y lista de espera.** Registro con correo y contraseña (12 caracteres o más; las contraseñas filtradas se
-rechazan), código de 6 dígitos por correo y la aceptación de los Términos de Uso y la Política de Privacidad. Toda
-cuenta entra en una lista de espera y el acceso se libera por lotes: el Habblaud abierto lo comprueba solo cada 30
-minutos. Hasta 3 computadoras por cuenta (**Dispositivos**, con revocar).
+**Cuenta y lista de espera.** Registro con correo, **nombre de jugador** (3 a 20 caracteres, único en el mundo: queda
+reservado para ti mientras esperas en la lista y pasa a ser el nombre del personaje) y contraseña (12 caracteres o más;
+las contraseñas filtradas se rechazan), código de 6 dígitos por correo y la aceptación de los Términos de Uso y la
+Política de Privacidad. Toda cuenta entra en una lista de espera y el acceso se libera por lotes: el Habblaud abierto lo
+comprueba solo cada 30 minutos. Hasta 3 computadoras por cuenta (**Dispositivos**, con revocar).
 
-**Personaje.** Nombre de jugador (3 a 20 caracteres, único en el mundo), el mismo editor de apariencia de los agentes, 2
-o 3 rasgos de personalidad y una frase de presentación de la lista (en el mundo no hay texto libre aparte del nombre).
-Se puede crear ya en la lista de espera.
+**Personaje.** El nombre de jugador elegido en el registro (se puede cambiar después, una vez cada 30 días), el mismo
+editor de apariencia de los agentes, 2 o 3 rasgos de personalidad y una frase de presentación de la lista (en el mundo
+no hay texto libre aparte del nombre). Se puede crear ya en la lista de espera.
 
 **Edificio.** Con la cuenta aprobada y el personaje creado, el edificio sube solo (por WebSocket) y acompaña la oficina
 en vivo. La tarjeta **Tu edificio** muestra la conexión, los pisos, los agentes, el último envío y, cuando el mundo

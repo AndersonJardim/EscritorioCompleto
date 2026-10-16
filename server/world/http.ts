@@ -111,15 +111,22 @@ function code(v: unknown): string {
   return s;
 }
 
-function character(body: Record<string, unknown>): PlayerInput {
-  const name = parsePlayerName(body.name);
+/** Nome de jogador (do cadastro e do personagem), arrumado e conferido pelas regras locais; o servidor do mundo confere de novo. */
+function playerName(v: unknown): string {
+  const name = parsePlayerName(v);
   if (!name.ok) throw new BodyError(422, name.code, tr('nome de jogador recusado ({0})', [name.problem]));
+  return name.name;
+}
+
+/** O personagem; `name` ausente = criar com o nome reservado no cadastro ou, ao atualizar, manter o nome (o serviço decide). */
+function character(body: Record<string, unknown>): PlayerInput {
+  const name = body.name === undefined ? undefined : playerName(body.name);
   const parts = parseAppearanceParts(body.parts ?? {});
   const traits = parsePlayerTraits(body.traits);
   if ((body.look !== 'f' && body.look !== 'm') || !parts || !traits || !isIntroId(body.intro)) {
-    throw new BodyError(422, 'invalid', tr('esperado {name, look: "f" ou "m", parts, traits: 2 ou 3 traços que combinam, intro}'));
+    throw new BodyError(422, 'invalid', tr('esperado {name?, look: "f" ou "m", parts, traits: 2 ou 3 traços que combinam, intro}'));
   }
-  return { name: name.name, look: body.look, parts, traits, intro: body.intro };
+  return { ...(name !== undefined ? { name } : {}), look: body.look, parts, traits, intro: body.intro };
 }
 
 /**
@@ -153,7 +160,8 @@ export function createWorldRoutes(service: WorldService, viewer?: WorldViewer, s
       account: true,
       run: async (req, res) => {
         const b = await readBody(req);
-        const input = { email: email(b.email), password: password(b.password) };
+        // Como no servidor do mundo, o nome é conferido antes da senha.
+        const input = { email: email(b.email), name: playerName(b.name), password: password(b.password) };
         if (b.locale !== undefined && !isWorldLocale(b.locale)) throw new BodyError(400, 'invalid', tr('idioma desconhecido'));
         if (b.invite !== undefined && (typeof b.invite !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(b.invite))) {
           throw new BodyError(400, 'invalid', tr('código de convite inválido'));

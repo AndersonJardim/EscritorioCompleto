@@ -801,14 +801,16 @@ complète, champ par champ (en portugais) : [docs/world/privacidade.md](docs/wor
 envoyé**, sur la carte Votre immeuble, montre le JSON exact du dernier envoi, avec sa taille en octets et la réponse du
 monde.
 
-**Compte et liste d'attente.** Inscription avec e-mail et mot de passe (12 caractères ou plus ; les mots de passe ayant
-fuité sont refusés), code à 6 chiffres par e-mail et acceptation des Conditions d'utilisation et de la Politique de
-confidentialité. Chaque compte entre dans une liste d'attente, et l'accès est ouvert par lots : le Habblaud ouvert
-vérifie tout seul toutes les 30 minutes. Jusqu'à 3 ordinateurs par compte (**Appareils**, avec révocation).
+**Compte et liste d'attente.** Inscription avec e-mail, **nom de joueur** (3 à 20 caractères, unique dans le monde :
+il vous est réservé pendant l'attente sur la liste et devient le nom du personnage) et mot de passe (12 caractères ou
+plus ; les mots de passe ayant fuité sont refusés), code à 6 chiffres par e-mail et acceptation des Conditions
+d'utilisation et de la Politique de confidentialité. Chaque compte entre dans une liste d'attente, et l'accès est ouvert
+par lots : le Habblaud ouvert vérifie tout seul toutes les 30 minutes. Jusqu'à 3 ordinateurs par compte (**Appareils**,
+avec révocation).
 
-**Personnage.** Nom de joueur (3 à 20 caractères, unique dans le monde), le même éditeur d'apparence que les agents, 2
-ou 3 traits de personnalité et une phrase de présentation de la liste (dans le monde, pas de texte libre en dehors du
-nom). On peut le créer dès la liste d'attente.
+**Personnage.** Le nom de joueur choisi à l'inscription (modifiable ensuite, une fois tous les 30 jours), le même éditeur
+d'apparence que les agents, 2 ou 3 traits de personnalité et une phrase de présentation de la liste (dans le monde, pas
+de texte libre en dehors du nom). On peut le créer dès la liste d'attente.
 
 **Immeuble.** Avec le compte validé et le personnage créé, l'immeuble monte tout seul (par WebSocket) et suit le bureau
 en direct. La carte **Votre immeuble** montre la connexion, les étages, les agents, le dernier envoi et, quand le monde

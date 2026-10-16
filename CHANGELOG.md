@@ -35,6 +35,14 @@ sair e o que nunca sai está em [`docs/world/privacidade.md`](docs/world/privaci
   se o acesso foi liberado. Tudo só pelo próprio computador: nunca pela porta do celular, e o que age pela conta só com
   o acesso local (a trava do terminal). O token do dispositivo fica em `~/.habblaud/world.json` (permissão 600; no
   Docker, no volume `/data`) e nunca vai ao navegador, ao snapshot, aos logs nem à URL.
+- **Nome de jogador escolhido no cadastro (fica reservado na lista de espera):** o cadastro pede o nome de jogador
+  (3 a 20 caracteres, único no mundo) junto com o e-mail e a senha, conferido na hora e, se já estiver em uso, com o
+  aviso no próprio campo. Ele fica reservado para a conta enquanto espera na lista (a tela da espera mostra "Seu nome
+  de jogador: X (reservado)") e vira o nome do personagem, que nasce com ele sem pedir o nome de novo (dá para trocar
+  depois, uma vez a cada 30 dias); contas antigas, sem reserva, seguem escolhendo o nome ao criar o personagem.
+  `docs/world/privacidade.md` passa a dizer que o servidor do mundo guarda, além do país, o IP do cadastro e o do
+  último login com senha, para auditoria (só a administração vê; apagados com a conta; incluídos em "Baixar meus
+  dados"), e nenhum outro.
 - **Popups de lançamento:** três avisos em janela modal, por cima do escritório (e de Configurações). **Novidade:
   Habblaud World**, para quem ainda não tem conta, com o botão **Criar conta**: "Agora não" o traz de volta em 3 dias
   (no máximo 3 vezes), "Não mostrar de novo" encerra e, com a conta criada, ele não volta. **Você está na lista de

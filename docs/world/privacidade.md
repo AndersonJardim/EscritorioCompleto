@@ -16,11 +16,12 @@ Ao usar o World, sai do computador, por HTTPS, para o servidor do mundo:
 | Sai | Quando | Por quê |
 | --- | --- | --- |
 | E-mail e senha | No cadastro, ao entrar e ao trocar a senha | Para a conta existir. A senha não fica gravada no computador; no servidor, só um hash (Argon2id) |
+| Nome de jogador (nickname) | No cadastro | É o nome do seu personagem (3 a 20 caracteres, único no mundo, sem diferença de maiúsculas ou acentos): fica reservado para você enquanto a conta espera na lista, e o personagem nasce com ele |
 | Código de 6 dígitos | Ao confirmar o e-mail ou trocar a senha | Provar que o e-mail é seu |
 | Idioma da interface (`pt-BR`, `en`, `es` ou `fr`) | No cadastro | Para os e-mails virem no seu idioma |
 | Aceite dos Termos de Uso (só a versão, `v1`) e o código de convite, se você tiver um | No cadastro | Registrar o aceite; o convite põe a conta no próximo lote da lista de espera |
 | Solução do desafio anti-robô (ALTCHA) | No cadastro, nos pedidos de e-mail e, se o servidor pedir, ao entrar | É só um número calculado pelo seu Habblaud, no lugar de um captcha |
-| Personagem: nome de jogador, aparência (cores e estilos), 2 ou 3 traços e a frase de apresentação | Ao salvar o personagem | É o que os outros jogadores vão ver |
+| Personagem: aparência (cores e estilos), 2 ou 3 traços, a frase de apresentação e, ao trocá-lo, o nome de jogador (ao criar, o nome é o reservado no cadastro: nem vai no pedido) | Ao salvar o personagem | É o que os outros jogadores vão ver |
 | Preferências de visibilidade (ao vivo ou discreto, fechado a visitas, esconder o país, mostrar tokens, placar, compactações) e o aviso por e-mail antes de retirar o prédio por inatividade | Ao salvar | Para o mundo respeitar a sua escolha |
 | Token do dispositivo | Em cada chamada da conta | Provar que é você, sem mandar a senha de novo |
 | Qual dispositivo desconectar | Ao desconectar um | Só o id que o próprio servidor deu ao dispositivo |
@@ -28,13 +29,17 @@ Ao usar o World, sai do computador, por HTTPS, para o servidor do mundo:
 | Sair do mundo | Ao confirmar "Sair do mundo" (`DELETE /v1/me/building`, só com o token) | Para o prédio sair do mundo na hora e o lote ficar livre; a conta e o personagem continuam |
 | Voltar ao mundo | Ao clicar em "Voltar ao mundo" depois de sair (`POST /v1/me/building/join`, só com o token) | Para o servidor aceitar o prédio de novo (um prédio novo, em outro lote) |
 | Excluir a conta | Ao pedir a exclusão e ao digitar o código que chegou por e-mail (`POST /v1/me/delete` e `/v1/me/delete/confirm`, com o token e o código) | Para o servidor apagar a conta: o prédio e o perfil somem do mundo na hora; a conta, os likes, os bloqueios, as denúncias feitas e os dispositivos saem do banco em 7 dias e dos backups em até 30. Aqui, o `world.json` é apagado |
-| Baixar meus dados | Ao clicar em "Baixar meus dados" (`GET /v1/me/export`, só com o token; uma vez por dia) | O servidor devolve, num arquivo JSON, o que guarda da sua conta; nada novo sai do computador |
+| Baixar meus dados | Ao clicar em "Baixar meus dados" (`GET /v1/me/export`, só com o token; uma vez por dia) | O servidor devolve, num arquivo JSON, o que guarda da sua conta (inclusive o nome reservado, o país e os IPs do cadastro e do último login); nada novo sai do computador |
 | Versão do Habblaud | Em toda chamada, no cabeçalho `User-Agent` (`Habblaud/0.11.0`) | Compatibilidade e diagnóstico |
 
 Enquanto a conta está na lista de espera, o Habblaud aberto pergunta ao servidor do mundo, a cada 30 minutos, se o
 acesso já foi liberado (`GET /v1/me`, só com o token do dispositivo, sem mais nada). Liberado ou fora da conta, para.
 
-O servidor do mundo vê o IP da conexão (como qualquer site) e guarda só o **país**, que dá para esconder.
+O servidor do mundo vê o IP da conexão (como qualquer site). Dele, guarda o **país** (que dá para esconder) e, em claro,
+**dois endereços só**: o IP do cadastro e o IP do último login com senha, para auditoria e prevenção de fraudes. Só a
+equipe de administração vê esses IPs; eles saem no "Baixar meus dados" (`signupIp`, `lastLoginIp` e `lastLoginAt`) e
+são apagados com a conta. O resumo diário por IP que limita tentativas (cadastro, entrada, códigos) continua como era.
+Nenhum outro IP é guardado: nem o da conexão do prédio, nem o dos passeios pela cidade.
 
 ## O que sai: o prédio (a lista fechada)
 
@@ -132,8 +137,9 @@ O que aparece para quem visita: **quem visita o mundo vê, ao vivo, quantos proj
 que cada personagem está fazendo (trabalhando, esperando, à toa). Ninguém vê quais projetos são, o que os agentes
 fazem, nem quem você é: só o nickname e o avatar que você escolheu.**
 
-- **Ninguém é identificado:** só o nickname e o avatar que você escolheu e o país do IP (dá para esconder). Sem e-mail,
-  nome real, nome de conta ou máquina.
+- **Ninguém é identificado:** só o nickname (escolhido no cadastro) e o avatar que você escolheu e o país do IP (dá para
+  esconder). Sem e-mail, nome real, nome de conta ou máquina. Os IPs do cadastro e do último login ficam só com a
+  administração, nunca aparecem no mundo.
 - **Nenhum projeto é identificável:** os ids dos andares são aleatórios e trocam a cada 24 h (±6 h), com a ordem das
   salas embaralhada.
 - **Nenhum horário do escritório sai:** o pacote não tem "desde quando" nem nada de tempo. A visita mostra o status,

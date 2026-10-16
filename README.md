@@ -762,14 +762,15 @@ messages, code, cost, model, branch and your Claude account never leave. The ful
 [docs/world/privacidade.md](docs/world/privacidade.md). **See what was sent**, on the Your building card, shows the
 exact JSON of the last upload, with its size in bytes and the world's reply.
 
-**Account and waitlist.** Sign up with e-mail and password (12 characters or more; leaked passwords are refused), a
-6-digit code by e-mail and accepting the Terms of Use and the Privacy Policy. Every account joins a waitlist, and access
-is granted in batches: an open Habblaud checks on its own every 30 minutes. Up to 3 computers per account
-(**Devices**, with revoke).
+**Account and waitlist.** Sign up with e-mail, **player name** (3 to 20 characters, unique in the world: it stays
+reserved for you while you wait on the list and becomes your character's name) and password (12 characters or more;
+leaked passwords are refused), a 6-digit code by e-mail and accepting the Terms of Use and the Privacy Policy. Every
+account joins a waitlist, and access is granted in batches: an open Habblaud checks on its own every 30 minutes. Up to 3
+computers per account (**Devices**, with revoke).
 
-**Character.** Player name (3 to 20 characters, unique in the world), the same appearance editor as the agents, 2 or 3
-personality traits and an intro line from the list (there's no free text in the world besides the name). You can create
-it while still on the waitlist.
+**Character.** The player name chosen at sign-up (it can be changed later, once every 30 days), the same appearance
+editor as the agents, 2 or 3 personality traits and an intro line from the list (there's no free text in the world
+besides the name). You can create it while still on the waitlist.
 
 **Building.** With the account approved and the character created, the building goes up on its own (over a WebSocket)
 and follows the office live. The **Your building** card shows the connection, floors, agents, the last upload and, when

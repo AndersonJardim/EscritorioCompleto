@@ -760,14 +760,15 @@ mensagens, código, custo, modelo, branch e a sua conta do Claude nunca saem. A 
 [docs/world/privacidade.md](docs/world/privacidade.md). **Ver o que foi enviado**, no cartão Seu prédio, mostra o JSON
 exato da última remessa, com o tamanho em bytes e a resposta do mundo.
 
-**Conta e lista de espera.** Cadastro com e-mail e senha (12 caracteres ou mais; senhas que já vazaram são recusadas),
-código de 6 dígitos por e-mail e o aceite dos Termos de Uso e da Política de Privacidade. Toda conta entra numa lista de
-espera, e o acesso é liberado por lotes: o Habblaud aberto confere sozinho a cada 30 minutos. Até 3 computadores por
-conta (**Dispositivos**, com revogar).
+**Conta e lista de espera.** Cadastro com e-mail, **nome de jogador** (3 a 20 caracteres, único no mundo: fica reservado
+para você enquanto espera na lista e vira o nome do personagem) e senha (12 caracteres ou mais; senhas que já vazaram
+são recusadas), código de 6 dígitos por e-mail e o aceite dos Termos de Uso e da Política de Privacidade. Toda conta
+entra numa lista de espera, e o acesso é liberado por lotes: o Habblaud aberto confere sozinho a cada 30 minutos. Até 3
+computadores por conta (**Dispositivos**, com revogar).
 
-**Personagem.** Nome de jogador (3 a 20 caracteres, único no mundo), o mesmo editor de aparência dos agentes, 2 ou 3
-traços de personalidade e uma frase de apresentação da lista (no mundo não há texto livre além do nome). Dá para criar
-ainda na lista de espera.
+**Personagem.** O nome de jogador escolhido no cadastro (dá para trocar depois, uma vez a cada 30 dias), o mesmo editor
+de aparência dos agentes, 2 ou 3 traços de personalidade e uma frase de apresentação da lista (no mundo não há texto
+livre além do nome). Dá para criar ainda na lista de espera.
 
 **Prédio.** Com a conta liberada e o personagem criado, o prédio sobe sozinho (por WebSocket) e acompanha o escritório
 ao vivo. O cartão **Seu prédio** mostra a conexão, os andares, os agentes, a última remessa e, quando o mundo recusa uma

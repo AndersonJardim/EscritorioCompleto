@@ -386,7 +386,7 @@ export class WorldService {
     }
   }
 
-  register(input: { email: string; password: string; locale?: WorldLocale; invite?: string }): Promise<Outcome<Record<string, never>>> {
+  register(input: { email: string; password: string; name: string; locale?: WorldLocale; invite?: string }): Promise<Outcome<Record<string, never>>> {
     return this.exclusive(async () => {
       const client = this.o.client!;
       const altcha = await this.altcha(client);
@@ -395,6 +395,7 @@ export class WorldService {
       return client.register({
         email: input.email,
         password: input.password,
+        name: input.name,
         locale,
         tos: TOS_VERSION,
         altcha: altcha.data,
@@ -461,10 +462,23 @@ export class WorldService {
     });
   }
 
+  /**
+   * Salva o personagem. Ao criar com o nome reservado no cadastro, o pedido vai sem `name` (o servidor do mundo usa a
+   * reserva); conta antiga, sem reserva, precisa do `name` (sem ele, `422 name_invalid` daqui mesmo). Ao atualizar,
+   * `name` ausente mantém o nome.
+   */
   setCharacter(input: PlayerInput): Promise<Outcome<Player>> {
     return this.exclusive(() =>
       this.withToken(async (s) => {
-        const r = await this.o.client!.putPlayer(s.token, input);
+        const me = this.meToken === s.token ? this.me : undefined;
+        const creating = !(me?.player ?? s.player);
+        const reserved = me?.account.reservedName;
+        let body = input;
+        if (creating && reserved) {
+          const { name: _name, ...rest } = input;
+          body = rest;
+        } else if (creating && !input.name) return { ok: false, status: 422, code: 'name_invalid' };
+        const r = await this.o.client!.putPlayer(s.token, body);
         if (r.ok) this.rememberPlayer(r.data);
         return r;
       }),
@@ -688,6 +702,8 @@ export class WorldService {
       st.account = { emailMasked: me?.account.emailMasked ?? maskEmail(s.email), access: s.access };
       const id = this.uplink?.accountId();
       if (id) st.account.id = id;
+      // O nome de jogador reservado no cadastro (só enquanto não há personagem).
+      if (me?.account.reservedName && !me.player) st.account.reservedName = me.account.reservedName;
       const player = me ? me.player : s.player;
       if (player) st.player = player;
       if (me) st.devices = me.devices;

@@ -169,14 +169,16 @@ export interface WorldUi {
   screen: WorldScreen;
   /** E-mail digitado: passa do cadastro para o código, do "esqueci a senha" para a senha nova e para o login. */
   email: string;
+  /** Nome de jogador digitado no cadastro: volta preenchido se a pessoa voltar da tela do código. */
+  name: string;
   flash: WorldFlash | null;
 }
 
 export type WorldUiEvent =
   | { type: 'server'; state: WorldServerState }
   | { type: 'go'; screen: WorldScreen }
-  /** Cadastro aceito ou login de e-mail ainda não confirmado: o código foi para o e-mail. */
-  | { type: 'code_sent'; email: string }
+  /** Cadastro aceito (com o nome de jogador reservado) ou login de e-mail ainda não confirmado: o código foi para o e-mail. */
+  | { type: 'code_sent'; email: string; name?: string }
   /** "Esqueci a senha": o código da senha nova foi para o e-mail. */
   | { type: 'reset_code_sent'; email: string }
   | { type: 'password_changed' }
@@ -195,7 +197,7 @@ export function screensFor(state: WorldServerState): readonly WorldScreen[] {
 }
 
 export function initialWorldUi(): WorldUi {
-  return { server: null, screen: 'welcome', email: '', flash: null };
+  return { server: null, screen: 'welcome', email: '', name: '', flash: null };
 }
 
 /** A tela continua valendo para o estado da conta? Senão, volta para a de entrada (ex.: saiu da conta → boas-vindas). */
@@ -213,7 +215,7 @@ export function worldReduce(s: WorldUi, e: WorldUiEvent): WorldUi {
     case 'go':
       return fit({ ...s, screen: e.screen, flash: null });
     case 'code_sent':
-      return fit({ ...s, screen: 'verify', email: e.email, flash: 'code_sent' });
+      return fit({ ...s, screen: 'verify', email: e.email, name: e.name ?? s.name, flash: 'code_sent' });
     case 'reset_code_sent':
       return fit({ ...s, screen: 'reset', email: e.email, flash: 'code_sent' });
     case 'password_changed':

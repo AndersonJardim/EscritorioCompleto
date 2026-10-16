@@ -178,6 +178,14 @@ describe('máquina de estados da seção', () => {
     expect(worldReduce(initialWorldUi(), { type: 'server', state: 'logged_out' }).screen).toBe('welcome');
     expect(worldReduce(initialWorldUi(), { type: 'server', state: 'waiting' }).screen).toBe('home');
     expect(worldReduce(initialWorldUi(), { type: 'server', state: 'approved' }).screen).toBe('home');
+  });
+
+  it('o cadastro guarda o e-mail e o nome de jogador para a tela do código (e para voltar)', () => {
+    const sent = worldReduce(at('logged_out', 'register'), { type: 'code_sent', email: 'ana@exemplo.com', name: 'Ana Pixel' });
+    expect(sent).toMatchObject({ screen: 'verify', email: 'ana@exemplo.com', name: 'Ana Pixel', flash: 'code_sent' });
+    expect(worldReduce(sent, { type: 'go', screen: 'register' })).toMatchObject({ screen: 'register', email: 'ana@exemplo.com', name: 'Ana Pixel' });
+    // O login com e-mail sem confirmar manda o código sem nome: o nome digitado antes fica.
+    expect(worldReduce(sent, { type: 'code_sent', email: 'outra@exemplo.com' })).toMatchObject({ email: 'outra@exemplo.com', name: 'Ana Pixel' });
     expect(screensFor('off')).toEqual([]);
   });
 

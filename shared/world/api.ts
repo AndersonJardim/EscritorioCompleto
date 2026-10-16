@@ -3,14 +3,15 @@
 // tudo o que age pela conta só com a trava do terminal (bind local). O token do dispositivo nunca chega aqui.
 //
 //   GET  /api/world/status[?refresh=1]       → WorldStatus
-//   POST /api/world/register                 {email, password, locale?, invite?} → 202 {}
+//   POST /api/world/register                 {email, password, name, locale?, invite?} → 202 {} (name: o nome de jogador,
+//                                                reservado na lista de espera; 422 name_invalid | name_blocked, 409 name_taken)
 //   POST /api/world/verify                   {email, code} → 200 WorldStatus (entra: grava o token neste computador)
 //   POST /api/world/login                    {email, password} → 200 WorldStatus
 //   POST /api/world/logout                   {} → 200 WorldStatus (apaga o token daqui e revoga no servidor)
 //   POST /api/world/resend                   {email} → 202 {}
 //   POST /api/world/password/forgot          {email} → 202 {}
 //   POST /api/world/password/reset           {email, code, password} → 204
-//   PUT  /api/world/character                PlayerInput → 200 Player
+//   PUT  /api/world/character                PlayerInput → 200 Player (ao criar com nome reservado no cadastro, sem `name`)
 //   PUT  /api/world/visibility               Visibility → 200 Visibility
 //   GET  /api/world/devices                  → {devices: DeviceInfo[]}
 //   POST /api/world/devices/:id/revoke       {} → 204 (o próprio dispositivo: sai daqui também)
@@ -386,8 +387,11 @@ export interface WorldStatus {
   available: boolean;
   configured: boolean;
   state: WorldState;
-  /** `id`: o id da conta no mundo, quando já se sabe (do `welcome` da conexão do prédio); vai no assunto do recurso. */
-  account?: { emailMasked: string; access: WorldAccess; id?: string };
+  /**
+   * `id`: o id da conta no mundo, quando já se sabe (do `welcome` da conexão do prédio); vai no assunto do recurso.
+   * `reservedName`: o nome de jogador escolhido no cadastro, reservado enquanto não há personagem (de `GET /v1/me`).
+   */
+  account?: { emailMasked: string; access: WorldAccess; id?: string; reservedName?: string };
   player?: Player;
   devices?: DeviceInfo[];
   /** Código do último problema (worldLastError: só códigos conhecidos), quando os dados podem estar velhos. */
