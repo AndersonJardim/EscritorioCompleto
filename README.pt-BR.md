@@ -5,7 +5,7 @@
 <h1 align="center">Habblaud</h1>
 
 <p align="center">
-  <b>O escritório virtual dos seus agentes do Claude Code (e do Codex).</b><br />
+  <b>O escritório virtual dos seus agentes do Claude Code, Codex e Gemini.</b><br />
   Cada projeto vira uma sala, cada agente vira um personagem em pixel art que mostra, em tempo real, o que está fazendo.
 </p>
 
@@ -606,6 +606,16 @@ chip da conta do Codex é vazado e leva o selo **CODEX**.
   pouco para ir embora depois que você fecha o terminal.
 - Conversas da nuvem do ChatGPT (sem arquivo no computador) não aparecem. `HABBLAUD_CODEX=0` desliga o Codex.
 
+### Gemini (Gemini CLI e Antigravity)
+
+As sessões do Gemini (Gemini CLI e Antigravity) aparecem junto às do Claude Code e Codex: personagem próprio, sala do projeto, tarefas, ferramentas, pensamentos, terminal ao vivo e histórico. O chip da conta do Gemini é azul e traz o selo **GEMINI**.
+
+- **Sem instalar nada**, o Habblaud detecta automaticamente a pasta `~/.gemini` (ou configurada via `GEMINI_HOME`), descobrindo as conversas em `~/.gemini/tmp/<projeto>/chats/` (Gemini CLI) e `~/.gemini/antigravity/brain/<id>/.system_generated/logs/transcript.jsonl` (Antigravity).
+- **Terminal ao vivo:** exibe pensamentos (`thinking`), chamadas e saídas de ferramentas (comandos de terminal, leitura/edição/escrita de arquivos, buscas na web) e respostas completas do modelo.
+- **Tokens e atividades:** contagem de tokens de entrada/saída e registro no Meu dia.
+- **Conferência rápida:** rode `npm run gemini:status` no terminal para inspecionar as contas e sessões detectadas.
+- `HABBLAUD_GEMINI=0` desliga o Gemini.
+
 ### GitHub no escritório
 
 O que os agentes fazem no GitHub anima a sala do projeto, sem token e sem acessar a internet: o Habblaud lê nos
@@ -727,6 +737,8 @@ Tudo funciona sem configurar nada. Se precisar ajustar, use variáveis de ambien
 | `HABBLAUD_CODEX` | ligado | `0` desliga o Codex no escritório. |
 | `HABBLAUD_CODEX_DIRS` | detecção automática | Pastas do Codex, separadas por vírgula (no lugar de `~/.codex*` e `CODEX_HOME`). |
 | `HABBLAUD_CODEX_BIN` | `codex` do PATH (no Windows, `codex.exe`) | O binário do Codex que entrega as mensagens (`codex queue`), no modo Node ou no `npm run codex:bridge`. |
+| `HABBLAUD_GEMINI` | ligado | `0` desliga o Gemini no escritório. |
+| `HABBLAUD_GEMINI_DIRS` | detecção automática | Pastas do Gemini, separadas por vírgula (no lugar de `~/.gemini*` e `GEMINI_HOME`). |
 | `HABBLAUD_UPDATE_CHECK` | ligado | `0` desliga a verificação de versão nova (uma consulta às releases do repositório no GitHub a cada 6 h). |
 | `HABBLAUD_LANG` | idioma do sistema (menos inglês), senão `pt-BR` | Idioma dos textos montados pelo servidor (atividades, avisos, logs): `pt-BR`, `en`, `es` ou `fr`. A interface segue o navegador ou a escolha em Configurações › Idioma. Ver [Idiomas](#idiomas). |
 | `HABBLAUD_ACCOUNTS` | — | JSON para personalizar nome, letra ou cor, casado pelo nome da pasta da conta. Ex.: `[{"id":".claude-conta2","name":"Trabalho","short":"T","color":"#5cc97b"}]`. |

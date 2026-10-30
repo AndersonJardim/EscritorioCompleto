@@ -10,6 +10,16 @@ do meio (0.**3**.0).
 
 ## [Não lançado]
 
+### Adicionado
+
+- **Suporte ao Gemini (Gemini CLI e Antigravity):** o Habblaud agora detecta e acompanha agentes do ecossistema Gemini em tempo real, lado a lado com o Claude Code e o Codex.
+  - **Descoberta automática de sessões e contas:** detecta contas em `~/.gemini` (e pastas com `isGeminiHome`), lendo e-mails de `google_accounts.json` e atalhos de shell; descobre sessões do Gemini CLI (`~/.gemini/tmp/<projeto>/chats/session-*.jsonl`) e do Antigravity (`~/.gemini/antigravity/brain/<id>/.system_generated/logs/transcript.jsonl`).
+  - **Salas integradas:** projetos abertos no Gemini viram salas ou juntam-se às salas existentes de projetos com o mesmo caminho.
+  - **Terminal e atividades ao vivo:** acompanhamento em tempo real de pensamentos (`thinking`), chamadas de ferramentas (`run_command`, `read_file`, `edit_file`, `write_file`, `search_web`, `ask_question`), resultados e respostas do modelo, com contagem de tokens de entrada e saída.
+  - **Identificação visual:** chip azul de conta, selo "Gemini", badges e estilos temáticos na interface.
+  - **Script de status:** `npm run gemini:status` para inspecionar rapidamente as contas e sessões detectadas do Gemini.
+  - **Configuração:** variável `HABBLAUD_GEMINI` (padrão ligada) e `HABBLAUD_GEMINI_DIRS` para pastas personalizadas.
+
 ## [1.0.3] - 2026-10-16
 
 ### Corrigido

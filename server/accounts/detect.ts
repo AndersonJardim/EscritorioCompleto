@@ -115,6 +115,26 @@ export function isCodexHome(p: string): boolean {
   }
 }
 
+/**
+ * A pasta é do Gemini (um GEMINI_HOME, ex.: ~/.gemini)? Ela tem marcas características do Gemini:
+ * - `google_accounts.json`, `GEMINI.md`, `projects.json`;
+ * - subpasta `antigravity`, `antigravity-ide` ou `tmp/<projeto>/chats/`.
+ * Pastas com `projects/` sem `projects.json` são do Claude Code e ficam de fora.
+ */
+export function isGeminiHome(p: string): boolean {
+  if (isDir(join(p, 'projects')) && !isFile(join(p, 'projects.json'))) return false;
+  if (isFile(join(p, 'google_accounts.json')) || isFile(join(p, 'GEMINI.md')) || isFile(join(p, 'projects.json'))) return true;
+  if (isDir(join(p, 'antigravity')) || isDir(join(p, 'antigravity-ide'))) return true;
+  if (isDir(join(p, 'tmp'))) {
+    try {
+      return readdirSync(join(p, 'tmp'), { withFileTypes: true }).some((e) => e.isDirectory() && isDir(join(p, 'tmp', e.name, 'chats')));
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
 /** Tem a cara de um config dir do Claude Code (`projects/` ou `sessions/`), sem olhar se é do Codex. */
 function hasClaudeLayout(p: string): boolean {
   return isDir(join(p, 'projects')) || isDir(join(p, 'sessions'));
@@ -122,7 +142,7 @@ function hasClaudeLayout(p: string): boolean {
 
 /** Config dir do Claude Code: `projects/` ou `sessions/`, e não é uma pasta do Codex. */
 export function isClaudeDir(p: string): boolean {
-  return hasClaudeLayout(p) && !isCodexHome(p);
+  return hasClaudeLayout(p) && !isCodexHome(p) && !isGeminiHome(p);
 }
 
 export function isDefaultDir(dir: string, home: string): boolean {
@@ -164,8 +184,18 @@ export function codexDirsRefused(env: NodeJS.ProcessEnv = process.env, home: str
   return scanClaudeDirs(env, home).codex;
 }
 
-function scanClaudeDirs(env: NodeJS.ProcessEnv, home: string): { dirs: string[]; codex: string[] } {
+export function geminiDirsRefused(env: NodeJS.ProcessEnv = process.env, home: string = env.HOME || homedir()): string[] {
+  return scanClaudeDirs(env, home).gemini;
+}
+
+function scanClaudeDirs(env: NodeJS.ProcessEnv, home: string): { dirs: string[]; codex: string[]; gemini: string[] } {
   const codex: string[] = [];
+  const gemini: string[] = [];
+  const notGemini = (p: string) => {
+    if (!isGeminiHome(p)) return true;
+    gemini.push(p);
+    return false;
+  };
   /** Fora se for do Codex (anotado em `codex`). */
   const notCodex = (p: string) => {
     if (!isCodexHome(p)) return true;
@@ -177,7 +207,7 @@ function scanClaudeDirs(env: NodeJS.ProcessEnv, home: string): { dirs: string[];
   const override = splitList(env.HABBLAUD_CLAUDE_DIRS);
   if (override.length) {
     const dirs = unique(override.map((p) => expandHome(p, home)));
-    return { dirs: dirs.filter(notCodex), codex };
+    return { dirs: dirs.filter(notCodex).filter(notGemini), codex, gemini };
   }
 
   const found: string[] = [];
@@ -186,18 +216,18 @@ function scanClaudeDirs(env: NodeJS.ProcessEnv, home: string): { dirs: string[];
       if (!ent.name.startsWith('.claude')) continue;
       if (!ent.isDirectory() && !ent.isSymbolicLink()) continue;
       const p = join(home, ent.name);
-      if (hasClaudeLayout(p) && notCodex(p)) found.push(p);
+      if (hasClaudeLayout(p) && notCodex(p) && notGemini(p)) found.push(p);
     }
   } catch {
     // $HOME ilegível (ex.: container sem home): segue com as outras fontes
   }
   for (const p of splitList(env.CLAUDE_CONFIG_DIR)) {
     const abs = expandHome(p, home);
-    if (isDir(abs) && notCodex(abs)) found.push(abs);
+    if (isDir(abs) && notCodex(abs) && notGemini(abs)) found.push(abs);
   }
   for (const o of claudeOverrides(env.HABBLAUD_ACCOUNTS)) {
     if (typeof o.mountDir !== 'string') continue;
-    if (hasClaudeLayout(o.mountDir) && notCodex(o.mountDir)) found.push(expandHome(o.mountDir, home));
+    if (hasClaudeLayout(o.mountDir) && notCodex(o.mountDir) && notGemini(o.mountDir)) found.push(expandHome(o.mountDir, home));
   }
   const dirs = unique(found.map((p) => expandHome(p, home)));
   dirs.sort((a, b) => {
@@ -205,7 +235,7 @@ function scanClaudeDirs(env: NodeJS.ProcessEnv, home: string): { dirs: string[];
     const db = isDefaultDir(b, home) ? 0 : 1;
     return da - db || a.localeCompare(b);
   });
-  return { dirs, codex: unique(codex.map((p) => expandHome(p, home))) };
+  return { dirs, codex: unique(codex.map((p) => expandHome(p, home))), gemini: unique(gemini.map((p) => expandHome(p, home))) };
 }
 
 const ALIAS_RE = /^\s*alias\s+([A-Za-z0-9_][A-Za-z0-9_.-]*)=(?:'([^']*)'|"((?:[^"\\]|\\.)*)")\s*(?:#.*)?$/;
@@ -218,6 +248,10 @@ const ALIAS_TOOLS: Record<Provider, { invokes: RegExp; dir: RegExp }> = {
   codex: {
     invokes: /(?:^|[\s;&|(])(?:[\w.~/-]*\/)?codex(?=$|[\s;&|)])/,
     dir: /\bCODEX_HOME=(?:"([^"]*)"|'([^']*)'|([^\s;&|]+))/,
+  },
+  gemini: {
+    invokes: /(?:^|[\s;&|(])(?:[\w.~/-]*\/)?(?:gemini|agy)(?=$|[\s;&|)])/,
+    dir: /\bGEMINI_HOME=(?:"([^"]*)"|'([^']*)'|([^\s;&|]+))/,
   },
 };
 

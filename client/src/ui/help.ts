@@ -1,5 +1,5 @@
 // Ajuda ("?"): legenda de status e ícones, controles, o que o escritório mostra, contas e uso, e o Codex.
-import type { AgentStatus } from '../../../shared/types';
+import type { AgentStatus, Provider } from '../../../shared/types';
 import type { HelpSection } from './context';
 import { h, iconButton, prefersReducedMotion } from './dom';
 import { ICONS } from './icons';
@@ -68,6 +68,14 @@ const CODEX_HELP: string[] = [
   tr('Meu dia: o Codex conta tokens, mas não grava custo.'),
 ];
 
+/** O Gemini no escritório: o que muda em relação ao Claude Code e Codex. */
+const GEMINI_HELP: string[] = [
+  tr('Cada projeto aberto no Gemini CLI ou Antigravity vira uma sala: a mesma do Claude Code ou Codex naquela pasta, e eles dividem a sala.'),
+  tr('Os agentes do Gemini têm o chip da conta azul e o selo GEMINI na etiqueta e nos detalhes.'),
+  tr('O escritório monitora as sessões do Gemini CLI em ~/.gemini/tmp e do Antigravity em ~/.gemini/antigravity, lendo os transcripts ao vivo.'),
+  tr('Terminal ao vivo: exibe pensamentos, ferramentas (leitura/edição de arquivos, comandos, buscas) e respostas do modelo em tempo real.'),
+];
+
 /** O fim da espera (o servidor marca com uma atividade ✅ ou ❌). */
 const SHELL_END_HELP: [string, string][] = [
   ['🎉', tr('Terminou bem: levanta, comemora com confete e uma estrela.')],
@@ -75,7 +83,7 @@ const SHELL_END_HELP: [string, string][] = [
 ];
 
 const INTRO =
-  tr('Cada projeto aberto no Claude Code ou no Codex vira uma sala (os dois no mesmo projeto dividem a sala), e cada sessão aberta é um personagem com nome próprio. ') +
+  tr('Cada projeto aberto no Claude Code, Codex ou Gemini vira uma sala (eles no mesmo projeto dividem a sala), e cada sessão aberta é um personagem com nome próprio. ') +
   tr('Subagentes chegam como colegas novos, trabalham na mesma sala e vão embora quando terminam. ') +
   tr('Quando a última sessão de uma sala é fechada, quem sai apaga a luz e a sala é desmontada.');
 
@@ -160,6 +168,7 @@ export class HelpDialog {
         ),
         this.usageSection(),
         this.codexSection(),
+        this.geminiSection(),
       ),
     );
     // Clique no fundo (fora do conteúdo) fecha.
@@ -247,7 +256,7 @@ export class HelpDialog {
         'ul',
         { class: 'ui-help__list' },
         h('li', { text: tr('O chip colorido com a letra (C, D…) mostra de qual conta do Claude Code é cada agente: cada atalho de terminal usa uma pasta de configuração diferente.') }),
-        h('li', {}, accountSample('C', '#f08a3c'), tr(' Conta do Claude Code · '), accountSample('X', '#a77bf3', true), tr(' Conta do Codex (chip vazado, com o selo CODEX onde há espaço).')),
+        h('li', {}, accountSample('C', '#f08a3c'), tr(' Conta do Claude Code · '), accountSample('X', '#a77bf3', 'codex'), tr(' Conta do Codex · '), accountSample('G', '#4aa8e8', 'gemini'), tr(' Conta do Gemini (chip azul, com o selo GEMINI onde há espaço).')),
         h('li', {
           text: tr('No topo, cada conta mostra o uso da sessão de 5 horas e da semana. O ↻ indica quando cada limite reinicia (contagem regressiva se faltar menos de um dia). Verde abaixo de 50%, âmbar até 80% e vermelho a partir daí.'),
         }),
@@ -272,15 +281,28 @@ export class HelpDialog {
     return el;
   }
 
+  /** O Gemini no escritório. */
+  private geminiSection(): HTMLElement {
+    const el = h(
+      'section',
+      { class: 'ui-help__usage', attrs: { 'aria-labelledby': 'ui-help-gemini' } },
+      h('h3', { text: 'Gemini', tabIndex: -1, attrs: { id: 'ui-help-gemini' } }),
+      h('ul', { class: 'ui-help__list' }, ...GEMINI_HELP.map((text) => h('li', {}, ...richText(text)))),
+    );
+    this.sections.set('gemini', el);
+    return el;
+    return el;
+  }
+
   get isOpen(): boolean {
     return this.el.open;
   }
 }
 
 /** Um chip de conta de exemplo (legenda). */
-function accountSample(short: string, color: string, codex = false): HTMLElement {
+function accountSample(short: string, color: string, provider?: Provider): HTMLElement {
   const chip = createAccountChip('sm');
-  updateAccountChip(chip, { id: short, short, name: codex ? 'Codex' : tr('Conta {0}', [short]), color, configDir: '', sessions: 0, usageStatus: 'disabled', ...(codex ? { provider: 'codex' as const } : {}) });
+  updateAccountChip(chip, { id: short, short, name: provider === 'codex' ? 'Codex' : provider === 'gemini' ? 'Gemini' : tr('Conta {0}', [short]), color, configDir: '', sessions: 0, usageStatus: 'disabled', ...(provider ? { provider } : {}) });
   chip.setAttribute('aria-hidden', 'true');
   return chip;
 }

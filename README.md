@@ -5,7 +5,7 @@
 <h1 align="center">Habblaud</h1>
 
 <p align="center">
-  <b>The virtual office for your Claude Code (and Codex) agents.</b><br />
+  <b>The virtual office for your Claude Code, Codex, and Gemini agents.</b><br />
   Each project becomes a room, and each agent becomes a pixel-art character that shows, in real time, what it's doing.
 </p>
 
@@ -608,6 +608,16 @@ Codex account chip is hollow and carries the **CODEX** tag.
   little while to leave after you close the terminal.
 - ChatGPT cloud conversations (with no file on the computer) don't show up. `HABBLAUD_CODEX=0` turns Codex off.
 
+### Gemini (Gemini CLI and Antigravity)
+
+Gemini sessions (Gemini CLI and Antigravity) show up alongside Claude Code and Codex: individual character, project room, tasks, tools, thoughts, live terminal, and history. The Gemini account chip is blue and bears the **GEMINI** badge.
+
+- **With nothing to install**, Habblaud automatically discovers the `~/.gemini` folder (or configured via `GEMINI_HOME`), reading chats from `~/.gemini/tmp/<project>/chats/` (Gemini CLI) and `~/.gemini/antigravity/brain/<id>/.system_generated/logs/transcript.jsonl` (Antigravity).
+- **Live terminal:** displays thoughts (`thinking`), tool calls and outputs (terminal commands, file read/edit/write, web searches), and full model responses in real time.
+- **Tokens and activities:** tracks input/output tokens and logs time in My Day.
+- **Quick status check:** run `npm run gemini:status` in your terminal to inspect detected Gemini accounts and sessions.
+- `HABBLAUD_GEMINI=0` turns Gemini off.
+
 ### GitHub in the office
 
 What the agents do on GitHub livens up the project's room, with no token and no internet access: Habblaud reads the
@@ -729,6 +739,8 @@ Everything works without configuring anything. If you need to adjust something, 
 | `HABBLAUD_CODEX` | on | `0` turns off Codex in the office. |
 | `HABBLAUD_CODEX_DIRS` | automatic detection | Codex folders, comma-separated (instead of `~/.codex*` and `CODEX_HOME`). |
 | `HABBLAUD_CODEX_BIN` | `codex` from PATH (on Windows, `codex.exe`) | The Codex binary that delivers the messages (`codex queue`), in Node mode or in `npm run codex:bridge`. |
+| `HABBLAUD_GEMINI` | on | `0` turns off Gemini in the office. |
+| `HABBLAUD_GEMINI_DIRS` | automatic detection | Gemini folders, comma-separated (instead of `~/.gemini*` and `GEMINI_HOME`). |
 | `HABBLAUD_UPDATE_CHECK` | on | `0` turns off the new-version check (a request to the repository's releases on GitHub every 6 h). |
 | `HABBLAUD_LANG` | system language (except English), otherwise `pt-BR` | Language of the texts the server builds (activities, notices, logs): `pt-BR`, `en`, `es` or `fr`. The interface follows the browser or the choice in Settings › Language. See [Languages](#languages). |
 | `HABBLAUD_ACCOUNTS` | — | JSON to customize name, letter or color, matched by the account folder name. E.g. `[{"id":".claude-conta2","name":"Trabalho","short":"T","color":"#5cc97b"}]`. |

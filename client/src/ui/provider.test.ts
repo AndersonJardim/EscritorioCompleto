@@ -8,7 +8,9 @@ import {
   fallbackShort,
   hasCodexPermission,
   isCodex,
+  isGemini,
   looksLikeCodexId,
+  looksLikeGeminiId,
   providerOf,
   showsProviderTag,
 } from './provider';
@@ -21,6 +23,10 @@ describe('ferramenta (Claude Code ou Codex)', () => {
     expect(isCodex({ provider: 'codex' })).toBe(true);
     expect(isCodex({ provider: 'claude' })).toBe(false);
     expect(isCodex(null)).toBe(false);
+    expect(providerOf({ provider: 'gemini' })).toBe('gemini');
+    expect(isGemini({ provider: 'gemini' })).toBe(true);
+    expect(isGemini({ provider: 'claude' })).toBe(false);
+    expect(isGemini(null)).toBe(false);
   });
 
   it('id com cara de pasta do Codex (só quando a conta já não está no snapshot)', () => {
@@ -31,6 +37,7 @@ describe('ferramenta (Claude Code ou Codex)', () => {
     expect(accountProvider({}, '.codex')).toBe('claude');
     expect(accountProvider(undefined, '.claude', 'codex')).toBe('codex');
     expect(accountProvider(undefined, '.codex')).toBe('codex');
+    expect(accountProvider(undefined, '.gemini')).toBe('gemini');
     expect(accountProvider(undefined, 'x')).toBe('claude');
   });
 
@@ -41,6 +48,8 @@ describe('ferramenta (Claude Code ou Codex)', () => {
     expect(fallbackShort('.codex-trabalho')).toBe('T');
     expect(fallbackShort('.codex~2')).toBe('X');
     expect(fallbackShort('demo:.codex')).toBe('X');
+    expect(fallbackShort('.gemini')).toBe('G');
+    expect(fallbackShort('.gemini-dev')).toBe('D');
     expect(fallbackShort('minha-conta')).toBe('M');
     expect(fallbackShort('')).toBe('?');
     expect(fallbackShort('...', 'codex')).toBe('X');
@@ -51,6 +60,8 @@ describe('ferramenta (Claude Code ou Codex)', () => {
     expect(showsProviderTag('codex', 'Codex')).toBe(false);
     expect(showsProviderTag('codex', 'Demo Codex')).toBe(false);
     expect(showsProviderTag('claude', 'Conta C')).toBe(false);
+    expect(showsProviderTag('gemini', 'Conta G')).toBe(true);
+    expect(showsProviderTag('gemini', 'Gemini')).toBe(false);
   });
 
   it('rótulo do chip: e-mail no Claude Code; ferramenta e plano no Codex', () => {
@@ -58,6 +69,7 @@ describe('ferramenta (Claude Code ou Codex)', () => {
     expect(accountChipLabel({ name: 'Conta X', plan: 'Team', provider: 'codex' }, '.codex', 'codex')).toBe('Conta X · Codex · plano Team');
     expect(accountChipLabel({ name: 'Codex', plan: 'Team', provider: 'codex' }, '.codex', 'codex')).toBe('Codex · plano Team');
     expect(accountChipLabel(undefined, '.codex', 'codex')).toBe('.codex · Codex');
+    expect(accountChipLabel(undefined, '.gemini', 'gemini')).toBe('.gemini · Gemini');
     expect(accountChipLabel(undefined, '', 'claude')).toBe('Conta desconhecida');
   });
 
@@ -67,7 +79,11 @@ describe('ferramenta (Claude Code ou Codex)', () => {
     const x = { short: 'X', provider: 'codex' as const };
     expect(emptyOfficeHint([c, d])).toBe('Abra o Claude Code em qualquer projeto (atalhos c ou d) e veja seu agente chegar.');
     expect(emptyOfficeHint([c, d, x])).toBe('Abra o Claude Code (atalhos c ou d) ou o Codex em qualquer projeto e veja seu agente chegar.');
+    const g = { short: 'G', provider: 'gemini' as const };
+    expect(emptyOfficeHint([c, d, g])).toBe('Abra o Claude Code (atalhos c ou d) ou o Gemini em qualquer projeto e veja seu agente chegar.');
+    expect(emptyOfficeHint([c, d, x, g])).toBe('Abra o Claude Code (atalhos c ou d), o Codex ou o Gemini em qualquer projeto e veja seu agente chegar.');
     expect(emptyOfficeHint([x])).toBe('Abra o Claude Code ou o Codex em qualquer projeto e veja seu agente chegar.');
+    expect(emptyOfficeHint([g])).toBe('Abra o Claude Code ou o Gemini em qualquer projeto e veja seu agente chegar.');
     expect(emptyOfficeHint([])).toBe('Abra o Claude Code em qualquer projeto e veja seu agente chegar.');
   });
 

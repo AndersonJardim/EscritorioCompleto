@@ -20,7 +20,7 @@ export function updateAccountChip(chip: HTMLElement, account: AccountInfo | unde
   const p = accountProvider(account, fallbackId, provider);
   setText(chip, account?.short ?? fallbackShort(fallbackId, p));
   setStyleVar(chip, '--acc', account?.color ?? '#8b98b3');
-  setAttr(chip, 'data-provider', p === 'codex' ? 'codex' : null);
+  setAttr(chip, 'data-provider', p === 'codex' ? 'codex' : p === 'gemini' ? 'gemini' : null);
   const label = accountChipLabel(account, fallbackId, p);
   setTitle(chip, label);
   setAttr(chip, 'aria-label', label);
@@ -33,7 +33,12 @@ export function createProviderTag(extra = ''): HTMLElement {
 
 /** Mostra o selo só para o Codex (e não repete quando o nome da conta já diz "Codex"). */
 export function updateProviderTag(tag: HTMLElement, provider: Provider, accountName = ''): void {
-  setHidden(tag, !showsProviderTag(provider, accountName));
+  const show = showsProviderTag(provider, accountName);
+  setHidden(tag, !show);
+  if (show) {
+    setText(tag, provider === 'gemini' ? 'Gemini' : 'Codex');
+    setTitle(tag, provider === 'gemini' ? tr('Agente do Gemini (Google)') : tr('Agente do Codex (OpenAI)'));
+  }
 }
 
 /** Quadradinho de status (pixel), com pulso quando precisa de você. */

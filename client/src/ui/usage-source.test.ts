@@ -48,5 +48,10 @@ describe('cartão de uso de uma conta do Codex', () => {
     expect(usageSubtitle({ email: 'a@b.c', configDir: '~/.claude' })).toBe('a@b.c');
     expect(usageSubtitle({ configDir: '~/.claude' })).toBe('~/.claude');
     expect(codexUsageNote({ usageStatus: 'ok' }, 0)).toBe('');
+    // Gemini
+    expect(usageMessage({ provider: 'gemini', usageStatus: 'disabled' })).toEqual(['sem dados ainda', 'sem dados']);
+    expect(usageSubtitle({ provider: 'gemini', plan: 'Advanced', configDir: '~/.gemini' })).toBe('plano Advanced');
+    expect(usageSubtitle({ provider: 'gemini', configDir: '~/.gemini' })).toBe('Gemini');
+    expect(usageSubtitle({ provider: 'gemini', email: 'test@example.com', configDir: '~/.gemini' })).toBe('test@example.com');
   });
 });
